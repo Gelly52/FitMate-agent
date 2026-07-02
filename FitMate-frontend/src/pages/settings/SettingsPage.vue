@@ -13,6 +13,11 @@
     <div class="settings-content max-w-3xl">
       <ProfileSection v-if="activeSection === 'profile'" :profile="profile" @updated="onProfileUpdated" />
       <AppearanceSection v-else-if="activeSection === 'appearance'" />
+      <!-- LLM 配置区块（Task 17 将替换为 LlmConfigSection 组件） -->
+      <section v-else-if="activeSection === 'llm'" class="settings-llm-placeholder">
+        <h2 class="font-headline-sm text-headline-sm text-on-surface">配置</h2>
+        <p class="text-on-surface-variant opacity-70 mt-sm">LLM 配置区块加载中...</p>
+      </section>
       <AboutSection v-else-if="activeSection === 'about'" />
     </div>
   </div>
@@ -52,7 +57,7 @@ export default {
     },
     applyHash() {
       const hash = (this.$route && this.$route.hash || "").replace("#", "");
-      if (hash && ["profile", "appearance", "about"].includes(hash)) {
+      if (hash && ["profile", "appearance", "llm", "about"].includes(hash)) {
         this.activeSection = hash;
       }
     },
