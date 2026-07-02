@@ -13,8 +13,8 @@
         <div class="dash-metric-rule"></div>
       </div>
       <div class="dash-metric">
-        <span class="dash-metric-label">Docs</span>
-        <span class="dash-metric-value">{{ docCount }}</span>
+        <span class="dash-metric-label">Last Training</span>
+        <span class="dash-metric-value dash-metric-accent">{{ lastTrainingDate || "--" }}</span>
         <div class="dash-metric-rule"></div>
       </div>
       <div class="dash-metric">
@@ -24,39 +24,29 @@
       </div>
     </section>
 
-    <!-- Two columns: Knowledge Base + User Profile (placeholder) -->
+    <!-- Two columns: Training Overview + User Profile (placeholder) -->
     <section class="dash-columns">
-      <!-- Knowledge Base -->
+      <!-- Training Overview -->
       <div class="dash-col">
         <div class="dash-col-head">
-          <h3 class="dash-col-title">Knowledge Base</h3>
-          <router-link to="/upload" class="dash-col-action">MANAGE FILES</router-link>
+          <h3 class="dash-col-title">Training Overview</h3>
+          <router-link to="/training" class="dash-col-action">LOG TRAINING</router-link>
         </div>
 
-        <div v-if="uploadedDocs.length > 0" class="dash-file-list">
+        <div v-if="recentTraining.length > 0" class="dash-training-list">
           <div
-            v-for="(doc, idx) in uploadedDocs"
+            v-for="(record, idx) in recentTraining"
             :key="idx"
-            class="dash-file-item"
+            class="dash-training-item"
           >
-            <span class="material-symbols-outlined dash-file-icon">description</span>
-            <span class="dash-file-name">{{ doc.fileName || "未命名文档" }}</span>
-            <span class="dash-file-meta">{{ formatChatSessionTime(doc.createdAt) || "--" }}</span>
+            <span class="material-symbols-outlined dash-training-icon">fitness_center</span>
+            <div class="dash-training-body">
+              <span class="dash-training-date">{{ record.date || "--" }}</span>
+              <span class="dash-training-summary">{{ record.summary || "—" }}</span>
+            </div>
           </div>
         </div>
-        <div v-else class="dash-empty">暂无知识库文档</div>
-
-        <label class="dash-dropzone">
-          <input
-            ref="fileInput"
-            type="file"
-            accept=".txt"
-            class="dash-file-input"
-            @change="handleFileChange"
-          />
-          <span class="material-symbols-outlined dash-dropzone-icon">upload</span>
-          <span class="dash-dropzone-text">点击上传 .txt 文档以更新语料库</span>
-        </label>
+        <div v-else class="dash-empty">暂无训练记录，去记录第一次训练吧</div>
       </div>
 
       <!-- User Profile (placeholder, reserved for future) -->
@@ -94,19 +84,21 @@
     <!-- Status bar -->
     <footer class="dash-status">
       <span>SYSTEM STATUS: {{ sseStatusLabel }}</span>
-      <span>DOCS: {{ docCount }} // MODE: {{ activeModeLabel }}</span>
+      <span>MODE: {{ activeModeLabel }}</span>
     </footer>
   </div>
 </template>
 
 <script lang="ts">
 import ChatLogicBase from "../chat/ChatLogicBase.vue";
+import doctorApi from "../../services/doctorApi";
 
 export default {
   name: "DashboardPage",
   extends: ChatLogicBase,
   data() {
     return {
+      recentTraining: [] as Array<{ date: string; summary: string }>,
       quickActions: [
         {
           label: "分析本周训练",
@@ -142,9 +134,20 @@ export default {
       }
       return "STANDBY";
     },
+    lastTrainingDate(): string {
+      if (!this.recentTraining || this.recentTraining.length === 0) return "";
+      const first = this.recentTraining[0];
+      if (!first || !first.date) return "";
+      // 只取 MM-DD
+      const parts = String(first.date).split("-");
+      if (parts.length >= 3) {
+        return parts[1] + "." + parts[2];
+      }
+      return String(first.date);
+    },
   },
   mounted() {
-    this.fetchUploadedDocs();
+    this.fetchRecentTraining();
   },
   methods: {
     formatVolume(volume) {
@@ -154,20 +157,19 @@ export default {
       }
       return String(v);
     },
-    handleFileChange(event) {
-      var files = event && event.target && event.target.files;
-      if (!files || files.length === 0) {
-        return;
-      }
-      var file = files[0];
+    fetchRecentTraining() {
       var me = this;
-      this.uploadDoc({
-        file: file,
-        onSuccess: function () {
-          me.fetchUploadedDocs();
-        },
-      });
-      event.target.value = "";
+      doctorApi
+        .getRecentTraining(5)
+        .then(function (res) {
+          var data = res && res.data;
+          if (Array.isArray(data)) {
+            me.recentTraining = data;
+          }
+        })
+        .catch(function () {
+          me.recentTraining = [];
+        });
     },
   },
 };
@@ -263,76 +265,55 @@ export default {
   color: var(--color-primary-fixed-dim);
 }
 
-.dash-file-list {
+.dash-training-list {
   display: flex;
   flex-direction: column;
 }
 
-.dash-file-item {
+.dash-training-item {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
   padding: 12px 0;
   border-bottom: 1px solid var(--color-surface-container);
 }
 
-.dash-file-icon {
+.dash-training-icon {
   font-size: 18px;
-  color: var(--color-on-surface-variant);
+  color: var(--color-primary-fixed-dim);
+  flex-shrink: 0;
+  margin-top: 2px;
 }
 
-.dash-file-name {
+.dash-training-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
   flex: 1;
-  font-size: 14px;
-  color: var(--color-on-surface);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.dash-file-meta {
+.dash-training-date {
   font-size: 9px;
   letter-spacing: 0.08em;
   color: var(--color-on-surface-variant);
-  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, monospace;
+}
+
+.dash-training-summary {
+  font-size: 13px;
+  color: var(--color-on-surface);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .dash-empty {
   padding: 24px 0;
   font-size: 13px;
-  color: var(--color-on-surface-variant);
-}
-
-.dash-dropzone {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 32px;
-  margin-top: 8px;
-  border: 1px solid var(--color-surface-container);
-  border-radius: 8px;
-  background: var(--color-surface-container-low);
-  cursor: pointer;
-  transition: border-color 0.2s ease;
-}
-
-.dash-dropzone:hover {
-  border-color: var(--color-outline-variant);
-}
-
-.dash-file-input {
-  display: none;
-}
-
-.dash-dropzone-icon {
-  font-size: 22px;
-  color: var(--color-on-surface-variant);
-}
-
-.dash-dropzone-text {
-  font-size: 12px;
   color: var(--color-on-surface-variant);
 }
 
