@@ -8,18 +8,12 @@
       </p>
     </header>
 
-    <SettingsSectionNav :active="activeSection" @navigate="scrollToSection" />
+    <SettingsSectionNav :active="activeSection" @navigate="selectSection" />
 
-    <div class="flex flex-col gap-lg max-w-3xl">
-      <section id="profile" ref="profileRef" class="settings-section">
-        <ProfileSection :profile="profile" @updated="onProfileUpdated" />
-      </section>
-      <section id="appearance" ref="appearanceRef" class="settings-section">
-        <AppearanceSection />
-      </section>
-      <section id="about" ref="aboutRef" class="settings-section">
-        <AboutSection />
-      </section>
+    <div class="settings-content max-w-3xl">
+      <ProfileSection v-if="activeSection === 'profile'" :profile="profile" @updated="onProfileUpdated" />
+      <AppearanceSection v-else-if="activeSection === 'appearance'" />
+      <AboutSection v-else-if="activeSection === 'about'" />
     </div>
   </div>
 </template>
@@ -39,9 +33,6 @@ export default {
     return {
       activeSection: "profile",
       profile: null as UserProfile | null,
-      profileRef: null as HTMLElement | null,
-      appearanceRef: null as HTMLElement | null,
-      aboutRef: null as HTMLElement | null,
     };
   },
   mounted() {
@@ -61,16 +52,12 @@ export default {
     },
     applyHash() {
       const hash = (this.$route && this.$route.hash || "").replace("#", "");
-      if (hash) {
-        this.$nextTick(() => this.scrollToSection(hash));
+      if (hash && ["profile", "appearance", "about"].includes(hash)) {
+        this.activeSection = hash;
       }
     },
-    scrollToSection(id: string) {
+    selectSection(id: string) {
       this.activeSection = id;
-      const el = document.getElementById(id);
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
     },
     onProfileUpdated(updated: UserProfile) {
       this.profile = updated;
@@ -82,9 +69,5 @@ export default {
 <style scoped>
 .settings-page {
   height: 100%;
-}
-
-.settings-section {
-  scroll-margin-top: 60px;
 }
 </style>
