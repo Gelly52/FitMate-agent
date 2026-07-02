@@ -9,61 +9,95 @@
       </p>
     </header>
 
-    <!-- Stats -->
-    <section class="kb-stats">
-      <div class="kb-stat">
-        <span class="kb-stat-value">{{ docCount }}</span>
-        <span class="kb-stat-label">文档总数</span>
-      </div>
-      <div class="kb-stat">
-        <span class="kb-stat-value">{{ uploadSynced ? "已同步" : "未同步" }}</span>
-        <span class="kb-stat-label">同步状态</span>
-      </div>
-    </section>
+    <div class="kb-columns">
+      <!-- 左侧：上传与文档管理 -->
+      <div class="kb-col">
+        <!-- Stats -->
+        <section class="kb-stats">
+          <div class="kb-stat">
+            <span class="kb-stat-value">{{ docCount }}</span>
+            <span class="kb-stat-label">文档总数</span>
+          </div>
+          <div class="kb-stat">
+            <span class="kb-stat-value">{{ uploadSynced ? "已同步" : "未同步" }}</span>
+            <span class="kb-stat-label">同步状态</span>
+          </div>
+        </section>
 
-    <!-- Dropzone -->
-    <label class="kb-dropzone" :class="{ 'kb-dropzone-active': isDragging }"
-      @dragover.prevent="isDragging = true"
-      @dragleave.prevent="isDragging = false"
-      @drop.prevent="handleDrop"
-    >
-      <input
-        ref="fileInput"
-        type="file"
-        accept=".txt"
-        class="kb-file-input"
-        @change="handleFileChange"
-      />
-      <span class="material-symbols-outlined kb-dropzone-icon">cloud_upload</span>
-      <span class="kb-dropzone-text">拖拽 .txt 文档到此 或 <em>点击上传</em></span>
-      <span class="kb-dropzone-hint">仅支持 .txt 文本文件，大小不超过 10MB</span>
-    </label>
-
-    <!-- Doc list -->
-    <section class="kb-section">
-      <div class="kb-section-head">
-        <h2 class="font-inter text-label-sm text-on-surface uppercase tracking-widest">
-          Uploaded Documents
-        </h2>
-      </div>
-      <div v-if="uploadedDocs.length > 0" class="kb-file-list">
-        <div
-          v-for="(doc, idx) in uploadedDocs"
-          :key="idx"
-          class="kb-file-item"
+        <!-- Dropzone -->
+        <label class="kb-dropzone" :class="{ 'kb-dropzone-active': isDragging }"
+          @dragover.prevent="isDragging = true"
+          @dragleave.prevent="isDragging = false"
+          @drop.prevent="handleDrop"
         >
-          <span class="material-symbols-outlined kb-file-icon">description</span>
-          <span class="kb-file-name">{{ doc.fileName || "未命名文档" }}</span>
-          <span class="kb-file-meta">{{ formatChatSessionTime(doc.createdAt) || "--" }}</span>
-        </div>
+          <input
+            ref="fileInput"
+            type="file"
+            accept=".txt"
+            class="kb-file-input"
+            @change="handleFileChange"
+          />
+          <span class="material-symbols-outlined kb-dropzone-icon">cloud_upload</span>
+          <span class="kb-dropzone-text">拖拽 .txt 文档到此 或 <em>点击上传</em></span>
+          <span class="kb-dropzone-hint">仅支持 .txt 文本文件，大小不超过 10MB</span>
+        </label>
+
+        <!-- Doc list -->
+        <section class="kb-section">
+          <div class="kb-section-head">
+            <h2 class="font-inter text-label-sm text-on-surface uppercase tracking-widest">
+              Uploaded Documents
+            </h2>
+          </div>
+          <div v-if="uploadedDocs.length > 0" class="kb-file-list">
+            <div
+              v-for="(doc, idx) in uploadedDocs"
+              :key="idx"
+              class="kb-file-item"
+            >
+              <span class="material-symbols-outlined kb-file-icon">description</span>
+              <span class="kb-file-name">{{ doc.fileName || "未命名文档" }}</span>
+              <span class="kb-file-meta">{{ formatChatSessionTime(doc.createdAt) || "--" }}</span>
+            </div>
+          </div>
+          <div v-else class="kb-empty">暂无已上传文档</div>
+        </section>
       </div>
-      <div v-else class="kb-empty">暂无已上传文档</div>
-    </section>
+
+      <!-- 右侧：Execution Log -->
+      <div class="kb-col">
+        <section class="kb-section">
+          <div class="kb-section-head kb-section-head-row">
+            <h2 class="font-inter text-label-sm text-on-surface uppercase tracking-widest">
+              Execution Log
+            </h2>
+            <span class="kb-live">
+              <span class="kb-live-dot"></span>
+              LIVE
+            </span>
+          </div>
+          <div v-if="executionLog.length > 0" class="kb-log-list">
+            <div
+              v-for="(run, idx) in executionLog"
+              :key="idx"
+              class="kb-log-item"
+              :class="{ 'kb-log-failed': run.status === 'failed' }"
+            >
+              <span class="kb-log-time">{{ run.time }}</span>
+              <span class="kb-log-text">{{ run.label }}</span>
+              <span class="kb-log-status">{{ run.statusLabel }}</span>
+            </div>
+          </div>
+          <div v-else class="kb-empty">暂无执行记录</div>
+        </section>
+      </div>
+    </div>
   </div>
 </template>
 
 <script lang="ts">
 import ChatLogicBase from "../chat/ChatLogicBase.vue";
+import doctorApi from "../../services/doctorApi";
 
 export default {
   name: "KnowledgePage",
@@ -71,10 +105,12 @@ export default {
   data() {
     return {
       isDragging: false,
+      executionLog: [],
     };
   },
   mounted() {
     this.fetchUploadedDocs();
+    this.fetchExecutionLog();
   },
   methods: {
     handleFileChange(event) {
@@ -110,6 +146,73 @@ export default {
         },
       });
     },
+    fetchExecutionLog() {
+      var me = this;
+      doctorApi
+        .getAgentRuns({ limit: 8 })
+        .then(function (res) {
+          var data = me.unwrapApiData(res, "加载执行记录失败");
+          if (Array.isArray(data)) {
+            me.executionLog = data.map(function (run) {
+              return me.mapAgentRunToLogItem(run);
+            });
+          }
+        })
+        .catch(function () {
+          me.executionLog = [];
+        });
+    },
+    mapAgentRunToLogItem(run) {
+      var status = me_normalizeStatus(run && run.status);
+      var rawTime = run && (run.finishedAt || run.startedAt || run.createdAt);
+      var time = "--:--";
+      if (rawTime) {
+        var date = new Date(rawTime);
+        if (!isNaN(date.getTime())) {
+          time =
+            String(date.getHours()).padStart(2, "0") +
+            ":" +
+            String(date.getMinutes()).padStart(2, "0");
+        }
+      }
+      var label =
+        (run && (run.requestText || run.botMsgId)) || "Agent Run";
+      if (label.length > 40) {
+        label = label.slice(0, 40) + "...";
+      }
+      return {
+        time: time,
+        label: label,
+        status: status,
+        statusLabel:
+          status === "success"
+            ? "成功"
+            : status === "failed"
+            ? "失败"
+            : status === "running"
+            ? "执行中"
+            : "等待",
+      };
+
+      function me_normalizeStatus(s) {
+        var v = s == null ? "pending" : String(s).toLowerCase();
+        if (v === "completed" || v === "success") {
+          return "success";
+        }
+        if (
+          v === "error" ||
+          v === "failed" ||
+          v === "cancelled" ||
+          v === "timeout"
+        ) {
+          return "failed";
+        }
+        if (v === "running") {
+          return "running";
+        }
+        return "pending";
+      }
+    },
   },
 };
 </script>
@@ -120,12 +223,25 @@ export default {
   flex-direction: column;
   gap: 32px;
   width: 100%;
-  max-width: 800px;
   height: 100%;
   min-height: 0;
   overflow-y: auto;
   padding: 32px 24px 48px;
   background: var(--color-background);
+}
+
+.kb-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 48px;
+  align-items: start;
+}
+
+.kb-col {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  min-width: 0;
 }
 
 .kb-header {
@@ -254,5 +370,87 @@ export default {
   padding: 24px 0;
   font-size: 13px;
   color: var(--color-on-surface-variant);
+}
+
+.kb-section-head-row {
+  justify-content: space-between;
+}
+
+.kb-log-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.kb-log-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--color-surface-container);
+}
+
+.kb-log-time {
+  font-size: 12px;
+  color: var(--color-primary-fixed-dim);
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, monospace;
+}
+
+.kb-log-text {
+  flex: 1;
+  font-size: 13px;
+  color: var(--color-on-surface-variant);
+  font-family: ui-monospace, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kb-log-status {
+  font-size: 12px;
+  color: var(--color-on-surface-variant);
+  flex-shrink: 0;
+}
+
+.kb-log-failed .kb-log-time,
+.kb-log-failed .kb-log-status {
+  color: var(--color-error);
+}
+
+.kb-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-on-surface-variant);
+}
+
+.kb-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
+  animation: kb-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes kb-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 900px) {
+  .kb-columns {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
 }
 </style>
