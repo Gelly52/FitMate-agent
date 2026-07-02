@@ -53,11 +53,11 @@
     <!-- Settings (bottom) -->
     <div class="mt-auto w-full flex" :class="expanded ? 'px-3' : 'justify-center'">
       <router-link
-        to="/dashboard"
+        to="/settings"
         class="side-nav-link group"
         :class="[
           expanded ? 'side-nav-link-expanded' : 'side-nav-link-collapsed',
-          isActive('/dashboard') ? 'side-nav-link-active' : '',
+          isActive('/settings') ? 'side-nav-link-active' : '',
         ]"
         :title="expanded ? '' : 'Settings'"
       >
