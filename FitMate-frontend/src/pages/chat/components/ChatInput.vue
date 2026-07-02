@@ -1,16 +1,7 @@
 <template>
-  <div class="chat-input-wrap">
+  <div class="chat-input-card">
     <!-- Mode toggle pills -->
     <div class="mode-toggle" role="group" aria-label="任务模式切换">
-      <button
-        type="button"
-        class="mode-pill"
-        :class="{ 'mode-pill-active': agentModeSelected }"
-        :aria-pressed="agentModeSelected ? 'true' : 'false'"
-        @click="$emit('toggle-agent-mode', agentModeSelected)"
-      >
-        Agent
-      </button>
       <button
         type="button"
         class="mode-pill"
@@ -37,7 +28,7 @@
         :aria-pressed="internetSearchSelected ? 'true' : 'false'"
         @click="$emit('toggle-internet-search', internetSearchSelected)"
       >
-        Search
+        WebSearch
       </button>
     </div>
 
@@ -70,22 +61,35 @@
       </button>
     </div>
 
-    <p class="chat-input-disclaimer">
-      FIT-AGENT MAY PRODUCE INACCURATE INFORMATION ABOUT WORKOUTS OR NUTRITION.
-    </p>
+    <!-- Footer: model selector 左对齐 + token 用量右对齐 -->
+    <div class="chat-input-footer">
+      <ModelSelector
+        :model="currentModel"
+        :models="availableModels"
+        @select="$emit('select-model', $event)"
+      />
+      <TokenUsageIndicator :token-usage="tokenUsage" />
+    </div>
   </div>
 </template>
 
 <script lang="ts">
+import TokenUsageIndicator from "./TokenUsageIndicator.vue";
+import ModelSelector from "./ModelSelector.vue";
+
 export default {
   name: "ChatInput",
+  components: {
+    TokenUsageIndicator,
+    ModelSelector,
+  },
   emits: [
     "update:modelValue",
     "send",
+    "select-model",
     "toggle-internet-search",
     "toggle-knowledge-base",
     "toggle-rag",
-    "toggle-agent-mode",
   ],
   props: {
     modelValue: {
@@ -104,10 +108,6 @@ export default {
       type: Boolean,
       default: false,
     },
-    agentModeSelected: {
-      type: Boolean,
-      default: true,
-    },
     isSending: {
       type: Boolean,
       default: false,
@@ -115,6 +115,18 @@ export default {
     isStreaming: {
       type: Boolean,
       default: false,
+    },
+    tokenUsage: {
+      type: Object,
+      default: null,
+    },
+    currentModel: {
+      type: String,
+      default: "",
+    },
+    availableModels: {
+      type: Array,
+      default: () => [],
     },
   },
   computed: {
@@ -125,9 +137,6 @@ export default {
       if (this.isSending) {
         return "任务已提交，等待执行中...";
       }
-      if (this.agentModeSelected) {
-        return "请输入任务，例如：分析我这周训练并生成周报";
-      }
       if (this.knowledgeBaseSelected && this.ragSelected) {
         return "输入问题，将从知识库 Wiki 与原始文档中检索...";
       }
@@ -137,7 +146,7 @@ export default {
       if (this.internetSearchSelected) {
         return "输入问题，将联网搜索获取最新信息...";
       }
-      return "直接描述训练目标，我会拆解并执行步骤...";
+      return "请输入任务，例如：分析我这周训练并生成周报";
     },
   },
   methods: {
@@ -197,14 +206,24 @@ export default {
 </script>
 
 <style scoped>
-.chat-input-wrap {
+.chat-input-card {
   max-width: 768px;
   margin: 0 auto;
   width: 100%;
-  padding: 12px 24px 16px;
+  padding: 14px 18px 10px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+  border: 1px solid color-mix(in srgb, var(--color-on-surface) 10%, transparent);
+  border-radius: 16px;
+  background: var(--color-surface-container-lowest, var(--color-background));
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--color-on-surface) 8%, transparent);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.chat-input-card:focus-within {
+  border-color: color-mix(in srgb, var(--color-primary) 50%, transparent);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--color-primary) 12%, transparent);
 }
 
 .mode-toggle {
@@ -247,13 +266,7 @@ export default {
   display: flex;
   align-items: flex-end;
   gap: 12px;
-  border-bottom: 1px solid var(--color-outline-variant);
-  padding-bottom: 8px;
-  transition: border-color 0.2s ease;
-}
-
-.chat-input-bar:focus-within {
-  border-bottom-color: var(--color-primary);
+  padding-bottom: 4px;
 }
 
 .chat-input-field {
@@ -271,7 +284,7 @@ export default {
 }
 
 .chat-input-field::placeholder {
-  color: var(--color-on-surface-variant);
+  color: color-mix(in srgb, var(--color-on-surface-variant) 50%, transparent);
 }
 
 .chat-send-btn {
@@ -283,33 +296,31 @@ export default {
   height: 32px;
   border: none;
   border-radius: 50%;
-  background: transparent;
-  color: var(--color-on-surface-variant);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
   cursor: pointer;
-  transition: color 0.2s ease, background 0.2s ease;
+  transition: color 0.2s ease, background 0.2s ease, opacity 0.2s ease;
 }
 
 .chat-send-btn:hover:not(:disabled) {
-  color: var(--color-primary-fixed-dim);
-  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  opacity: 0.85;
 }
 
 .chat-send-btn:disabled {
   cursor: not-allowed;
-  opacity: 0.6;
+  opacity: 0.4;
+  background: var(--color-on-surface-variant);
 }
 
 .chat-send-btn .material-symbols-outlined {
   font-size: 20px;
 }
 
-.chat-input-disclaimer {
-  text-align: center;
-  font-size: 9px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-on-surface-variant);
-  opacity: 0.6;
-  margin: 0;
+.chat-input-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 14px;
 }
 </style>
