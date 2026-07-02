@@ -1,5 +1,4 @@
 import axios from "axios";
-import { reactive } from "vue";
 import { API_BASE } from "../config/runtime";
 
 const TOKEN_COOKIE_KEY = "user_token";
@@ -97,15 +96,18 @@ export function setUserInfo(userInfo, maxAgeSeconds = DEFAULT_COOKIE_MAX_AGE) {
     return;
   }
   setCookieValue(USER_INFO_COOKIE_KEY, JSON.stringify(userInfo), maxAgeSeconds);
-  userState.data = userInfo;
+  notifyUserInfoChanged();
 }
 
-/** 响应式用户状态，供组件监听用户信息变化（如昵称更新后右上角头像同步）。 */
-export const userState = reactive<{ data: Record<string, unknown> | undefined }>({
-  data: getUserInfo(),
-});
+/** 用户信息变更事件名，供组件监听以同步刷新（如右上角头像）。 */
+export const USER_INFO_CHANGED_EVENT = "fitmate:user-info-changed";
 
-/** 局部更新用户信息（同时写入 cookie 与响应式 state）。 */
+function notifyUserInfoChanged() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(USER_INFO_CHANGED_EVENT));
+}
+
+/** 局部更新用户信息（同时写入 cookie 并通知监听组件）。 */
 export function updateUserState(partial: Record<string, unknown>) {
   const current = getUserInfo() || {};
   const next = { ...current, ...partial };
@@ -115,7 +117,7 @@ export function updateUserState(partial: Record<string, unknown>) {
 export function clearUserSession() {
   removeCookieValue(TOKEN_COOKIE_KEY);
   removeCookieValue(USER_INFO_COOKIE_KEY);
-  userState.data = undefined;
+  notifyUserInfoChanged();
 }
 
 export function createHttpInstance() {

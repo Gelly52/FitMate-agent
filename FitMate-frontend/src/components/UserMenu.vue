@@ -52,7 +52,7 @@
 </template>
 
 <script lang="ts">
-import { userState } from "../services/http";
+import { getUserInfo, USER_INFO_CHANGED_EVENT } from "../services/http";
 
 export default {
   name: "UserMenu",
@@ -62,11 +62,15 @@ export default {
       open: false,
       hoverCloseTimer: null as ReturnType<typeof setTimeout> | null,
       loggingOut: false,
+      userInfoVersion: 0,
     };
   },
   computed: {
     userInfo(): Record<string, unknown> | null {
-      return userState.data || null;
+      // 依赖 userInfoVersion 以在收到变更事件后强制重新求值
+      void this.userInfoVersion;
+      const info = getUserInfo();
+      return info || null;
     },
     displayName(): string {
       const u = this.userInfo as Record<string, unknown> | null;
@@ -87,10 +91,12 @@ export default {
   mounted() {
     document.addEventListener("click", this.onDocClick);
     document.addEventListener("keydown", this.onKeydown);
+    window.addEventListener(USER_INFO_CHANGED_EVENT, this.onUserInfoChanged);
   },
   beforeUnmount() {
     document.removeEventListener("click", this.onDocClick);
     document.removeEventListener("keydown", this.onKeydown);
+    window.removeEventListener(USER_INFO_CHANGED_EVENT, this.onUserInfoChanged);
     if (this.hoverCloseTimer) clearTimeout(this.hoverCloseTimer);
   },
   watch: {
@@ -128,6 +134,9 @@ export default {
     },
     onKeydown(e: KeyboardEvent) {
       if (e.key === "Escape") this.open = false;
+    },
+    onUserInfoChanged() {
+      this.userInfoVersion++;
     },
     onLogout() {
       if (this.loggingOut) return;
