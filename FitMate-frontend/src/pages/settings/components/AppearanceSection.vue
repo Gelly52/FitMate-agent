@@ -1,7 +1,6 @@
 <!-- FitMate-frontend/src/pages/settings/components/AppearanceSection.vue -->
 <template>
   <div>
-    <h2 class="text-primary font-inter text-body-base font-semibold mb-md"># 外观</h2>
     <div class="settings-card">
       <!-- 主题模式 -->
       <div class="mb-lg">

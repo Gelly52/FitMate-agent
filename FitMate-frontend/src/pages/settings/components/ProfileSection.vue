@@ -1,7 +1,6 @@
 <!-- FitMate-frontend/src/pages/settings/components/ProfileSection.vue -->
 <template>
   <div>
-    <h2 class="text-primary font-inter text-body-base font-semibold mb-md"># 个人信息</h2>
     <div class="settings-card">
       <!-- 头像 + 昵称 + 邮箱 -->
       <div class="flex items-center gap-md mb-lg">
@@ -96,6 +95,7 @@
 <script lang="ts">
 import doctorApi from "../../../services/doctorApi";
 import toast from "../../../services/toast";
+import { updateUserState } from "../../../services/http";
 import type { UserProfile } from "../../../types/settings";
 
 export default {
@@ -178,7 +178,10 @@ export default {
         if (res && res.status === 200) {
           toast.success("已保存");
           this.editing[field] = false;
-          this.$emit("updated", res.data as UserProfile);
+          // 同步到全局响应式 user state，右上角头像/昵称即时刷新
+          const updated = res.data as UserProfile;
+          updateUserState({ nickname: updated.nickname, phone: updated.phone });
+          this.$emit("updated", updated);
         } else {
           toast.error((res && res.msg) || "保存失败");
         }

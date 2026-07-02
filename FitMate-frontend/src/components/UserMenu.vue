@@ -52,7 +52,7 @@
 </template>
 
 <script lang="ts">
-import { getUserInfo } from "../services/http";
+import { userState } from "../services/http";
 
 export default {
   name: "UserMenu",
@@ -66,8 +66,7 @@ export default {
   },
   computed: {
     userInfo(): Record<string, unknown> | null {
-      const info = getUserInfo();
-      return info || null;
+      return userState.data || null;
     },
     displayName(): string {
       const u = this.userInfo as Record<string, unknown> | null;

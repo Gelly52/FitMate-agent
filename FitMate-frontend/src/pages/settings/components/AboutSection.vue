@@ -1,11 +1,10 @@
 <!-- FitMate-frontend/src/pages/settings/components/AboutSection.vue -->
 <template>
   <div>
-    <h2 class="text-primary font-inter text-body-base font-semibold mb-md"># 关于</h2>
     <div class="settings-card">
       <div class="about-row">
         <span class="about-label">应用</span>
-        <span class="about-value">FitMate OS</span>
+        <span class="about-value">FitMate DS</span>
       </div>
       <div class="about-row">
         <span class="about-label">构建号</span>
