@@ -407,7 +407,18 @@ CREATE TABLE IF NOT EXISTS `t_user_memory` (
     KEY `idx_content_hash` (`user_id`, `content_hash`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户长期记忆';
 
+CREATE TABLE IF NOT EXISTS `t_user_profile` (
+    `id`                BIGINT   NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `user_id`           BIGINT   NOT NULL COMMENT '用户ID',
+    `profile_text`      TEXT     NOT NULL COMMENT 'LLM 生成的自然语言画像',
+    `profile_tags_json` JSON     NULL     COMMENT '关键标签数组，供可视化',
+    `memory_version`    INT      NOT NULL DEFAULT 0 COMMENT '生成时基于的记忆版本号',
+    `generated_at`      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at`        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_user` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户画像缓存';
+
 -- ========== 升级脚本（已有库执行）==========
 -- 长期记忆功能
 -- ALTER TABLE t_wiki_page MODIFY COLUMN page_type VARCHAR(30) NOT NULL COMMENT 'INDEX/ENTITY/CONCEPT/SYNTHESIS/SOURCE_SUMMARY/LOG';
--- CREATE TABLE IF NOT EXISTS t_user_profile (...);
