@@ -41,6 +41,19 @@ LLM 编译时必须输出如下 JSON：
     {"action": "update", "slug": "existing-slug", "content_md": "..."},
     {"action": "update_index", "content_md": "..."},
     {"action": "append_log", "entry": "## [YYYY-MM-DD] ingest | 文档标题"}
+  ],
+  "memory_extraction": [
+    {"type": "FACT", "content": "用户目标减脂到15%体脂", "metadata": {"category": "goal", "tags": ["减脂"]}}
   ]
 }
 ```
+
+## 记忆提取（可选）
+
+如果原始资料中明确包含用户本人的训练目标、身体条件、饮食偏好、伤病史、训练历史、
+或用户明显关注的训练领域，请在 `memory_extraction` 字段中提取为 FACT 类型。
+
+高阈值：仅在明确涉及用户个人化信息时提取，通用健身知识不要提取。
+无个人化信息时返回空数组 `[]`。
+
+每条记忆的 metadata 可包含 category（goal/body_condition/diet/injury/training_history/interest）和 tags。
