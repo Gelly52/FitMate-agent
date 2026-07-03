@@ -12,7 +12,7 @@ public class WikiPage {
     @TableId(type = IdType.AUTO)
     private Long id;
     private Long spaceId;
-    private String pageType;        // INDEX/ENTITY/CONCEPT/SYNTHESIS/SOURCE_SUMMARY/LOG/PROFILE
+    private String pageType;        // INDEX/ENTITY/CONCEPT/SYNTHESIS/SOURCE_SUMMARY/LOG
     private String title;
     private String slug;
     private String contentMd;

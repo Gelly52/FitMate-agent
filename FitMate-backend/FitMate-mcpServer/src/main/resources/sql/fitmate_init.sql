@@ -316,7 +316,7 @@ CREATE TABLE IF NOT EXISTS `t_wiki_space` (
 CREATE TABLE IF NOT EXISTS `t_wiki_page` (
     `id`               BIGINT       NOT NULL AUTO_INCREMENT COMMENT '页面主键',
     `space_id`         BIGINT       NOT NULL COMMENT '所属空间',
-    `page_type`        VARCHAR(30)  NOT NULL COMMENT 'INDEX/ENTITY/CONCEPT/SYNTHESIS/SOURCE_SUMMARY/LOG/PROFILE',
+    `page_type`        VARCHAR(30)  NOT NULL COMMENT 'INDEX/ENTITY/CONCEPT/SYNTHESIS/SOURCE_SUMMARY/LOG',
     `title`            VARCHAR(255) NOT NULL COMMENT '页面标题',
     `slug`             VARCHAR(255) NOT NULL COMMENT 'URL 友好标识（空间内唯一）',
     `content_md`       LONGTEXT     NULL     COMMENT 'Markdown 正文',
@@ -387,3 +387,9 @@ CREATE TABLE IF NOT EXISTS `t_user_preference` (
     UNIQUE KEY `uk_user_preference_user` (`user_id`),
     CONSTRAINT `fk_user_preference_user` FOREIGN KEY (`user_id`) REFERENCES `t_user` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户偏好设置表';
+
+-- ========== 升级脚本（已有库执行）==========
+-- 长期记忆功能
+-- ALTER TABLE t_wiki_page MODIFY COLUMN page_type VARCHAR(30) NOT NULL COMMENT 'INDEX/ENTITY/CONCEPT/SYNTHESIS/SOURCE_SUMMARY/LOG';
+-- CREATE TABLE IF NOT EXISTS t_user_memory (...);
+-- CREATE TABLE IF NOT EXISTS t_user_profile (...);
