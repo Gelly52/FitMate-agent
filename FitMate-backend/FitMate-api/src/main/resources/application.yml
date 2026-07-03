@@ -108,6 +108,18 @@ fitmate:
       - training_log.query
       - web.search
       - web.fetch
+      - memory.search
+  memory:
+    enabled: ${MEMORY_ENABLED:true}
+    async-pool-size: ${MEMORY_ASYNC_POOL_SIZE:2}
+    profile:
+      cache-ttl-hours: ${MEMORY_PROFILE_CACHE_TTL_HOURS:24}
+    snapshot:
+      window-days: ${MEMORY_SNAPSHOT_WINDOW_DAYS:14}
+      cron: ${MEMORY_SNAPSHOT_CRON:0 0 2 * * *}
+    extract:
+      min-conversation-turns: ${MEMORY_EXTRACT_MIN_TURNS:3}
+      min-conversation-chars: ${MEMORY_EXTRACT_MIN_CHARS:100}
   wiki:
     enabled: ${WIKI_ENABLED:true}
     compile:
