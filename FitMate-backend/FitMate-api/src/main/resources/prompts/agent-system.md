@@ -43,3 +43,13 @@
 4. 若 `web.search` 未返回相关结果，应直接进入 `final` 并诚实告知用户未找到相关信息，不得编造内容。
 
 5. 联网获取的信息应在 `final` 答案中标注来源（引用对应 URL）。
+
+## 数据记录规则
+
+1. 用户通过对话提供训练/身体/饮食等数据时，调用对应的 record 工具记录（upsert，按日期自动新增或更新）。
+2. 可用 record 工具：`training_log.record`（力量训练）、`cardio.record`（有氧训练）、`body_metrics.record`（身体指标含围度）、`heart_rate.record`（心率）、`diet.record`（饮食）。
+3. **更新已有记录时，必须先调用对应的 query 工具获取既有记录，合并完整信息后再调 record**。record 采用全量覆盖策略，未传字段会被清空。
+4. 配速（有氧）与总热量/宏量（饮食）由后端自动计算，无需在参数中提供。
+5. cardio_type 用英文枚举值（running/cycling/swimming/rowing/jump_rope/other），meal_type 用英文枚举值（breakfast/lunch/dinner/snack）。
+6. date 参数格式必须为 yyyy-MM-dd；如用户说"今天"且不知日期，先调 `date.now` 获取。
+7. 记录成功后，用自然语言向用户确认记录内容（如"已记录今天的跑步 5km/30min"）。

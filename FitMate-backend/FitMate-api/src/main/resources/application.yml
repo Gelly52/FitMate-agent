@@ -84,8 +84,8 @@ fitmate:
       base-url: ${OPENAI_BASE_URL:https://api.deepseek.com}
       api-key: ${OPENAI_API_KEY:your_openai_api_key}
       model: ${OPENAI_MODEL:deepseek-v4-flash}
-      max-input-context-tokens: 204800
-      max-output-context-tokens: 65536
+      max-input-context-tokens: 512000
+      max-output-context-tokens: 384000
       thinking-enabled: true
       reasoning-effort: ${REASONING_EFFORT:high}
   agent:
@@ -109,6 +109,14 @@ fitmate:
       - web.search
       - web.fetch
       - memory.search
+      - training_log.record
+      - cardio.record
+      - cardio.query
+      - body_metrics.record
+      - heart_rate.record
+      - heart_rate.query
+      - diet.record
+      - diet.query
   memory:
     enabled: ${MEMORY_ENABLED:true}
     async-pool-size: ${MEMORY_ASYNC_POOL_SIZE:2}
