@@ -33,6 +33,12 @@ public class UserController {
     @Resource
     private SseTicketService sseTicketService;
 
+    @Resource
+    private com.itgeo.fitmate.api.chat.application.LlmConfigResolver llmConfigResolver;
+
+    @Resource
+    private com.itgeo.fitmate.api.chat.infrastructure.LlmProxyClient llmProxyClient;
+
     /**
      * 发送邮箱登录验证码。
      *
@@ -184,6 +190,87 @@ public class UserController {
         } catch (Exception e) {
             log.error("保存用户偏好失败", e);
             return LeeResult.errorException("保存用户偏好失败");
+        }
+    }
+
+    /**
+     * 获取当前登录用户的 LLM 配置（apiKey 脱敏）。
+     *
+     * @return 通用响应结果
+     */
+    @GetMapping("/llm-config")
+    public LeeResult getLlmConfig() {
+        try {
+            Long userId = UserContextHolder.getRequired().getUserId();
+            return LeeResult.ok(llmConfigResolver.getByUserId(userId));
+        } catch (IllegalArgumentException e) {
+            return LeeResult.errorMsg(e.getMessage());
+        } catch (Exception e) {
+            log.error("获取 LLM 配置失败", e);
+            return LeeResult.errorException("获取 LLM 配置失败");
+        }
+    }
+
+    /**
+     * 保存当前登录用户的 LLM 配置（apiKey 为空表示不修改原值）。
+     *
+     * @param request 保存请求体
+     * @return 通用响应结果
+     */
+    @PutMapping("/llm-config")
+    public LeeResult saveLlmConfig(@RequestBody com.itgeo.fitmate.api.auth.dto.LlmConfigSaveRequest request) {
+        try {
+            Long userId = UserContextHolder.getRequired().getUserId();
+            llmConfigResolver.saveByUserId(userId, request);
+            return LeeResult.ok(llmConfigResolver.getByUserId(userId));
+        } catch (IllegalArgumentException e) {
+            return LeeResult.errorMsg(e.getMessage());
+        } catch (Exception e) {
+            log.error("保存 LLM 配置失败", e);
+            return LeeResult.errorException("保存 LLM 配置失败");
+        }
+    }
+
+    /**
+     * 代理调用 DeepSeek GET /models 拉取模型列表。
+     * 请求体字段为空时用当前用户已存配置。
+     *
+     * @param request 代理请求体（可为空）
+     * @return 通用响应结果
+     */
+    @PostMapping("/llm/models")
+    public LeeResult listLlmModels(@RequestBody(required = false) com.itgeo.fitmate.api.chat.dto.LlmProxyRequest request) {
+        try {
+            Long userId = UserContextHolder.getRequired().getUserId();
+            com.itgeo.fitmate.api.chat.application.ResolvedLlmConfig resolved = llmConfigResolver.resolveByUserId(userId);
+            String baseUrl = request != null && request.getBaseUrl() != null ? request.getBaseUrl() : resolved.getBaseUrl();
+            String apiKey = request != null && request.getApiKey() != null ? request.getApiKey() : resolved.getApiKey();
+            return LeeResult.ok(llmProxyClient.listModels(baseUrl, apiKey));
+        } catch (Exception e) {
+            log.error("拉取模型列表失败", e);
+            return LeeResult.errorMsg(e.getMessage());
+        }
+    }
+
+    /**
+     * 测活：极简 chat completion（max_tokens=1, thinking=disabled）。
+     * 请求体字段为空时用当前用户已存配置。
+     *
+     * @param request 代理请求体（可为空）
+     * @return 通用响应结果
+     */
+    @PostMapping("/llm/test")
+    public LeeResult testLlmConnection(@RequestBody(required = false) com.itgeo.fitmate.api.chat.dto.LlmProxyRequest request) {
+        try {
+            Long userId = UserContextHolder.getRequired().getUserId();
+            com.itgeo.fitmate.api.chat.application.ResolvedLlmConfig resolved = llmConfigResolver.resolveByUserId(userId);
+            String baseUrl = request != null && request.getBaseUrl() != null ? request.getBaseUrl() : resolved.getBaseUrl();
+            String apiKey = request != null && request.getApiKey() != null ? request.getApiKey() : resolved.getApiKey();
+            String model = request != null && request.getModel() != null ? request.getModel() : resolved.getModel();
+            return LeeResult.ok(llmProxyClient.testConnection(baseUrl, apiKey, model));
+        } catch (Exception e) {
+            log.error("LLM 测活失败", e);
+            return LeeResult.errorMsg(e.getMessage());
         }
     }
 
