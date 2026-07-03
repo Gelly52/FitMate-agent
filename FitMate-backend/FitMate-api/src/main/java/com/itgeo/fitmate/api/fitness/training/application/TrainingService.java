@@ -17,6 +17,15 @@ public interface TrainingService {
     void logTraining(Long userId, TrainingLogRequest trainingLogRequest);
 
     /**
+     * 记录训练日志（指定来源）。
+     *
+     * @param userId 用户ID
+     * @param request 请求
+     * @param source 来源：manual/chat/import
+     */
+    void logTraining(Long userId, TrainingLogRequest request, String source);
+
+    /**
      * 查询指定用户最近的训练摘要。
      *
      * @param userId 用户主键

@@ -9,7 +9,6 @@ import com.itgeo.fitmate.api.fitness.training.infrastructure.entity.TrainingExer
 import com.itgeo.fitmate.api.fitness.training.infrastructure.entity.TrainingLog;
 import com.itgeo.fitmate.api.fitness.training.infrastructure.mapper.TrainingExerciseMapper;
 import com.itgeo.fitmate.api.fitness.training.infrastructure.mapper.TrainingLogMapper;
-import jakarta.annotation.Resource;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -24,11 +23,15 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(rollbackFor = Exception.class)
 public class TrainingServiceImpl implements TrainingService {
 
-    @Resource
-    private TrainingLogMapper trainingLogMapper;
+    private final TrainingLogMapper trainingLogMapper;
 
-    @Resource
-    private TrainingExerciseMapper trainingExerciseMapper;
+    private final TrainingExerciseMapper trainingExerciseMapper;
+
+    public TrainingServiceImpl(TrainingLogMapper trainingLogMapper,
+                               TrainingExerciseMapper trainingExerciseMapper) {
+        this.trainingLogMapper = trainingLogMapper;
+        this.trainingExerciseMapper = trainingExerciseMapper;
+    }
 
     /**
      * 记录训练日志。
@@ -40,6 +43,11 @@ public class TrainingServiceImpl implements TrainingService {
      */
     @Override
     public void logTraining(Long userId, TrainingLogRequest request) {
+        logTraining(userId, request, "manual");
+    }
+
+    @Override
+    public void logTraining(Long userId, TrainingLogRequest request, String source) {
         // 先校验用户、训练日期和动作列表，并过滤掉无效动作名。
         if (userId == null) {
             throw new IllegalArgumentException("用户未登录");
@@ -84,7 +92,7 @@ public class TrainingServiceImpl implements TrainingService {
         if (existing != null) {
             existing.setSummary(summary);
             existing.setTotalVolume(totalVolume);
-            existing.setSource("manual");
+            existing.setSource(source);
             trainingLogMapper.updateById(existing);
             trainingLogId = existing.getId();
             trainingExerciseMapper.delete(
@@ -98,7 +106,7 @@ public class TrainingServiceImpl implements TrainingService {
             log.setSummary(summary);
             log.setPrimaryMuscleGroup(null);
             log.setTotalVolume(totalVolume);
-            log.setSource("manual");
+            log.setSource(source);
             trainingLogMapper.insert(log);
             trainingLogId = log.getId();
         }
