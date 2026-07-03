@@ -13,11 +13,7 @@
     <div class="settings-content max-w-3xl">
       <ProfileSection v-if="activeSection === 'profile'" :profile="profile" @updated="onProfileUpdated" />
       <AppearanceSection v-else-if="activeSection === 'appearance'" />
-      <!-- LLM 配置区块（Task 17 将替换为 LlmConfigSection 组件） -->
-      <section v-else-if="activeSection === 'llm'" class="settings-llm-placeholder">
-        <h2 class="font-headline-sm text-headline-sm text-on-surface">配置</h2>
-        <p class="text-on-surface-variant opacity-70 mt-sm">LLM 配置区块加载中...</p>
-      </section>
+      <LlmConfigSection v-else-if="activeSection === 'llm'" />
       <AboutSection v-else-if="activeSection === 'about'" />
     </div>
   </div>
@@ -29,11 +25,12 @@ import SettingsSectionNav from "./components/SettingsSectionNav.vue";
 import ProfileSection from "./components/ProfileSection.vue";
 import AppearanceSection from "./components/AppearanceSection.vue";
 import AboutSection from "./components/AboutSection.vue";
+import LlmConfigSection from "./components/LlmConfigSection.vue";
 import type { UserProfile } from "../../types/settings";
 
 export default {
   name: "SettingsPage",
-  components: { SettingsSectionNav, ProfileSection, AppearanceSection, AboutSection },
+  components: { SettingsSectionNav, ProfileSection, AppearanceSection, AboutSection, LlmConfigSection },
   data() {
     return {
       activeSection: "profile",
