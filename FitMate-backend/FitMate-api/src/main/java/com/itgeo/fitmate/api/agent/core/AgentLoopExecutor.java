@@ -12,6 +12,8 @@ import com.itgeo.fitmate.api.agent.llm.LlmGateway;
 import com.itgeo.fitmate.api.agent.memory.AgentMemoryService;
 import com.itgeo.fitmate.api.agent.memory.ContextCompressService;
 import com.itgeo.fitmate.api.agent.memory.dto.MemoryLoadResult;
+import com.itgeo.fitmate.api.agent.memory.longterm.application.MemoryReader;
+import com.itgeo.fitmate.api.agent.memory.longterm.application.extractor.SessionMemoryExtractor;
 import com.itgeo.fitmate.api.agent.prompt.AgentPromptBuilder;
 import com.itgeo.fitmate.api.agent.tool.KbSearchContextHolder;
 import com.itgeo.fitmate.api.agent.tool.ToolCall;
@@ -22,6 +24,7 @@ import com.itgeo.fitmate.api.agent.tool.ToolRouter;
 import com.itgeo.fitmate.api.agent.trace.AgentTraceService;
 import com.itgeo.fitmate.api.chat.application.ChatSessionService;
 import com.itgeo.fitmate.api.chat.dto.ChatEntity;
+import com.itgeo.fitmate.api.chat.infrastructure.entity.ChatMessage;
 import com.itgeo.fitmate.api.chat.dto.ChatStreamChunkResponse;
 import com.itgeo.fitmate.api.chat.dto.ReasoningStreamChunk;
 import com.itgeo.fitmate.api.chat.dto.TokenUsage;
@@ -98,6 +101,12 @@ public class AgentLoopExecutor {
     @Resource
     private AgentCancellationRegistry cancellationRegistry;
 
+    @Resource
+    private MemoryReader memoryReader;
+
+    @Resource
+    private SessionMemoryExtractor sessionMemoryExtractor;
+
     public void run(AgentExecuteContext context) {
         cancellationRegistry.register(context.getRunId());
         Instant runStarted = Instant.now();
@@ -139,7 +148,9 @@ public class AgentLoopExecutor {
                 throw new AgentCancelledException(extractPartialContent(context));
             }
 
-            String prompt = agentPromptBuilder.buildDecisionPrompt(context, memory, observations, allowedTools, wikiContext, summarySection);
+            // 加载用户画像区块（用于注入 Agent prompt）
+            String userProfileSection = memoryReader.loadProfileSection(context.getAuthenticatedUser().getUserId());
+            String prompt = agentPromptBuilder.buildDecisionPrompt(context, memory, observations, allowedTools, wikiContext, summarySection, userProfileSection);
             AgentStep llmStep = agentTraceService.startEvent(
                     context,
                     "llm_started",
@@ -324,6 +335,23 @@ public class AgentLoopExecutor {
         );
         agentRunService.markRunSuccess(context.getRunId(), JSONUtil.toJsonStr(finish));
         SSEServer.sendMsg(context.getAuthenticatedUser().getSseClientId(), JSONUtil.toJsonStr(finish), SSEMsgType.FINISH);
+
+        // 触发会话记忆提取（异步）
+        try {
+            Long userId = context.getAuthenticatedUser().getUserId();
+            Long sessionId = context.getChatSessionId();
+            if (userId != null && sessionId != null) {
+                List<ChatMessage> messages = chatSessionService.listMessagesBySessionIdOnly(sessionId);
+                List<Map<String, String>> conversation = messages.stream()
+                        .map(m -> Map.of(
+                                "role", m.getRole() != null ? m.getRole() : "",
+                                "content", m.getContent() != null ? m.getContent() : ""))
+                        .collect(Collectors.toList());
+                sessionMemoryExtractor.extract(userId, sessionId, conversation);
+            }
+        } catch (Exception e) {
+            log.warn("触发会话记忆提取失败", e);
+        }
     }
 
     private List<ToolDescriptor> resolveAllowedTools(AgentExecuteContext context) {
