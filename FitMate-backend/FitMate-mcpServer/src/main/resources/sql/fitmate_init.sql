@@ -388,8 +388,26 @@ CREATE TABLE IF NOT EXISTS `t_user_preference` (
     CONSTRAINT `fk_user_preference_user` FOREIGN KEY (`user_id`) REFERENCES `t_user` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户偏好设置表';
 
+-- ========== 长期记忆 ==========
+CREATE TABLE IF NOT EXISTS `t_user_memory` (
+    `id`              BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `user_id`         BIGINT       NOT NULL COMMENT '用户ID',
+    `memory_type`     VARCHAR(20)  NOT NULL COMMENT 'FACT|EPISODIC|SNAPSHOT|INSIGHT',
+    `content`         TEXT         NOT NULL COMMENT '自然语言正文',
+    `metadata_json`   JSON         NULL     COMMENT '结构化元数据：时间范围/标签/重要性/关联实体等',
+    `source`          VARCHAR(100) NULL     COMMENT '来源：session:{id} / wiki_compile:{pageId} / schedule',
+    `content_hash`    VARCHAR(64)  NULL     COMMENT '内容hash，用于去重和ignored标记',
+    `status`          VARCHAR(20)  NOT NULL DEFAULT 'active' COMMENT 'active|archived|ignored',
+    `expired_at`      DATETIME     NULL     COMMENT '过期时间（SNAPSHOT 滚动更新时旧记录归档）',
+    `created_at`      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at`      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_user_type_status` (`user_id`, `memory_type`, `status`),
+    KEY `idx_user_created` (`user_id`, `created_at`),
+    KEY `idx_content_hash` (`user_id`, `content_hash`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户长期记忆';
+
 -- ========== 升级脚本（已有库执行）==========
 -- 长期记忆功能
 -- ALTER TABLE t_wiki_page MODIFY COLUMN page_type VARCHAR(30) NOT NULL COMMENT 'INDEX/ENTITY/CONCEPT/SYNTHESIS/SOURCE_SUMMARY/LOG';
--- CREATE TABLE IF NOT EXISTS t_user_memory (...);
 -- CREATE TABLE IF NOT EXISTS t_user_profile (...);
