@@ -4,6 +4,9 @@ import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.itgeo.fitmate.api.agent.memory.longterm.application.MemoryWriteRequest;
+import com.itgeo.fitmate.api.agent.memory.longterm.application.MemoryWriter;
+import com.itgeo.fitmate.api.agent.memory.longterm.config.MemoryProperties;
 import com.itgeo.fitmate.api.prompt.PromptTemplateManager;
 import com.itgeo.fitmate.api.rag.application.DocumentService;
 import com.itgeo.fitmate.api.rag.infrastructure.entity.RagDocument;
@@ -61,6 +64,8 @@ public class WikiCompileServiceImpl implements WikiCompileService {
     private final WikiProperties wikiProperties;
     private final WikiKeywordSearchService wikiKeywordSearchService;
     private final RedisVectorStore wikiRedisVectorStore;
+    private final MemoryWriter memoryWriter;
+    private final MemoryProperties memoryProperties;
 
     public WikiCompileServiceImpl(
             WikiCompileJobMapper compileJobMapper,
@@ -73,7 +78,9 @@ public class WikiCompileServiceImpl implements WikiCompileService {
             PromptTemplateManager promptTemplateManager,
             WikiProperties wikiProperties,
             WikiKeywordSearchService wikiKeywordSearchService,
-            @Qualifier("wikiRedisVectorStore") RedisVectorStore wikiRedisVectorStore) {
+            @Qualifier("wikiRedisVectorStore") RedisVectorStore wikiRedisVectorStore,
+            MemoryWriter memoryWriter,
+            MemoryProperties memoryProperties) {
         this.compileJobMapper = compileJobMapper;
         this.spaceMapper = spaceMapper;
         this.pageMapper = pageMapper;
@@ -85,6 +92,8 @@ public class WikiCompileServiceImpl implements WikiCompileService {
         this.wikiProperties = wikiProperties;
         this.wikiKeywordSearchService = wikiKeywordSearchService;
         this.wikiRedisVectorStore = wikiRedisVectorStore;
+        this.memoryWriter = memoryWriter;
+        this.memoryProperties = memoryProperties;
     }
 
     @Override
@@ -145,6 +154,15 @@ public class WikiCompileServiceImpl implements WikiCompileService {
             for (int i = 0; i < actions.size(); i++) {
                 JSONObject action = actions.getJSONObject(i);
                 applyAction(job.getSpaceId(), action, space, ragDoc);
+            }
+
+            // 记忆提取（仅 USER scope）
+            try {
+                if ("USER".equals(space.getScopeType()) && memoryProperties.isEnabled()) {
+                    extractWikiMemories(llmOutput, space.getOwnerUserId(), job.getSourceDocId());
+                }
+            } catch (Exception e) {
+                log.warn("Wiki 记忆提取失败 docId={} userId={}", job.getSourceDocId(), space.getOwnerUserId(), e);
             }
 
             // 8. 标记成功
@@ -288,6 +306,39 @@ public class WikiCompileServiceImpl implements WikiCompileService {
         wikiLog.setEntrySummary(entry);
         wikiLog.setCreatedAt(LocalDateTime.now());
         logMapper.insert(wikiLog);
+    }
+
+    /**
+     * 从 Wiki 编译的 LLM 输出中提取长期记忆并写入。
+     * 仅当 LLM 输出包含 memory_extraction 数组时生效。
+     */
+    private void extractWikiMemories(String llmOutput, Long userId, Long sourceDocId) {
+        JSONObject json;
+        try {
+            json = JSONUtil.parseObj(llmOutput);
+        } catch (Exception e) {
+            return;
+        }
+        JSONArray extractions = json.getJSONArray("memory_extraction");
+        if (extractions == null || extractions.isEmpty()) {
+            return;
+        }
+        String source = "wiki_compile:" + sourceDocId;
+        for (Object item : extractions) {
+            JSONObject m = (JSONObject) item;
+            String content = m.getStr("content");
+            if (content == null || content.isBlank()) continue;
+            Object metadata = m.get("metadata");
+            MemoryWriteRequest req = MemoryWriteRequest.builder()
+                    .userId(userId)
+                    .memoryType("FACT")
+                    .content(content)
+                    .metadataJson(metadata != null ? JSONUtil.toJsonStr(metadata) : null)
+                    .source(source)
+                    .build();
+            memoryWriter.writeIfNotIgnored(req);
+        }
+        log.info("Wiki 记忆提取完成 docId={} userId={} 提取 {} 条", sourceDocId, userId, extractions.size());
     }
 
     /**
