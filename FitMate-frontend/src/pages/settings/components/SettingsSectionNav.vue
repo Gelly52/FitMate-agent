@@ -31,6 +31,7 @@ export default {
         { id: "profile", label: "个人信息", icon: "person" },
         { id: "appearance", label: "外观", icon: "palette" },
         { id: "llm", label: "配置", icon: "tune" },
+        { id: "memory", label: "记忆管理", icon: "psychology" },
         { id: "about", label: "关于", icon: "info" },
       ],
     };

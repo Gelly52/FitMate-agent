@@ -14,6 +14,7 @@
       <ProfileSection v-if="activeSection === 'profile'" :profile="profile" @updated="onProfileUpdated" />
       <AppearanceSection v-else-if="activeSection === 'appearance'" />
       <LlmConfigSection v-else-if="activeSection === 'llm'" />
+      <MemorySection v-else-if="activeSection === 'memory'" />
       <AboutSection v-else-if="activeSection === 'about'" />
     </div>
   </div>
@@ -26,11 +27,12 @@ import ProfileSection from "./components/ProfileSection.vue";
 import AppearanceSection from "./components/AppearanceSection.vue";
 import AboutSection from "./components/AboutSection.vue";
 import LlmConfigSection from "./components/LlmConfigSection.vue";
+import MemorySection from "./components/MemorySection.vue";
 import type { UserProfile } from "../../types/settings";
 
 export default {
   name: "SettingsPage",
-  components: { SettingsSectionNav, ProfileSection, AppearanceSection, AboutSection, LlmConfigSection },
+  components: { SettingsSectionNav, ProfileSection, AppearanceSection, AboutSection, LlmConfigSection, MemorySection },
   data() {
     return {
       activeSection: "profile",
@@ -54,7 +56,7 @@ export default {
     },
     applyHash() {
       const hash = (this.$route && this.$route.hash || "").replace("#", "");
-      if (hash && ["profile", "appearance", "llm", "about"].includes(hash)) {
+      if (hash && ["profile", "appearance", "llm", "memory", "about"].includes(hash)) {
         this.activeSection = hash;
       }
     },
