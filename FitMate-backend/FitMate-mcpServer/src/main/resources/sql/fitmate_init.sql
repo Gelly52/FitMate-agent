@@ -136,6 +136,7 @@ CREATE TABLE IF NOT EXISTS `t_chat_message` (
     `content` LONGTEXT NOT NULL COMMENT '消息正文',
     `bot_msg_id` VARCHAR(64) DEFAULT NULL COMMENT '机器人消息ID',
     `sources_json` JSON DEFAULT NULL COMMENT '可选的知识来源列表',
+    `usage_json` JSON DEFAULT NULL COMMENT 'Token 用量快照，仅 assistant 消息携带',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
@@ -144,6 +145,22 @@ CREATE TABLE IF NOT EXISTS `t_chat_message` (
     KEY `idx_chat_message_created` (`created_at`),
     CONSTRAINT `fk_chat_message_session` FOREIGN KEY (`session_id`) REFERENCES `t_chat_session` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='聊天消息表';
+
+CREATE TABLE IF NOT EXISTS `t_context_summary` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '压缩记录主键',
+    `session_id` BIGINT NOT NULL COMMENT '所属会话主键',
+    `summary_content` LONGTEXT NOT NULL COMMENT '压缩摘要文本',
+    `compressed_from_seq` INT NOT NULL COMMENT '被压缩的起始消息seqNo',
+    `compressed_to_seq` INT NOT NULL COMMENT '被压缩的结束消息seqNo',
+    `compressed_message_count` INT NOT NULL COMMENT '被压缩的消息条数',
+    `token_before` INT DEFAULT NULL COMMENT '压缩前历史token数(prompt_tokens)',
+    `token_after` INT DEFAULT NULL COMMENT '压缩后摘要token数(估算)',
+    `trigger_type` VARCHAR(20) NOT NULL DEFAULT 'auto' COMMENT '触发类型 auto/manual',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_summary_session_seq` (`session_id`, `compressed_to_seq`),
+    CONSTRAINT `fk_summary_session` FOREIGN KEY (`session_id`) REFERENCES `t_chat_session` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='上下文压缩记录表';
 
 -- ============================================================
 -- Phase 3：RAG 元数据、配置与评测记录
@@ -363,6 +380,7 @@ CREATE TABLE IF NOT EXISTS `t_user_preference` (
     `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '偏好主键',
     `user_id` BIGINT NOT NULL COMMENT '所属用户主键',
     `preferences_json` JSON NOT NULL COMMENT '偏好设置 JSON，如 {"themeMode":"dark","accentColor":"blue"}',
+    `llm_config_json` JSON NULL COMMENT 'LLM 配置 JSON，apiKey 字段为 AES 加密密文',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),

@@ -1,0 +1,58 @@
+name: fitmate-ai
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: fitmate-ai-mysql
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${DB_PORT:-5506}:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-123456}
+      MYSQL_DATABASE: ${DB_NAME:-fitmate}
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+08:00
+    volumes:
+      - fitmate-ai-mysql-data:/var/lib/mysql
+      - ./FitMate-backend/FitMate-mcpServer/src/main/resources/sql/fitmate_init.sql:/docker-entrypoint-initdb.d/01-fitmate-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  redis:
+    image: redis/redis-stack-server:latest
+    container_name: fitmate-ai-redis
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-9379}:6379"
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-123456}
+      REDIS_ARGS: "--requirepass ${REDIS_PASSWORD:-123456} --appendonly yes"
+    volumes:
+      - fitmate-ai-redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  searxng:
+    image: searxng/searxng:latest
+    container_name: fitmate-ai-searxng
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${SEARXNG_PORT:-6080}:8080"
+    environment:
+      SEARXNG_BASE_URL: ${SEARXNG_BASE_URL:-http://127.0.0.1:6080/}
+      SEARXNG_INSTANCE_NAME: fitmate-ai-searxng
+
+volumes:
+  fitmate-ai-mysql-data:
+  fitmate-ai-redis-data:

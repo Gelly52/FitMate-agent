@@ -275,6 +275,27 @@ public class UserController {
     }
 
     /**
+     * 代理调用 DeepSeek GET /user/balance 查询账户余额。
+     * 请求体字段为空时用当前用户已存配置。
+     *
+     * @param request 代理请求体（可为空）
+     * @return 通用响应结果
+     */
+    @PostMapping("/llm/balance")
+    public LeeResult getLlmBalance(@RequestBody(required = false) com.itgeo.fitmate.api.chat.dto.LlmProxyRequest request) {
+        try {
+            Long userId = UserContextHolder.getRequired().getUserId();
+            com.itgeo.fitmate.api.chat.application.ResolvedLlmConfig resolved = llmConfigResolver.resolveByUserId(userId);
+            String baseUrl = request != null && request.getBaseUrl() != null ? request.getBaseUrl() : resolved.getBaseUrl();
+            String apiKey = request != null && request.getApiKey() != null ? request.getApiKey() : resolved.getApiKey();
+            return LeeResult.ok(llmProxyClient.getBalance(baseUrl, apiKey));
+        } catch (Exception e) {
+            log.error("查询 DeepSeek 余额失败", e);
+            return LeeResult.errorMsg(e.getMessage());
+        }
+    }
+
+    /**
      * 优先读取 X-Forwarded-For，否则回退到直连地址。
      *
      * @param request HTTP 请求对象

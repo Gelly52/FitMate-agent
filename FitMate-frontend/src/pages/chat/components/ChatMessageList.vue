@@ -59,6 +59,18 @@
           </div>
         </div>
 
+        <!-- Compress notice (system summary) -->
+        <div
+          v-else-if="item.chatType === 'system'"
+          :key="'msg-system-' + (item.id || index)"
+          class="msg-row msg-row-system"
+        >
+          <div class="compress-notice" :title="item.summaryContent || ''">
+            <span class="material-symbols-outlined compress-icon">compress</span>
+            <span>已压缩 {{ item.compressCount || 0 }} 条历史对话</span>
+          </div>
+        </div>
+
         <!-- Bot message -->
         <div
           v-else
@@ -75,6 +87,10 @@
               @toggle-thinking="$emit('toggle-thinking', item)"
             />
             <div class="msg-text markdown-body" v-html="item.content"></div>
+            <div v-if="item.interrupted" class="msg-interrupted-badge">
+              <span class="material-symbols-outlined">pause_circle</span>
+              <span>已中断</span>
+            </div>
             <source-card-list :sources="getMessageSources(item)" />
             <div class="msg-meta">
               <span class="msg-time">{{ formatMessageTime(item) }}</span>
@@ -300,6 +316,32 @@ export default {
   border-radius: 9999px;
 }
 
+.msg-row-system {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 12px 0;
+}
+
+.compress-notice {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 14px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-primary) 8%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, var(--color-primary) 25%, transparent);
+  color: var(--color-on-surface-variant);
+  font-size: 12px;
+  cursor: default;
+  user-select: none;
+}
+
+.compress-icon {
+  font-size: 14px;
+  color: var(--color-primary);
+}
+
 .msg-row {
   display: flex;
   margin-bottom: 24px;
@@ -459,5 +501,20 @@ export default {
   border: 1px solid var(--color-surface-container);
   padding: 6px 10px;
   text-align: left;
+}
+
+.msg-interrupted-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  font-size: 12px;
+}
+.msg-interrupted-badge .material-symbols-outlined {
+  font-size: 14px;
 }
 </style>

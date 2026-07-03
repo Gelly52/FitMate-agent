@@ -89,6 +89,71 @@
         </div>
       </div>
     </div>
+
+    <!-- DeepSeek 账户余额 -->
+    <div class="settings-card balance-card">
+      <div class="balance-header">
+        <div class="balance-title">
+          <span class="material-symbols-outlined balance-title-icon">account_balance_wallet</span>
+          <div>
+            <div class="balance-title-text">DeepSeek 账户余额</div>
+            <div class="balance-title-sub">基于当前 LLM 配置查询</div>
+          </div>
+        </div>
+        <button
+          class="balance-refresh-btn"
+          :disabled="balanceLoading"
+          @click="loadBalance"
+          title="刷新"
+        >
+          <span class="material-symbols-outlined" :class="{ 'spin': balanceLoading }">refresh</span>
+        </button>
+      </div>
+
+      <!-- 加载中 -->
+      <div v-if="balanceLoading && !balance" class="balance-state">
+        <span class="material-symbols-outlined spin">progress_activity</span>
+        <span>查询中…</span>
+      </div>
+
+      <!-- 错误态 -->
+      <div v-else-if="balanceError" class="balance-state balance-state-error">
+        <span class="material-symbols-outlined">error_outline</span>
+        <span>{{ balanceError }}</span>
+      </div>
+
+      <!-- 余额展示 -->
+      <div v-else-if="balance" class="balance-body">
+        <div v-if="balance.isAvailable === false" class="balance-warn">
+          <span class="material-symbols-outlined">warning</span>
+          <span>当前账户余额不足，无法调用 API</span>
+        </div>
+        <div
+          v-for="info in balance.balanceInfos"
+          :key="info.currency"
+          class="balance-item"
+        >
+          <div class="balance-item-main">
+            <span class="balance-total">{{ info.totalBalance || "0.00" }}</span>
+            <span class="balance-currency">{{ info.currency || "CNY" }}</span>
+          </div>
+          <div class="balance-item-sub">
+            <span>赠金 {{ info.grantedBalance || "0.00" }}</span>
+            <span class="balance-dot">·</span>
+            <span>充值 {{ info.toppedUpBalance || "0.00" }}</span>
+          </div>
+        </div>
+        <div v-if="balanceUpdatedAt" class="balance-updated">
+          更新于 {{ balanceUpdatedAt }}
+        </div>
+      </div>
+
+      <!-- 空态 -->
+      <div v-else class="balance-state">
+        <span class="material-symbols-outlined">wallet</span>
+        <span>点击右上角刷新按钮查询余额</span>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -96,7 +161,7 @@
 import doctorApi from "../../../services/doctorApi";
 import toast from "../../../services/toast";
 import { updateUserState } from "../../../services/http";
-import type { UserProfile } from "../../../types/settings";
+import type { LlmBalanceResult, UserProfile } from "../../../types/settings";
 
 export default {
   name: "ProfileSection",
@@ -112,7 +177,14 @@ export default {
       editing: { nickname: false, phone: false },
       forms: { nickname: "", phone: "" },
       saving: false,
+      balance: null as LlmBalanceResult | null,
+      balanceLoading: false,
+      balanceError: "" as string,
+      balanceUpdatedAt: "" as string,
     };
+  },
+  mounted() {
+    this.loadBalance();
   },
   computed: {
     displayNickname(): string {
@@ -133,6 +205,33 @@ export default {
     },
   },
   methods: {
+    async loadBalance() {
+      if (this.balanceLoading) return;
+      this.balanceLoading = true;
+      this.balanceError = "";
+      try {
+        const res = await doctorApi.getLlmBalance();
+        if (res && res.status === 200 && res.data) {
+          this.balance = res.data as LlmBalanceResult;
+          this.balanceUpdatedAt = this.formatNow();
+        } else {
+          this.balanceError = (res && res.msg) || "查询余额失败";
+        }
+      } catch (e: any) {
+        this.balanceError = (e && e.message) || "查询余额失败，请稍后重试";
+      } finally {
+        this.balanceLoading = false;
+      }
+    },
+    formatNow(): string {
+      try {
+        const d = new Date();
+        const pad = (n: number) => String(n).padStart(2, "0");
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+      } catch {
+        return "";
+      }
+    },
     formatDate(iso: string): string {
       if (!iso) return "—";
       try {
@@ -319,5 +418,170 @@ export default {
 .settings-save-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* 余额卡片 */
+.balance-card {
+  margin-top: 16px;
+}
+
+.balance-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.balance-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.balance-title-icon {
+  font-size: 22px;
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.balance-title-text {
+  color: var(--color-on-surface);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.balance-title-sub {
+  color: var(--color-on-surface-variant);
+  font-size: 11px;
+  margin-top: 2px;
+  opacity: 0.75;
+}
+
+.balance-refresh-btn {
+  background: transparent;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: 4px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--color-on-surface-variant);
+  transition: color 0.2s ease, border-color 0.2s ease;
+  flex-shrink: 0;
+}
+
+.balance-refresh-btn:hover:not(:disabled) {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.balance-refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.balance-refresh-btn .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.balance-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.balance-item {
+  background: var(--color-surface);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: 6px;
+  padding: 12px 14px;
+}
+
+.balance-item-main {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.balance-total {
+  color: var(--color-on-surface);
+  font-size: 22px;
+  font-weight: 700;
+  font-family: "Inter", sans-serif;
+  letter-spacing: -0.01em;
+}
+
+.balance-currency {
+  color: var(--color-on-surface-variant);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.balance-item-sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  color: var(--color-on-surface-variant);
+  font-size: 12px;
+}
+
+.balance-dot {
+  opacity: 0.6;
+}
+
+.balance-warn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--color-error-container, rgba(239, 68, 68, 0.1));
+  color: var(--color-on-error-container, var(--color-error, #ef4444));
+  font-size: 12px;
+}
+
+.balance-warn .material-symbols-outlined {
+  font-size: 16px;
+}
+
+.balance-updated {
+  color: var(--color-on-surface-variant);
+  font-size: 11px;
+  opacity: 0.7;
+  text-align: right;
+  margin-top: 2px;
+}
+
+.balance-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px 12px;
+  color: var(--color-on-surface-variant);
+  font-size: 13px;
+}
+
+.balance-state .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.balance-state-error {
+  color: var(--color-error, #ef4444);
+}
+
+.spin {
+  animation: balance-spin 0.9s linear infinite;
+}
+
+@keyframes balance-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 </style>

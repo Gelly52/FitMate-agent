@@ -51,6 +51,7 @@ export default {
       isSending: false,
       isStreaming: false,
       tokenUsage: null,
+      isCompressing: false,
       showBackToBottom: false,
       selectedUploadName: "",
       sseState: "idle",
@@ -89,10 +90,20 @@ export default {
       taskStartTime: null,
       currentModel: "",
       availableModels: [] as Array<{ id: string; ownedBy: string }>,
+      thinkingEnabled: true,
+      reasoningEffort: "high" as "high" | "max",
       _llmConfigUnsub: null as (() => void) | null,
     };
   },
   computed: {
+    canCompressContext() {
+      // 有活动会话且消息数 >= 8 时才允许主动压缩
+      return this.activeChatSessionId != null
+        && Array.isArray(this.chatList)
+        && this.chatList.filter(function (item) {
+             return item && (item.chatType === "user" || item.chatType === "bot");
+           }).length >= 8;
+    },
     activeModeLabel() {
       var mainLabel = "Agent";
       if (this.knowledgeBaseSelected && this.ragSelected) {
@@ -170,9 +181,13 @@ export default {
     }
     this.currentModel = llmConfig.getConfig().model;
     this.availableModels = llmConfig.getModels();
+    this.thinkingEnabled = llmConfig.getConfig().thinkingEnabled;
+    this.reasoningEffort = llmConfig.getConfig().reasoningEffort;
     this._llmConfigUnsub = llmConfig.subscribe(() => {
       this.currentModel = llmConfig.getConfig().model;
       this.availableModels = llmConfig.getModels();
+      this.thinkingEnabled = llmConfig.getConfig().thinkingEnabled;
+      this.reasoningEffort = llmConfig.getConfig().reasoningEffort;
     });
     if (this.availableModels.length === 0) {
       llmConfig.fetchModels().catch(() => {});
@@ -182,6 +197,9 @@ export default {
     this.scrollToBottom(true);
   },
   beforeUnmount() {
+    if (this._stopTimeout) {
+      clearTimeout(this._stopTimeout);
+    }
     this.teardownSSE({ clearPending: true });
     if (this._llmConfigUnsub) {
       this._llmConfigUnsub();
@@ -1367,7 +1385,61 @@ export default {
       this.scrollToBottom();
     },
     handleAgentCustomEvent(rawValue) {
+      // 优先识别上下文压缩事件（context_compressing / context_compressed / context_compress_failed）
+      if (this.handleCompressEvent(rawValue)) {
+        return;
+      }
       this.handleAgentEvent(rawValue);
+    },
+    handleCompressEvent(rawValue) {
+      var payload = null;
+      if (rawValue && typeof rawValue === "object") {
+        payload = rawValue;
+      } else if (typeof rawValue === "string") {
+        try { payload = JSON.parse(rawValue); } catch (e) { payload = null; }
+      }
+      if (!payload || typeof payload !== "object") return false;
+      var evt = payload.event;
+      if (evt === "context_compressing") {
+        this.isCompressing = true;
+        return true;
+      }
+      if (evt === "context_compressed") {
+        this.isCompressing = false;
+        // 立即刷新右下角用量为压缩后快照
+        if (payload.tokenAfter != null) {
+          this.tokenUsage = {
+            promptTokens: payload.tokenAfter,
+            completionTokens: 0,
+            totalTokens: payload.tokenAfter,
+            cumulativeTotalTokens: this.tokenUsage && this.tokenUsage.cumulativeTotalTokens != null
+              ? this.tokenUsage.cumulativeTotalTokens : payload.tokenAfter,
+            contextWindow: payload.contextWindow != null ? payload.contextWindow
+              : (this.tokenUsage && this.tokenUsage.contextWindow) || 65536,
+            cacheHitTokens: null,
+            cacheMissTokens: null,
+            reasoningTokens: null,
+          };
+        }
+        // 插入胶囊提示
+        this.chatList.push({
+          id: "compress-" + Date.now(),
+          chatType: "system",
+          compressCount: payload.compressedCount || 0,
+          summaryContent: "",
+          createdAt: new Date().toISOString(),
+        });
+        this.scrollToBottom();
+        return true;
+      }
+      if (evt === "context_compress_failed") {
+        this.isCompressing = false;
+        if (this.toast && typeof this.toast.info === "function") {
+          this.toast.info("上下文压缩失败" + (payload.reason ? "：" + payload.reason : ""));
+        }
+        return true;
+      }
+      return false;
     },
     handleAgentEvent(rawValue) {
       var event = normalizeAgentTraceEvent(rawValue);
@@ -1531,6 +1603,13 @@ export default {
         chatResponse && typeof chatResponse === "object"
           ? chatResponse
           : { message: chatResponse == null ? "" : String(chatResponse) };
+      var isInterrupted = payload && payload.status === "interrupted";
+
+      // 清理停止超时（stopGeneration 设置的 5 秒兜底）
+      if (this._stopTimeout) {
+        clearTimeout(this._stopTimeout);
+        this._stopTimeout = null;
+      }
       var message = payload.message == null ? "" : String(payload.message);
       var botMsgId =
         payload.botMsgId ||
@@ -1553,6 +1632,7 @@ export default {
         var chatItem = this.chatList[i];
         if (chatItem.botMsgId == botMsgId) {
           chatItem.content = marked.parse(message || "");
+          chatItem.interrupted = isInterrupted;
           chatItem.sources = normalizedSources;
           chatItem.sourceType =
             payload.sourceType || chatItem.sourceType || null;
@@ -2015,6 +2095,24 @@ export default {
         return null;
       }
 
+      // 识别上下文压缩摘要记录（role=system, messageType=summary）
+      if (message.role === "system" && message.messageType === "summary") {
+        var meta = {};
+        try { meta = message.sourcesJson ? JSON.parse(message.sourcesJson) : {}; } catch (e) { meta = {}; }
+        return {
+          id: "summary-" + (message.seqNo != null ? message.seqNo : index),
+          content: "",
+          summaryContent: message.content || "",
+          userName: "system",
+          chatType: "system",
+          compressCount: meta.compressedCount || 0,
+          createdAt: message.createdAt || new Date().toISOString(),
+          sessionCode: message.sessionCode || null,
+          sceneType: message.sceneType || null,
+          sources: [],
+        };
+      }
+
       var role = message.role === "assistant" ? "assistant" : "user";
       var rawContent = message.content == null ? "" : String(message.content);
       return {
@@ -2034,6 +2132,7 @@ export default {
           role === "assistant"
             ? this.parseRecordSources(message.sourcesJson)
             : [],
+        interrupted: role === "assistant" && rawContent.indexOf("已中断") >= 0,
       };
     },
     resolveChatHistorySources(chatItems) {
@@ -2187,13 +2286,113 @@ export default {
       this.guidanceMessage = "已将所选消息引用到输入框，可继续编辑后发送。";
       this.focusInputPanel(true);
     },
-    retryUserMessage(item) {
+    async stopGeneration(skipConfirm) {
+      // 二次确认（retryUserMessage 内部调用时已确认过，跳过）
+      if (!skipConfirm && !window.confirm("确定要停止生成吗？")) {
+        return;
+      }
+      // 获取当前 runId
+      var runId =
+        (this.activeAgentRun && this.activeAgentRun.runId) || null;
+      if (!runId) {
+        // 没有 runId 时仅做前端状态重置
+        this.botMsgId = null;
+        this.isSending = false;
+        this.isStreaming = false;
+        this.isThinking = false;
+        this.guidanceMessage = "已停止生成。";
+        return;
+      }
+
+      this.guidanceMessage = "正在停止生成…";
+      try {
+        await doctorApi.cancelAgent(runId);
+      } catch (e) {
+        console.error("取消Agent请求失败:", e);
+      }
+
+      // 前端状态立即重置（后端会推送 interrupted FINISH 事件做最终收尾）
+      // 但如果 SSE 通道已断开，FINISH 可能收不到，所以这里也做兜底重置
+      // 注意：不完全重置 isStreaming，等 FINISH 事件或超时后再重置
+      // 设置一个超时兜底：5秒后如果没收到 FINISH，强制重置
+      var me = this;
+      if (this._stopTimeout) {
+        clearTimeout(this._stopTimeout);
+      }
+      this._stopTimeout = setTimeout(function () {
+        if (me.isStreaming || me.isSending) {
+          console.warn("停止超时，强制重置状态");
+          me.botMsgId = null;
+          me.isSending = false;
+          me.isStreaming = false;
+          me.isThinking = false;
+          me.guidanceMessage = "已停止生成。";
+        }
+      }, 5000);
+    },
+    async retryUserMessage(item) {
       var text = this.extractMessageText(item && item.content).trim();
       if (!text) {
         this.showUiMessage("error", "暂无可重试内容");
         return;
       }
 
+      // 二次确认（回滚会删除该消息及之后的历史，不可恢复）
+      if (!window.confirm("确定要回滚到该消息吗？该消息及其后的所有回复将被删除。")) {
+        return;
+      }
+
+      // 如果正在输出，先打断（串行：等打断完成再回滚）
+      if (this.isSending || this.isStreaming) {
+        this.guidanceMessage = "正在停止当前生成，请稍候…";
+        await this.stopGeneration(true);
+
+        // 等待 interrupted FINISH 事件到达（stopGeneration 已设置 5 秒超时兜底）
+        // 这里用轮询等待 isStreaming 变为 false
+        var waitCount = 0;
+        while ((this.isStreaming || this.isSending) && waitCount < 60) {
+          await new Promise(function (resolve) { setTimeout(resolve, 100); });
+          waitCount++;
+        }
+      }
+
+      // 执行回滚删除
+      var botMsgId = item && item.botMsgId;
+      var sessionId = this.activeChatSessionId;
+      if (botMsgId && sessionId) {
+        try {
+          await doctorApi.rollbackMessage(sessionId, botMsgId);
+        } catch (e) {
+          console.error("回滚消息失败:", e);
+          this.showUiMessage("error", "回滚失败，请稍后重试");
+          return;
+        }
+
+        // 从前端 chatList 中移除该用户消息及之后的所有消息
+        var rollbackIndex = -1;
+        for (var i = 0; i < this.chatList.length; i++) {
+          if (this.chatList[i].botMsgId === botMsgId) {
+            // 找到 botMsgId 对应的 assistant 消息，用户消息在它前一条
+            rollbackIndex = i - 1;
+            break;
+          }
+        }
+        if (rollbackIndex < 0) {
+          // 兜底：如果没找到 botMsgId，尝试按消息内容匹配
+          for (var j = 0; j < this.chatList.length; j++) {
+            if (this.chatList[j].chatType === "user"
+                && this.extractMessageText(this.chatList[j].content).trim() === text) {
+              rollbackIndex = j;
+              break;
+            }
+          }
+        }
+        if (rollbackIndex >= 0) {
+          this.chatList.splice(rollbackIndex);
+        }
+      }
+
+      // 回填输入框
       this.draftMessage = text;
       this.guidanceMessage = "已将历史任务填回输入框，可直接调整后再次发送。";
       this.focusInputPanel(true);
@@ -2215,6 +2414,24 @@ export default {
     },
     failCurrentAgentStep() {
       return;
+    },
+    async triggerManualCompress() {
+      if (this.isCompressing || this.isSending || this.isStreaming) {
+        return;
+      }
+      var sessionId = this.activeChatSessionId;
+      if (sessionId == null) {
+        this.showUiMessage("error", "当前没有活动会话，无法压缩。");
+        return;
+      }
+      this.isCompressing = true;
+      try {
+        await doctorApi.compressContext(sessionId);
+        // 结果由 SSE handler 统一处理（context_compressing / context_compressed / context_compress_failed）
+      } catch (e) {
+        this.isCompressing = false;
+        this.showUiMessage("error", "触发压缩失败：" + (e && e.message ? e.message : "未知错误"));
+      }
     },
     async doChat() {
       var currentUserName = this.currentUserName;
@@ -2334,6 +2551,7 @@ export default {
         sessionCode: this.currentSessionCode || null,
         sceneType: expectedSceneType,
         sourceType: currentSourceType,
+        botMsgId: botMsgId,
       });
 
       this.draftMessage = "";
@@ -2427,6 +2645,26 @@ export default {
         this.currentModel = llmConfig.getConfig().model;
       } catch (e) {
         this.showUiMessage("error", "切换模型失败");
+      }
+    },
+    async onToggleThinking() {
+      var next = !this.thinkingEnabled;
+      try {
+        await llmConfig.save({ thinkingEnabled: next });
+        this.thinkingEnabled = llmConfig.getConfig().thinkingEnabled;
+      } catch (e) {
+        this.showUiMessage("error", "切换思考模式失败");
+      }
+    },
+    async onSelectReasoningEffort(effort) {
+      if (!effort || effort === this.reasoningEffort) {
+        return;
+      }
+      try {
+        await llmConfig.save({ reasoningEffort: effort });
+        this.reasoningEffort = llmConfig.getConfig().reasoningEffort;
+      } catch (e) {
+        this.showUiMessage("error", "切换推理强度失败");
       }
     },
   },

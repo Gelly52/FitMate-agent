@@ -20,7 +20,7 @@ const routes = [
         path: "chat",
         name: "chat",
         component: () => import("../pages/chat/ChatPage.vue"),
-        meta: { title: "AI Chat" },
+        meta: { title: "Agent Chat" },
       },
       {
         path: "training",

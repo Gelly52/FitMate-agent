@@ -18,30 +18,6 @@ export type AgentRunListItem = AgentRunDetail & {
   finishedAt?: string;
 };
 
-export function doChat(bo) {
-  return instance({
-    url: "/chat/doChat",
-    method: "post",
-    data: bo,
-  });
-}
-
-export function ragSearch(bo) {
-  return instance({
-    url: "/rag/search",
-    method: "post",
-    data: bo,
-  });
-}
-
-export function internetSearch(bo) {
-  return instance({
-    url: "/internet/search",
-    method: "post",
-    data: bo,
-  });
-}
-
 export function sendUserCode(bo) {
   return instance({
     url: "/user/code",
@@ -115,6 +91,29 @@ export function getAgentRunDetail(runId: number | string): Promise<AgentRunDetai
   return instance({
     url: "/agent/runs/" + encodeURIComponent(runId),
     method: "get",
+  });
+}
+
+export function compressContext(sessionId: number | string) {
+  return instance({
+    url: "/agent/sessions/" + encodeURIComponent(sessionId) + "/compress",
+    method: "post",
+  });
+}
+
+export function cancelAgent(runId: number | string) {
+  return instance({
+    url: "/agent/cancel",
+    method: "post",
+    params: { runId },
+  });
+}
+
+export function rollbackMessage(sessionId: number | string, botMsgId: string) {
+  return instance({
+    url: "/chat/rollback",
+    method: "post",
+    data: { sessionId, botMsgId },
   });
 }
 
@@ -201,10 +200,46 @@ export function saveUserPreferences(bo) {
   });
 }
 
+export function getLlmConfig() {
+  return instance({
+    url: "/user/llm-config",
+    method: "get",
+  });
+}
+
+export function saveLlmConfig(bo) {
+  return instance({
+    url: "/user/llm-config",
+    method: "put",
+    data: bo,
+  });
+}
+
+export function listLlmModels(bo) {
+  return instance({
+    url: "/user/llm/models",
+    method: "post",
+    data: bo || {},
+  });
+}
+
+export function testLlmConnection(bo) {
+  return instance({
+    url: "/user/llm/test",
+    method: "post",
+    data: bo || {},
+  });
+}
+
+export function getLlmBalance(bo) {
+  return instance({
+    url: "/user/llm/balance",
+    method: "post",
+    data: bo || {},
+  });
+}
+
 const doctorApi = {
-  doChat,
-  ragSearch,
-  internetSearch,
   sendUserCode,
   userLogin,
   userLogout,
@@ -214,6 +249,9 @@ const doctorApi = {
   agentExecute,
   getAgentRuns,
   getAgentRunDetail,
+  compressContext,
+  cancelAgent,
+  rollbackMessage,
   ragConfig,
   benchmarkEvaluate,
   logTraining,
@@ -225,6 +263,11 @@ const doctorApi = {
   updateUserProfile,
   getUserPreferences,
   saveUserPreferences,
+  getLlmConfig,
+  saveLlmConfig,
+  listLlmModels,
+  testLlmConnection,
+  getLlmBalance,
 };
 
 if (typeof window !== "undefined") {

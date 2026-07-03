@@ -1,0 +1,132 @@
+# Server
+server:
+  forward-headers-strategy: framework
+
+# Spring
+spring:
+  application:
+    name: fitmate-api
+  profiles:
+    active: dev
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY}
+      base-url: ${OPENAI_BASE_URL}
+      chat:
+        options:
+          model: ${OPENAI_MODEL}
+    vectorstore:
+      redis:
+        initialize-schema: true
+        index-name: fitmate-vectorstore
+        prefix: "fitmate:dev:rag:embedding:"
+  data:
+    redis:
+      host: 127.0.0.1
+      port: ${REDIS_PORT:9379}
+      password: ${REDIS_PASSWORD:your_redis_password}
+  mail:
+    host: ${MAIL_HOST:smtp.163.com}
+    port: ${MAIL_PORT:465}
+    username: ${MAIL_USERNAME:your_email@163.com}
+    password: ${MAIL_PASSWORD:your_mail_auth_code}
+    protocol: smtp
+    default-encoding: UTF-8
+    properties:
+      mail:
+        smtp:
+          socketFactory:
+            port: 465
+            class: javax.net.ssl.SSLSocketFactory
+          ssl:
+            enable: true
+
+# Reasoning
+reasoning:
+  effort: ${REASONING_EFFORT:${DEEPSEEK_REASONING_EFFORT:high}}
+
+# RAG
+rag:
+  embedding:
+    # 可选值：transformers-default / bge-m3-http
+    provider: ${RAG_EMBEDDING_PROVIDER:bge-m3-http}
+    service-url: ${EMBEDDING_SERVICE_URL:http://127.0.0.1:7086}
+    model-name: ${RAG_EMBEDDING_MODEL_NAME:bge-m3}
+    dimension: ${RAG_EMBEDDING_DIMENSION:1024}
+  vectorstore:
+    index-name: ${RAG_VECTOR_INDEX_NAME:fitmate-vectorstore}
+    prefix: ${RAG_VECTOR_PREFIX:embedding:}
+  chunking:
+    # 可选值：token / semantic
+    strategy: ${RAG_CHUNKING_STRATEGY:semantic}
+    merge-threshold: ${RAG_CHUNKING_MERGE_THRESHOLD:0.82}
+    breakpoint-drop-threshold: ${RAG_CHUNKING_BREAKPOINT_DROP_THRESHOLD:0.12}
+    max-chunk-sentence-count: ${RAG_CHUNKING_MAX_CHUNK_SENTENCE_COUNT:8}
+    max-chunk-chars: ${RAG_CHUNKING_MAX_CHUNK_CHARS:800}
+    sentence-embedding-batch-size: ${RAG_CHUNKING_SENTENCE_EMBEDDING_BATCH_SIZE:64}
+    paragraph-boundary-enabled: ${RAG_CHUNKING_PARAGRAPH_BOUNDARY_ENABLED:true}
+    debug-log-enabled: ${RAG_CHUNKING_DEBUG_LOG_ENABLED:false}
+
+# Internet
+internet:
+  websearch:
+    searxng:
+      url: http://127.0.0.1:6080/search
+      counts: 25
+    bing:
+      counts: 10
+
+# FitMate
+fitmate:
+  llm:
+    encryption-key: ${LLM_ENCRYPTION_KEY:}
+    default-config:
+      base-url: ${OPENAI_BASE_URL:https://api.deepseek.com}
+      api-key: ${OPENAI_API_KEY:your_openai_api_key}
+      model: ${OPENAI_MODEL:deepseek-v4-flash}
+      max-input-context-tokens: 204800
+      max-output-context-tokens: 65536
+      thinking-enabled: true
+      reasoning-effort: ${REASONING_EFFORT:high}
+  agent:
+    max-iterations: 20
+    max-tool-calls: 100
+    max-run-duration-seconds: 1800
+    llm-timeout-seconds: 120
+    tool-timeout-seconds: 30
+    memory-window-size: 50
+    context-compress:
+      enabled: true
+      threshold-ratio: 0.8
+      keep-recent-count: 6
+      summary-max-tokens: 1024
+    enabled-tools:
+      - date.now
+      - kb.search
+      - rag.search
+      - body_metrics.query
+      - training_log.query
+      - web.search
+      - web.fetch
+  wiki:
+    enabled: ${WIKI_ENABLED:true}
+    compile:
+      async-pool-size: ${WIKI_COMPILE_POOL_SIZE:3}
+      max-retry: ${WIKI_COMPILE_MAX_RETRY:2}
+    retrieval:
+      default-top-k: ${WIKI_RETRIEVAL_TOP_K:4}
+      max-top-k: ${WIKI_RETRIEVAL_MAX_TOP_K:10}
+      vector-recall-k: ${WIKI_VECTOR_RECALL_K:8}
+      keyword-recall-k: ${WIKI_KEYWORD_RECALL_K:8}
+      rerank-enabled: ${WIKI_RERANK_ENABLED:true}
+    vectorstore:
+      index-name: ${WIKI_VECTORSTORE_INDEX_NAME:fitmate-wiki-vectorstore}
+      prefix: ${WIKI_VECTORSTORE_PREFIX:fitmate:wiki:embedding:}
+    keyword:
+      index-name: ${WIKI_KEYWORD_INDEX_NAME:fitmate-wiki-keyword-index}
+      key-prefix: ${WIKI_KEYWORD_KEY_PREFIX:fitmate:wiki:chunk:}
+
+# Logging
+logging:
+  level:
+    root: info

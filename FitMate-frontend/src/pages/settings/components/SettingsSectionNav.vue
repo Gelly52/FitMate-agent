@@ -30,6 +30,7 @@ export default {
       sections: [
         { id: "profile", label: "个人信息", icon: "person" },
         { id: "appearance", label: "外观", icon: "palette" },
+        { id: "llm", label: "配置", icon: "tune" },
         { id: "about", label: "关于", icon: "info" },
       ],
     };

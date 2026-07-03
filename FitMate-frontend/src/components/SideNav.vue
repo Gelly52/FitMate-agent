@@ -83,7 +83,7 @@ export default {
     return {
       navItems: [
         { to: "/dashboard", icon: "grid_view", label: "Dashboard" },
-        { to: "/chat", icon: "chat_bubble", label: "AI Chat" },
+        { to: "/chat", icon: "chat_bubble", label: "Agent Chat" },
         { to: "/training", icon: "fitness_center", label: "Training Log" },
         { to: "/body-metrics", icon: "monitor_weight", label: "Body Metrics" },
         { to: "/upload", icon: "folder_open", label: "Knowledge Base" },

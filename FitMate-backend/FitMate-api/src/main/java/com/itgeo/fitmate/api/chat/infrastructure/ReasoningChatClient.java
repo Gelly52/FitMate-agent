@@ -40,10 +40,17 @@ public class ReasoningChatClient {
     }
 
     public ReasoningStreamChunk call(String prompt) {
+        return call(prompt, null);
+    }
+
+    /**
+     * @param maxTokens 覆盖 max_tokens；传 null 用 config 默认值
+     */
+    public ReasoningStreamChunk call(String prompt, Integer maxTokens) {
         StringBuilder reasoning = new StringBuilder();
         StringBuilder content = new StringBuilder();
         TokenUsage[] usageHolder = new TokenUsage[1];
-        stream(prompt).toStream().forEach(chunk -> {
+        stream(prompt, maxTokens).toStream().forEach(chunk -> {
             if (chunk.getUsage() != null) {
                 usageHolder[0] = chunk.getUsage();
                 return;
@@ -59,10 +66,17 @@ public class ReasoningChatClient {
     }
 
     public Flux<ReasoningStreamChunk> stream(String prompt) {
+        return stream(prompt, null);
+    }
+
+    /**
+     * @param maxTokens 覆盖 max_tokens；传 null 用 config 默认值
+     */
+    public Flux<ReasoningStreamChunk> stream(String prompt, Integer maxTokens) {
         return Flux.create(sink -> {
             try {
                 ResolvedLlmConfig config = llmConfigResolver.resolveForCurrentUser();
-                String requestBody = buildRequestBody(prompt, config);
+                String requestBody = buildRequestBody(prompt, config, maxTokens);
 
                 HttpRequest request = HttpRequest.newBuilder()
                         .uri(URI.create(buildChatCompletionsUrl(config.getBaseUrl())))
@@ -93,14 +107,23 @@ public class ReasoningChatClient {
     }
 
     private String buildRequestBody(String prompt, ResolvedLlmConfig config) {
+        return buildRequestBody(prompt, config, null);
+    }
+
+    /**
+     * @param maxTokens 非 null 时覆盖 config 的 max_tokens（用于压缩等需要独立限制输出的场景）
+     */
+    private String buildRequestBody(String prompt, ResolvedLlmConfig config, Integer maxTokens) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("model", config.getModel());
         body.put("stream", true);
         body.put("stream_options", Map.of("include_usage", true));
         body.put("reasoning_effort", StrUtil.blankToDefault(config.getReasoningEffort(), "high"));
         body.put("thinking", Map.of("type", Boolean.TRUE.equals(config.getThinkingEnabled()) ? "enabled" : "disabled"));
-        if (config.getMaxOutputContextTokens() != null && config.getMaxOutputContextTokens() > 0) {
-            body.put("max_tokens", config.getMaxOutputContextTokens());
+        // 优先使用显式传入的 maxTokens（压缩场景），否则回退到用户配置
+        Integer effectiveMaxTokens = (maxTokens != null && maxTokens > 0) ? maxTokens : config.getMaxOutputContextTokens();
+        if (effectiveMaxTokens != null && effectiveMaxTokens > 0) {
+            body.put("max_tokens", effectiveMaxTokens);
         }
         body.put("messages", List.of(Map.of("role", "user", "content", prompt)));
         return JSONUtil.toJsonStr(body);

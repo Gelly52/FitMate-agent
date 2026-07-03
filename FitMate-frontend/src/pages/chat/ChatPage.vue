@@ -78,11 +78,19 @@
         :token-usage="tokenUsage"
         :current-model="currentModel"
         :available-models="availableModels"
+        :thinking-enabled="thinkingEnabled"
+        :reasoning-effort="reasoningEffort"
+        :is-compressing="isCompressing"
+        :can-compress="canCompressContext"
         @send="doChat"
+        @stop="stopGeneration"
         @select-model="onModelSelect"
+        @toggle-thinking="onToggleThinking"
+        @select-reasoning-effort="onSelectReasoningEffort"
         @toggle-internet-search="doInternetSearch"
         @toggle-knowledge-base="doKnowledgeBase"
         @toggle-rag="doRag"
+        @trigger-compress="triggerManualCompress"
       />
     </div>
   </div>

@@ -1,0 +1,59 @@
+# =============================================================================
+# Sensitive / local-only files
+# =============================================================================
+
+# Local environment variables (contains real API keys, DB passwords, etc.)
+.env
+
+# Spring Boot runtime environment configs (may contain credentials)
+# NOTE: *.example.yml templates remain tracked; only actual runtime files are ignored.
+FitMate-backend/FitMate-api/src/main/resources/application-dev.yml
+FitMate-backend/FitMate-api/src/main/resources/application-prod.yml
+FitMate-backend/FitMate-mcpServer/src/main/resources/application-dev.yml
+FitMate-backend/FitMate-mcpServer/src/main/resources/application-prod.yml
+
+# Snow AI CLI local settings and logs
+.snow/
+
+# Brainstorming visual companion artifacts (local mockups, not source)
+.superpowers/
+
+# Common credential/key files
+*.key
+*.pem
+*.p12
+*.jks
+*.keystore
+
+# =============================================================================
+# Build artifacts
+# =============================================================================
+
+# Maven / Java build output
+target/
+build/
+*.class
+*.jar
+*.war
+
+# IDE files
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.project
+.classpath
+.settings/
+
+# Node / frontend build output
+node_modules/
+dist/
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local scratch / notes (not source)
+新建 文本文档.txt
