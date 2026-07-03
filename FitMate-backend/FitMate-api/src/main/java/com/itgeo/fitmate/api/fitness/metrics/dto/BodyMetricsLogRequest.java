@@ -18,6 +18,16 @@ public class BodyMetricsLogRequest {
     private BigDecimal weight;
     /** 体脂率。 */
     private BigDecimal bodyFat;
+    /** 胸围 cm。 */
+    private BigDecimal chestGirth;
+    /** 腰围 cm。 */
+    private BigDecimal waistGirth;
+    /** 臀围 cm。 */
+    private BigDecimal hipGirth;
+    /** 臂围 cm。 */
+    private BigDecimal armGirth;
+    /** 大腿围 cm。 */
+    private BigDecimal thighGirth;
     /** 睡眠时长，单位小时。 */
     private BigDecimal sleep;
     /** 疲劳等级。 */

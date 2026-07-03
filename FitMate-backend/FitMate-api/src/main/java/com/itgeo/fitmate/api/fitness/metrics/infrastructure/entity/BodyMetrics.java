@@ -23,6 +23,16 @@ public class BodyMetrics {
     private BigDecimal weight;
     @TableField("body_fat")
     private BigDecimal bodyFat;
+    @TableField("chest_girth")
+    private BigDecimal chestGirth;
+    @TableField("waist_girth")
+    private BigDecimal waistGirth;
+    @TableField("hip_girth")
+    private BigDecimal hipGirth;
+    @TableField("arm_girth")
+    private BigDecimal armGirth;
+    @TableField("thigh_girth")
+    private BigDecimal thighGirth;
     @TableField("sleep_hours")
     /** 睡眠时长，单位小时。 */
     private BigDecimal sleepHours;
