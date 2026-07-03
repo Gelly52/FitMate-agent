@@ -422,3 +422,92 @@ CREATE TABLE IF NOT EXISTS `t_user_profile` (
 -- ========== 升级脚本（已有库执行）==========
 -- 长期记忆功能
 -- ALTER TABLE t_wiki_page MODIFY COLUMN page_type VARCHAR(30) NOT NULL COMMENT 'INDEX/ENTITY/CONCEPT/SYNTHESIS/SOURCE_SUMMARY/LOG';
+
+-- ========== 数据记录工具扩展（2026-07-03）==========
+
+-- Phase 1.1: 有氧训练日志表
+CREATE TABLE IF NOT EXISTS `t_cardio_log` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '有氧训练ID',
+    `user_id` BIGINT NOT NULL COMMENT '所属用户主键',
+    `training_date` DATE NOT NULL COMMENT '训练日期',
+    `cardio_type` VARCHAR(32) NOT NULL COMMENT '类型：running/cycling/swimming/rowing/jump_rope/other',
+    `distance_km` DECIMAL(8,2) DEFAULT NULL COMMENT '距离 km',
+    `duration_minutes` INT DEFAULT NULL COMMENT '时长 分钟',
+    `avg_pace` VARCHAR(16) DEFAULT NULL COMMENT '配速，自动计算，格式 mm:ss/km',
+    `avg_heart_rate` INT DEFAULT NULL COMMENT '平均心率',
+    `calories_burned` INT DEFAULT NULL COMMENT '消耗卡路里',
+    `note` VARCHAR(500) DEFAULT NULL COMMENT '备注',
+    `summary` VARCHAR(500) DEFAULT NULL COMMENT '摘要展示文本',
+    `source` VARCHAR(20) NOT NULL DEFAULT 'manual' COMMENT '来源：manual/chat/import',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_cardio_user_date_type` (`user_id`, `training_date`, `cardio_type`),
+    KEY `idx_cardio_user_date` (`user_id`, `training_date`),
+    CONSTRAINT `fk_cardio_log_user` FOREIGN KEY (`user_id`) REFERENCES `t_user` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='有氧训练日志表';
+
+-- Phase 1.2: 心率记录表
+CREATE TABLE IF NOT EXISTS `t_heart_rate` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '心率记录ID',
+    `user_id` BIGINT NOT NULL COMMENT '所属用户主键',
+    `record_date` DATE NOT NULL COMMENT '记录日期',
+    `resting_hr` INT DEFAULT NULL COMMENT '静息心率',
+    `max_hr` INT DEFAULT NULL COMMENT '最大心率',
+    `hrv` INT DEFAULT NULL COMMENT '心率变异性 ms',
+    `note` VARCHAR(500) DEFAULT NULL COMMENT '备注',
+    `summary` VARCHAR(500) DEFAULT NULL COMMENT '摘要展示文本',
+    `source` VARCHAR(20) NOT NULL DEFAULT 'manual' COMMENT '来源：manual/chat/import',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_hr_user_date` (`user_id`, `record_date`),
+    KEY `idx_hr_user_date` (`user_id`, `record_date`),
+    CONSTRAINT `fk_heart_rate_user` FOREIGN KEY (`user_id`) REFERENCES `t_user` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='心率记录表';
+
+-- Phase 1.3: 饮食日志主表
+CREATE TABLE IF NOT EXISTS `t_diet_log` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '饮食日志ID',
+    `user_id` BIGINT NOT NULL COMMENT '所属用户主键',
+    `record_date` DATE NOT NULL COMMENT '记录日期',
+    `meal_type` VARCHAR(16) NOT NULL COMMENT '餐次：breakfast/lunch/dinner/snack',
+    `total_calories` INT DEFAULT NULL COMMENT '总热量，自动汇总',
+    `total_protein` DECIMAL(8,1) DEFAULT NULL COMMENT '总蛋白质 g',
+    `total_carbs` DECIMAL(8,1) DEFAULT NULL COMMENT '总碳水 g',
+    `total_fat` DECIMAL(8,1) DEFAULT NULL COMMENT '总脂肪 g',
+    `note` VARCHAR(500) DEFAULT NULL COMMENT '备注',
+    `summary` VARCHAR(500) DEFAULT NULL COMMENT '摘要展示文本',
+    `source` VARCHAR(20) NOT NULL DEFAULT 'manual' COMMENT '来源：manual/chat/import',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_diet_user_date_meal` (`user_id`, `record_date`, `meal_type`),
+    KEY `idx_diet_user_date` (`user_id`, `record_date`),
+    CONSTRAINT `fk_diet_log_user` FOREIGN KEY (`user_id`) REFERENCES `t_user` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='饮食日志主表';
+
+-- Phase 1.4: 饮食明细表
+CREATE TABLE IF NOT EXISTS `t_diet_item` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '饮食明细ID',
+    `diet_log_id` BIGINT NOT NULL COMMENT '所属饮食日志ID',
+    `food_name` VARCHAR(100) NOT NULL COMMENT '食物名称',
+    `portion` VARCHAR(50) DEFAULT NULL COMMENT '份量描述',
+    `calories` INT DEFAULT NULL COMMENT '热量 kcal',
+    `protein` DECIMAL(8,1) DEFAULT NULL COMMENT '蛋白质 g',
+    `carbs` DECIMAL(8,1) DEFAULT NULL COMMENT '碳水 g',
+    `fat` DECIMAL(8,1) DEFAULT NULL COMMENT '脂肪 g',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_diet_item_log` (`diet_log_id`),
+    CONSTRAINT `fk_diet_item_log` FOREIGN KEY (`diet_log_id`) REFERENCES `t_diet_log` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='饮食明细表';
+
+-- ========== 升级脚本（已有库执行）==========
+-- 以下 ALTER 用于已存在的数据库升级，新建库无需执行（上方 CREATE TABLE 已含字段）
+ALTER TABLE `t_body_metrics`
+    ADD COLUMN `chest_girth` DECIMAL(6,1) DEFAULT NULL COMMENT '胸围 cm' AFTER `body_fat`,
+    ADD COLUMN `waist_girth` DECIMAL(6,1) DEFAULT NULL COMMENT '腰围 cm' AFTER `chest_girth`,
+    ADD COLUMN `hip_girth` DECIMAL(6,1) DEFAULT NULL COMMENT '臀围 cm' AFTER `waist_girth`,
+    ADD COLUMN `arm_girth` DECIMAL(6,1) DEFAULT NULL COMMENT '臂围 cm' AFTER `hip_girth`,
+    ADD COLUMN `thigh_girth` DECIMAL(6,1) DEFAULT NULL COMMENT '大腿围 cm' AFTER `arm_girth`;
