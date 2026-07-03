@@ -14,13 +14,15 @@ import org.mockito.ArgumentCaptor;
 class MemoryWriterTest {
 
     private UserMemoryMapper mapper;
+    private ProfileBuilder profileBuilder;
     private MemoryWriter writer;
 
     @BeforeEach
     void setUp() {
         mapper = mock(UserMemoryMapper.class);
+        profileBuilder = mock(ProfileBuilder.class);
         when(mapper.selectList(any())).thenReturn(Collections.emptyList());
-        writer = new MemoryWriter(mapper);
+        writer = new MemoryWriter(mapper, profileBuilder);
     }
 
     @Test

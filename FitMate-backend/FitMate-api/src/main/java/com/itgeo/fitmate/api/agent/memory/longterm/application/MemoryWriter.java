@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 public class MemoryWriter {
 
     private final UserMemoryMapper memoryMapper;
+    private final ProfileBuilder profileBuilder;
 
     /**
      * 写入记忆：若相同 content_hash 已存在（active 或 ignored）则跳过。
@@ -41,6 +42,8 @@ public class MemoryWriter {
         entity.setStatus("active");
         memoryMapper.insert(entity);
         log.info("写入记忆 userId={} type={} source={}", req.getUserId(), req.getMemoryType(), req.getSource());
+        // 触发画像异步重建
+        profileBuilder.asyncRebuild(req.getUserId());
         return true;
     }
 }
