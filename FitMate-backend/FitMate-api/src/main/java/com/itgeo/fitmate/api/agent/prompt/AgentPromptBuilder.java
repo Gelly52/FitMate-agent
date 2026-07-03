@@ -39,10 +39,29 @@ public class AgentPromptBuilder {
                                       List<ToolDescriptor> tools,
                                       String wikiContext,
                                       String summarySection) {
+        return buildDecisionPrompt(context, memory, observations, tools, wikiContext, summarySection, null);
+    }
+
+    /**
+     * 构造 Agent Loop 决策 prompt（带用户画像区块）。
+     *
+     * @param summarySection      历史摘要区块文本，无摘要时传 null 或空串
+     * @param userProfileSection  用户画像区块文本（如 "## 用户画像\n..."），无画像时传 null 或空串
+     */
+    public String buildDecisionPrompt(AgentExecuteContext context,
+                                      List<Map<String, String>> memory,
+                                      List<Map<String, Object>> observations,
+                                      List<ToolDescriptor> tools,
+                                      String wikiContext,
+                                      String summarySection,
+                                      String userProfileSection) {
         StringBuilder prompt = new StringBuilder(loadSystemPrompt());
         prompt.append("\n\n## 可用工具\n").append(JSONUtil.toJsonStr(tools));
         if (StrUtil.isNotBlank(summarySection)) {
             prompt.append(summarySection);
+        }
+        if (StrUtil.isNotBlank(userProfileSection)) {
+            prompt.append("\n\n").append(userProfileSection);
         }
         prompt.append("\n\n## 最近对话\n").append(JSONUtil.toJsonStr(memory));
         if (StrUtil.isNotBlank(wikiContext)) {
