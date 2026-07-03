@@ -49,17 +49,12 @@
         <div v-else class="dash-empty">暂无训练记录，去记录第一次训练吧</div>
       </div>
 
-      <!-- User Profile (placeholder, reserved for future) -->
+      <!-- User Profile -->
       <div class="dash-col">
         <div class="dash-col-head">
           <h3 class="dash-col-title">User Profile</h3>
-          <span class="dash-col-tag">SOON</span>
         </div>
-        <div class="dash-placeholder">
-          <span class="material-symbols-outlined dash-placeholder-icon">account_circle</span>
-          <span class="dash-placeholder-text">用户画像内容即将上线</span>
-          <span class="dash-placeholder-hint">此处将展示用户个性化画像与建议</span>
-        </div>
+        <UserProfilePanel />
       </div>
     </section>
 
@@ -92,9 +87,11 @@
 <script lang="ts">
 import ChatLogicBase from "../chat/ChatLogicBase.vue";
 import doctorApi from "../../services/doctorApi";
+import UserProfilePanel from "./components/UserProfilePanel.vue";
 
 export default {
   name: "DashboardPage",
+  components: { UserProfilePanel },
   extends: ChatLogicBase,
   data() {
     return {
