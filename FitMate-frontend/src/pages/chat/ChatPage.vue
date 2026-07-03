@@ -73,14 +73,16 @@
         :internet-search-selected="internetSearchSelected"
         :knowledge-base-selected="knowledgeBaseSelected"
         :rag-selected="ragSelected"
-        :agent-mode-selected="agentModeSelected"
         :is-sending="isSending"
         :is-streaming="isStreaming"
+        :token-usage="tokenUsage"
+        :current-model="currentModel"
+        :available-models="availableModels"
         @send="doChat"
+        @select-model="onModelSelect"
         @toggle-internet-search="doInternetSearch"
         @toggle-knowledge-base="doKnowledgeBase"
         @toggle-rag="doRag"
-        @toggle-agent-mode="doAgentMode"
       />
     </div>
   </div>
@@ -293,6 +295,7 @@ export default {
 
 .chat-page-input {
   flex-shrink: 0;
-  border-top: 1px solid color-mix(in srgb, var(--color-surface-container) 60%, transparent);
+  padding: 8px 24px 16px;
+  background: var(--color-background);
 }
 </style>
