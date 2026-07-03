@@ -21,6 +21,7 @@
 <script lang="ts">
 import { getToken, getUserInfo, clearUserSession } from "../services/http";
 import doctorApi from "../services/doctorApi";
+import { llmConfig } from "../services/llmConfig";
 import SideNav from "../components/SideNav.vue";
 import TopBar from "../components/TopBar.vue";
 
@@ -55,6 +56,9 @@ export default {
         this.$router.push("/login");
       }
     },
+  },
+  mounted() {
+    llmConfig.load();
   },
 };
 </script>
