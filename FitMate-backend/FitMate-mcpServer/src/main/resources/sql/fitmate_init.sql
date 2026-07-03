@@ -97,6 +97,7 @@ CREATE TABLE IF NOT EXISTS `t_body_metrics` (
     `fatigue_level` VARCHAR(16) DEFAULT NULL COMMENT '疲劳度：低/中/高',
     `note` VARCHAR(500) DEFAULT NULL COMMENT '备注',
     `summary` VARCHAR(500) DEFAULT NULL COMMENT '近期变化摘要，供 recent 列表展示',
+    `source` VARCHAR(20) NOT NULL DEFAULT 'manual' COMMENT '来源：manual/chat/import',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
@@ -510,4 +511,5 @@ ALTER TABLE `t_body_metrics`
     ADD COLUMN `waist_girth` DECIMAL(6,1) DEFAULT NULL COMMENT '腰围 cm' AFTER `chest_girth`,
     ADD COLUMN `hip_girth` DECIMAL(6,1) DEFAULT NULL COMMENT '臀围 cm' AFTER `waist_girth`,
     ADD COLUMN `arm_girth` DECIMAL(6,1) DEFAULT NULL COMMENT '臂围 cm' AFTER `hip_girth`,
-    ADD COLUMN `thigh_girth` DECIMAL(6,1) DEFAULT NULL COMMENT '大腿围 cm' AFTER `arm_girth`;
+    ADD COLUMN `thigh_girth` DECIMAL(6,1) DEFAULT NULL COMMENT '大腿围 cm' AFTER `arm_girth`,
+    ADD COLUMN `source` VARCHAR(20) NOT NULL DEFAULT 'manual' COMMENT '来源：manual/chat/import' AFTER `summary`;

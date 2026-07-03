@@ -6,7 +6,6 @@ import com.itgeo.fitmate.api.fitness.metrics.dto.BodyMetricsLogRequest;
 import com.itgeo.fitmate.api.fitness.metrics.infrastructure.entity.BodyMetrics;
 import com.itgeo.fitmate.api.fitness.metrics.infrastructure.mapper.BodyMetricsMapper;
 import com.itgeo.fitmate.api.fitness.training.dto.DateSummaryItem;
-import jakarta.annotation.Resource;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -20,8 +19,11 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(rollbackFor = Exception.class)
 public class BodyMetricsServiceImpl implements BodyMetricsService {
 
-    @Resource
-    private BodyMetricsMapper bodyMetricsMapper;
+    private final BodyMetricsMapper bodyMetricsMapper;
+
+    public BodyMetricsServiceImpl(BodyMetricsMapper bodyMetricsMapper) {
+        this.bodyMetricsMapper = bodyMetricsMapper;
+    }
 
     /**
      * 记录身体指标。
@@ -32,7 +34,12 @@ public class BodyMetricsServiceImpl implements BodyMetricsService {
      */
     @Override
     public void logBodyMetrics(Long userId, BodyMetricsLogRequest request) {
-        // 先校验用户与请求内容，确保至少填写体重或体脂中的一项。
+        logBodyMetrics(userId, request, "manual");
+    }
+
+    @Override
+    public void logBodyMetrics(Long userId, BodyMetricsLogRequest request, String source) {
+        // 先校验用户与请求内容，确保至少填写体重、体脂或任一围度字段中的一项。
         if (userId == null) {
             throw new IllegalArgumentException("用户未登录");
         }
@@ -42,8 +49,11 @@ public class BodyMetricsServiceImpl implements BodyMetricsService {
         if (request.getDate() == null || request.getDate().isBlank()) {
             throw new IllegalArgumentException("记录日期不能为空");
         }
-        if (request.getWeight() == null && request.getBodyFat() == null) {
-            throw new IllegalArgumentException("体重和体脂至少填写一项");
+        if (request.getWeight() == null && request.getBodyFat() == null
+                && request.getChestGirth() == null && request.getWaistGirth() == null
+                && request.getHipGirth() == null && request.getArmGirth() == null
+                && request.getThighGirth() == null) {
+            throw new IllegalArgumentException("weight / bodyFat / 任一围度字段至少需提供一个");
         }
 
         // 解析记录日期并生成用于展示的身体指标摘要。
@@ -60,10 +70,16 @@ public class BodyMetricsServiceImpl implements BodyMetricsService {
         if (existing != null) {
             existing.setWeight(request.getWeight());
             existing.setBodyFat(request.getBodyFat());
+            existing.setChestGirth(request.getChestGirth());
+            existing.setWaistGirth(request.getWaistGirth());
+            existing.setHipGirth(request.getHipGirth());
+            existing.setArmGirth(request.getArmGirth());
+            existing.setThighGirth(request.getThighGirth());
             existing.setSleepHours(request.getSleep());
             existing.setFatigueLevel(blankToNull(request.getFatigue()));
             existing.setNote(blankToNull(request.getNote()));
             existing.setSummary(summary);
+            existing.setSource(source);
             bodyMetricsMapper.updateById(existing);
         } else {
             BodyMetrics entity = new BodyMetrics();
@@ -71,10 +87,16 @@ public class BodyMetricsServiceImpl implements BodyMetricsService {
             entity.setRecordDate(recordDate);
             entity.setWeight(request.getWeight());
             entity.setBodyFat(request.getBodyFat());
+            entity.setChestGirth(request.getChestGirth());
+            entity.setWaistGirth(request.getWaistGirth());
+            entity.setHipGirth(request.getHipGirth());
+            entity.setArmGirth(request.getArmGirth());
+            entity.setThighGirth(request.getThighGirth());
             entity.setSleepHours(request.getSleep());
             entity.setFatigueLevel(blankToNull(request.getFatigue()));
             entity.setNote(blankToNull(request.getNote()));
             entity.setSummary(summary);
+            entity.setSource(source);
             bodyMetricsMapper.insert(entity);
         }
 

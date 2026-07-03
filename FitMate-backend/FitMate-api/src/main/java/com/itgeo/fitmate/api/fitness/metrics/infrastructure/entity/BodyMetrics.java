@@ -42,6 +42,8 @@ public class BodyMetrics {
     private String note;
     /** 摘要展示文本。 */
     private String summary;
+    /** 来源：manual/chat/import。 */
+    private String source;
     @TableField("created_at")
     private LocalDateTime createdAt;
     @TableField("updated_at")

@@ -17,6 +17,15 @@ public interface BodyMetricsService {
     void logBodyMetrics(Long userId, BodyMetricsLogRequest request);
 
     /**
+     * 记录身体指标（指定来源）。
+     *
+     * @param userId 用户ID
+     * @param request 请求
+     * @param source 来源：manual/chat/import
+     */
+    void logBodyMetrics(Long userId, BodyMetricsLogRequest request, String source);
+
+    /**
      * 查询指定用户最近的身体指标摘要。
      *
      * @param userId 用户主键
