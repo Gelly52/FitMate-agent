@@ -55,4 +55,62 @@ class TrainingServiceImplTest {
         verify(trainingLogMapper).insert(captor.capture());
         assertEquals("manual", captor.getValue().getSource());
     }
+
+    @Test
+    void logTraining_withBenchPress_setsPrimaryMuscleGroupChest() {
+        // 准备：卧推动作
+        TrainingLogRequest request = new TrainingLogRequest();
+        request.setDate("2026-07-03");
+        TrainingExerciseItem item = new TrainingExerciseItem();
+        item.setName("杠铃卧推");
+        item.setSets(3);
+        item.setReps(10);
+        item.setWeight(new BigDecimal("60"));
+        request.setExercises(java.util.Collections.singletonList(item));
+
+        when(trainingLogMapper.selectOne(any())).thenReturn(null);
+
+        // 执行
+        service.logTraining(1L, request, "chat");
+
+        // 验证：primaryMuscleGroup 被推断为胸肌
+        ArgumentCaptor<TrainingLog> captor = ArgumentCaptor.forClass(TrainingLog.class);
+        verify(trainingLogMapper).insert(captor.capture());
+        TrainingLog saved = captor.getValue();
+        assertEquals("胸肌", saved.getPrimaryMuscleGroup());
+    }
+
+    @Test
+    void logTraining_withMultipleMovements_setsMostFrequentMuscleGroup() {
+        // 准备：2 个胸肌动作 + 1 个肩部动作，应推断为胸肌
+        TrainingLogRequest request = new TrainingLogRequest();
+        request.setDate("2026-07-03");
+        TrainingExerciseItem benchPress = new TrainingExerciseItem();
+        benchPress.setName("卧推");
+        benchPress.setSets(3);
+        benchPress.setReps(10);
+        benchPress.setWeight(new BigDecimal("60"));
+        TrainingExerciseItem inclinePress = new TrainingExerciseItem();
+        inclinePress.setName("上斜卧推");
+        inclinePress.setSets(3);
+        inclinePress.setReps(10);
+        inclinePress.setWeight(new BigDecimal("50"));
+        TrainingExerciseItem shoulderPress = new TrainingExerciseItem();
+        shoulderPress.setName("推举");
+        shoulderPress.setSets(3);
+        shoulderPress.setReps(10);
+        shoulderPress.setWeight(new BigDecimal("40"));
+        request.setExercises(java.util.Arrays.asList(benchPress, inclinePress, shoulderPress));
+
+        when(trainingLogMapper.selectOne(any())).thenReturn(null);
+
+        // 执行
+        service.logTraining(1L, request, "chat");
+
+        // 验证：胸肌出现 2 次，肩部 1 次，推断为胸肌
+        ArgumentCaptor<TrainingLog> captor = ArgumentCaptor.forClass(TrainingLog.class);
+        verify(trainingLogMapper).insert(captor.capture());
+        TrainingLog saved = captor.getValue();
+        assertEquals("胸肌", saved.getPrimaryMuscleGroup());
+    }
 }

@@ -2,6 +2,7 @@ package com.itgeo.fitmate.api.fitness.training.application.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.itgeo.fitmate.api.fitness.training.application.TrainingService;
+import com.itgeo.fitmate.api.fitness.training.domain.MuscleGroupDictionary;
 import com.itgeo.fitmate.api.fitness.training.dto.DateSummaryItem;
 import com.itgeo.fitmate.api.fitness.training.dto.TrainingExerciseItem;
 import com.itgeo.fitmate.api.fitness.training.dto.TrainingLogRequest;
@@ -11,7 +12,9 @@ import com.itgeo.fitmate.api.fitness.training.infrastructure.mapper.TrainingExer
 import com.itgeo.fitmate.api.fitness.training.infrastructure.mapper.TrainingLogMapper;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -80,6 +83,19 @@ public class TrainingServiceImpl implements TrainingService {
             totalVolume = totalVolume.add(volume);
         }
 
+        // 推断主肌群：统计每个动作匹配的肌群频次，取最高
+        Map<String, Integer> muscleGroupCount = new HashMap<>();
+        for (TrainingExerciseItem item : validExercises) {
+            String group = MuscleGroupDictionary.inferMuscleGroup(item.getName());
+            if (group != null) {
+                muscleGroupCount.merge(group, 1, Integer::sum);
+            }
+        }
+        String primaryMuscleGroup = muscleGroupCount.entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .map(Map.Entry::getKey)
+                .orElse(null);
+
         // 生成训练摘要，并按当天是否已有记录执行更新或新增。
         String summary = buildTrainingSummary(validExercises);
         TrainingLog existing = trainingLogMapper.selectOne(
@@ -92,6 +108,7 @@ public class TrainingServiceImpl implements TrainingService {
         if (existing != null) {
             existing.setSummary(summary);
             existing.setTotalVolume(totalVolume);
+            existing.setPrimaryMuscleGroup(primaryMuscleGroup);
             existing.setSource(source);
             trainingLogMapper.updateById(existing);
             trainingLogId = existing.getId();
@@ -104,7 +121,7 @@ public class TrainingServiceImpl implements TrainingService {
             log.setUserId(userId);
             log.setTrainingDate(trainingDate);
             log.setSummary(summary);
-            log.setPrimaryMuscleGroup(null);
+            log.setPrimaryMuscleGroup(primaryMuscleGroup);
             log.setTotalVolume(totalVolume);
             log.setSource(source);
             trainingLogMapper.insert(log);
