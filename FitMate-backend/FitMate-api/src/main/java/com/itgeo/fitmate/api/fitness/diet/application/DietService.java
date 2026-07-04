@@ -15,4 +15,13 @@ public interface DietService {
      * @param source 来源：manual/chat/import
      */
     void logDiet(Long userId, DietLogRequest request, String source);
+
+    /**
+     * 查询最近饮食摘要。
+     *
+     * @param userId 用户ID
+     * @param limit  返回条数
+     * @return 日期摘要列表
+     */
+    java.util.List<com.itgeo.fitmate.api.fitness.training.dto.DateSummaryItem> getRecentDiet(Long userId, Integer limit);
 }

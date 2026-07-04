@@ -92,4 +92,20 @@ class DietServiceImplTest {
         assertThrows(IllegalArgumentException.class,
                 () -> service.logDiet(1L, req, "chat"));
     }
+
+    @Test
+    void getRecentDiet_returnsDateSummaryList() {
+        com.itgeo.fitmate.api.fitness.diet.infrastructure.entity.DietLog log1 =
+                new com.itgeo.fitmate.api.fitness.diet.infrastructure.entity.DietLog();
+        log1.setRecordDate(java.time.LocalDate.of(2026, 7, 3));
+        log1.setSummary("早餐 共 290kcal");
+        when(dietLogMapper.selectList(any())).thenReturn(java.util.Collections.singletonList(log1));
+
+        java.util.List<com.itgeo.fitmate.api.fitness.training.dto.DateSummaryItem> result =
+                service.getRecentDiet(1L, 10);
+
+        assertEquals(1, result.size());
+        assertEquals("2026-07-03", result.get(0).getDate());
+        assertEquals("早餐 共 290kcal", result.get(0).getSummary());
+    }
 }

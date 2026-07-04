@@ -8,13 +8,16 @@ import com.itgeo.fitmate.api.fitness.diet.infrastructure.entity.DietItem;
 import com.itgeo.fitmate.api.fitness.diet.infrastructure.entity.DietLog;
 import com.itgeo.fitmate.api.fitness.diet.infrastructure.mapper.DietItemMapper;
 import com.itgeo.fitmate.api.fitness.diet.infrastructure.mapper.DietLogMapper;
+import com.itgeo.fitmate.api.fitness.training.dto.DateSummaryItem;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -126,6 +129,25 @@ public class DietServiceImpl implements DietService {
             entity.setFat(item.getFat());
             dietItemMapper.insert(entity);
         }
+    }
+
+    @Override
+    public List<DateSummaryItem> getRecentDiet(Long userId, Integer limit) {
+        if (userId == null) {
+            throw new IllegalArgumentException("用户ID不能为空");
+        }
+        int safeLimit = (limit == null || limit <= 0) ? 10 : Math.min(limit, 50);
+        List<DietLog> logs = dietLogMapper.selectList(
+                new LambdaQueryWrapper<DietLog>()
+                        .eq(DietLog::getUserId, userId)
+                        .orderByDesc(DietLog::getRecordDate)
+                        .last("limit " + safeLimit)
+        );
+        return logs.stream()
+                .map(log -> new DateSummaryItem(
+                        log.getRecordDate() == null ? null : log.getRecordDate().toString(),
+                        log.getSummary()))
+                .collect(Collectors.toList());
     }
 
     private String buildSummary(String mealType, int totalCalories,
