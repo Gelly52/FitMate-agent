@@ -11,6 +11,21 @@
         </p>
       </header>
 
+      <!-- Tab Bar -->
+      <div class="tab-bar">
+        <button
+          v-for="tab in [
+            { key: 'body', label: '身体指标' },
+            { key: 'heart-rate', label: '心率' }
+          ]"
+          :key="tab.key"
+          class="tab-btn"
+          :class="{ 'tab-btn-active': activeMetricsTab === tab.key }"
+          @click="switchMetricsTab(tab.key)"
+        >{{ tab.label }}</button>
+      </div>
+
+      <div v-if="activeMetricsTab === 'body'">
       <!-- Metrics -->
       <section class="form-section">
         <div class="form-section-head">
@@ -51,6 +66,27 @@
               step="0.1"
               placeholder="0.0"
             />
+          </div>
+
+          <div class="metric-field metric-field-wide">
+            <label class="metric-label"><span>Girth (cm)</span></label>
+            <div class="form-row">
+              <div class="girth-item">
+                <input v-model.number="form.chestGirth" class="metric-input" type="number" step="0.1" placeholder="胸围" />
+              </div>
+              <div class="girth-item">
+                <input v-model.number="form.waistGirth" class="metric-input" type="number" step="0.1" placeholder="腰围" />
+              </div>
+              <div class="girth-item">
+                <input v-model.number="form.hipGirth" class="metric-input" type="number" step="0.1" placeholder="臀围" />
+              </div>
+              <div class="girth-item">
+                <input v-model.number="form.armGirth" class="metric-input" type="number" step="0.1" placeholder="臂围" />
+              </div>
+              <div class="girth-item">
+                <input v-model.number="form.thighGirth" class="metric-input" type="number" step="0.1" placeholder="大腿围" />
+              </div>
+            </div>
           </div>
 
           <div class="metric-field group">
@@ -130,6 +166,42 @@
           COMMIT LOG
         </button>
       </div>
+      </div><!-- end body tab -->
+
+      <!-- Heart Rate Tab -->
+      <div v-if="activeMetricsTab === 'heart-rate'" class="heart-rate-section">
+        <div class="form-block">
+          <div class="form-label">DATE</div>
+          <input v-model="heartRateForm.date" class="metric-input" type="date" />
+        </div>
+        <div class="form-row">
+          <div class="form-block">
+            <div class="form-label">RESTING HR</div>
+            <input v-model.number="heartRateForm.restingHr" class="metric-input" type="number" placeholder="bpm" />
+          </div>
+          <div class="form-block">
+            <div class="form-label">MAX HR</div>
+            <input v-model.number="heartRateForm.maxHr" class="metric-input" type="number" placeholder="bpm" />
+          </div>
+        </div>
+        <div class="form-block">
+          <div class="form-label">HRV (MS)</div>
+          <input v-model.number="heartRateForm.hrv" class="metric-input" type="number" placeholder="ms" />
+        </div>
+        <div class="form-block">
+          <div class="form-label">NOTE</div>
+          <textarea v-model="heartRateForm.note" class="metric-input" rows="2"></textarea>
+        </div>
+        <button class="form-submit-btn" @click="submitHeartRate">COMMIT LOG</button>
+
+        <div class="history-section">
+          <div class="section-title">RECENT · 心率</div>
+          <div v-for="(record, idx) in recentHeartRate" :key="idx" class="history-item">
+            <span class="history-date">{{ record.date }}</span>
+            <span class="history-detail">{{ record.summary }}</span>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Today snapshot -->
@@ -153,6 +225,16 @@
         <span class="aside-stat-label">Fatigue</span>
         <span class="aside-stat-value" :class="fatigueClass">{{ todayStatus.fatigue || "--" }}</span>
       </div>
+      <div v-if="bodyMetricsSummary" class="summary-block">
+        <div class="summary-item">
+          <div class="summary-label">BMI</div>
+          <div class="summary-value">{{ bodyMetricsSummary.bmi || '未设置身高' }}</div>
+        </div>
+        <div class="summary-item">
+          <div class="summary-label">WEIGHT CHANGE</div>
+          <div class="summary-value">{{ bodyMetricsSummary.weightChangeRate ? bodyMetricsSummary.weightChangeRate + '%' : '-' }}</div>
+        </div>
+      </div>
     </aside>
   </div>
 </template>
@@ -172,8 +254,21 @@ export default {
         sleep: null,
         fatigue: "",
         note: "",
+        chestGirth: null,
+        waistGirth: null,
+        hipGirth: null,
+        armGirth: null,
+        thighGirth: null,
       },
       fatigueOptions: ["低", "中", "高"],
+      activeMetricsTab: 'body',
+      heartRateForm: {
+        date: new Date().toISOString().slice(0, 10),
+        restingHr: null,
+        maxHr: null,
+        hrv: null,
+        note: ''
+      },
     };
   },
   computed: {
@@ -196,6 +291,7 @@ export default {
   },
   mounted() {
     this.fetchRecentMetrics();
+    this.fetchBodyMetricsSummary();
   },
   methods: {
     submitMetrics() {
@@ -209,6 +305,11 @@ export default {
         fatigue: this.form.fatigue,
         note: this.form.note,
         date: new Date().toISOString().slice(0, 10),
+        chestGirth: this.form.chestGirth,
+        waistGirth: this.form.waistGirth,
+        hipGirth: this.form.hipGirth,
+        armGirth: this.form.armGirth,
+        thighGirth: this.form.thighGirth,
       };
       var me = this;
       doctorApi
@@ -228,6 +329,7 @@ export default {
             me.todayStatus.fatigue = formData.fatigue;
           }
           me.fetchRecentMetrics();
+          me.fetchBodyMetricsSummary();
         })
         .catch(function () {
           window.sessionStorage.setItem(
@@ -236,6 +338,33 @@ export default {
           );
           me.$router.push("/chat");
         });
+    },
+    switchMetricsTab: function (tab) {
+      this.activeMetricsTab = tab;
+      if (tab === 'heart-rate' && this.recentHeartRate.length === 0) this.fetchRecentHeartRate();
+    },
+    submitHeartRate: function () {
+      var me = this;
+      var formData = {
+        date: this.heartRateForm.date,
+        restingHr: this.heartRateForm.restingHr,
+        maxHr: this.heartRateForm.maxHr,
+        hrv: this.heartRateForm.hrv,
+        note: this.heartRateForm.note
+      };
+      doctorApi.logHeartRate(formData).then(function () {
+        me.fetchRecentHeartRate();
+      }).catch(function () {
+        window.sessionStorage.setItem("fitmate:pending-draft", me.buildHeartRatePrompt(formData));
+        me.$router.push("/chat");
+      });
+    },
+    buildHeartRatePrompt: function (data) {
+      var parts = [];
+      if (data.restingHr) parts.push('静息心率' + data.restingHr);
+      if (data.maxHr) parts.push('最大心率' + data.maxHr);
+      if (data.hrv) parts.push('HRV ' + data.hrv + 'ms');
+      return '我今天测了' + parts.join('，') + '，请帮我记录';
     },
   },
 };
@@ -502,6 +631,105 @@ export default {
 
 .status-alert {
   color: var(--color-error);
+}
+
+.tab-bar {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+
+.tab-btn {
+  padding: 6px 16px;
+  border: none;
+  background: transparent;
+  color: var(--color-on-surface-variant);
+  cursor: pointer;
+  border-radius: 999px;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  font-family: "Inter", sans-serif;
+}
+
+.tab-btn-active {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.heart-rate-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-label {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-on-surface-variant);
+}
+
+.form-row {
+  display: flex;
+  gap: 12px;
+}
+
+.form-row .form-block,
+.form-row .girth-item {
+  flex: 1;
+  min-width: 60px;
+}
+
+.girth-item {
+  flex: 1;
+  min-width: 60px;
+}
+
+.history-section {
+  margin-top: 24px;
+}
+
+.section-title {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-on-surface-variant);
+  margin-bottom: 8px;
+}
+
+.summary-block {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-surface-container);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.summary-label {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-on-surface-variant);
+}
+
+.summary-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-on-surface);
+  font-variant-numeric: tabular-nums;
 }
 
 @media (max-width: 900px) {
