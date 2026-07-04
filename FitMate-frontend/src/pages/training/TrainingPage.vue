@@ -231,6 +231,24 @@
         <span class="aside-stat-label">Trend</span>
         <span class="aside-stat-value" :class="trendClass">{{ weekSummary.trend || "暂无数据" }}</span>
       </div>
+      <div v-if="trainingSummary" class="summary-grid">
+        <div class="summary-card">
+          <div class="summary-label">WEEK VOLUME</div>
+          <div class="summary-value tabular-nums">{{ trainingSummary.weekVolume || 0 }}</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-label">MONTH VOLUME</div>
+          <div class="summary-value tabular-nums">{{ trainingSummary.monthVolume || 0 }}</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-label">WEEK DAYS</div>
+          <div class="summary-value tabular-nums">{{ trainingSummary.weekTrainingDays || 0 }}</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-label">MONTH DAYS</div>
+          <div class="summary-value tabular-nums">{{ trainingSummary.monthTrainingDays || 0 }}</div>
+        </div>
+      </div>
     </aside>
   </div>
 </template>
@@ -787,6 +805,36 @@ export default {
   text-transform: uppercase;
   color: var(--color-on-surface-variant);
   margin-bottom: 8px;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-surface-container);
+}
+
+.summary-card {
+  background: var(--color-surface-container);
+  padding: 10px 12px;
+  border-radius: 8px;
+}
+
+.summary-label {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-on-surface-variant);
+  margin-bottom: 4px;
+}
+
+.summary-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-on-surface);
+  font-variant-numeric: tabular-nums;
 }
 
 @media (max-width: 900px) {
