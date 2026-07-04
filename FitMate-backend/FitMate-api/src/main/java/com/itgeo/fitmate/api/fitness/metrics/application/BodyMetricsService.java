@@ -1,6 +1,7 @@
 package com.itgeo.fitmate.api.fitness.metrics.application;
 
 import com.itgeo.fitmate.api.fitness.metrics.dto.BodyMetricsLogRequest;
+import com.itgeo.fitmate.api.fitness.metrics.dto.BodyMetricsSummaryDTO;
 import com.itgeo.fitmate.api.fitness.training.dto.DateSummaryItem;
 import java.util.List;
 
@@ -33,4 +34,12 @@ public interface BodyMetricsService {
      * @return 日期摘要列表
      */
     List<DateSummaryItem> getRecentBodyMetrics(Long userId, Integer limit);
+
+    /**
+     * 查询指定用户的身体指标派生指标（BMI、体重变化率）。
+     *
+     * @param userId 用户主键
+     * @return 身体指标派生指标 DTO
+     */
+    BodyMetricsSummaryDTO getBodyMetricsSummary(Long userId);
 }

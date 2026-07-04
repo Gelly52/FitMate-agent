@@ -1,11 +1,15 @@
 package com.itgeo.fitmate.api.fitness.metrics.application.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.itgeo.fitmate.api.auth.application.UserPreferenceService;
 import com.itgeo.fitmate.api.fitness.metrics.application.BodyMetricsService;
 import com.itgeo.fitmate.api.fitness.metrics.dto.BodyMetricsLogRequest;
+import com.itgeo.fitmate.api.fitness.metrics.dto.BodyMetricsSummaryDTO;
 import com.itgeo.fitmate.api.fitness.metrics.infrastructure.entity.BodyMetrics;
 import com.itgeo.fitmate.api.fitness.metrics.infrastructure.mapper.BodyMetricsMapper;
 import com.itgeo.fitmate.api.fitness.training.dto.DateSummaryItem;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -21,8 +25,11 @@ public class BodyMetricsServiceImpl implements BodyMetricsService {
 
     private final BodyMetricsMapper bodyMetricsMapper;
 
-    public BodyMetricsServiceImpl(BodyMetricsMapper bodyMetricsMapper) {
+    private final UserPreferenceService userPreferenceService;
+
+    public BodyMetricsServiceImpl(BodyMetricsMapper bodyMetricsMapper, UserPreferenceService userPreferenceService) {
         this.bodyMetricsMapper = bodyMetricsMapper;
+        this.userPreferenceService = userPreferenceService;
     }
 
     /**
@@ -131,6 +138,50 @@ public class BodyMetricsServiceImpl implements BodyMetricsService {
                         record.getRecordDate() == null ? null : record.getRecordDate().toString(),
                         record.getSummary()))
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * 查询身体指标派生指标（BMI、体重变化率）。
+     * 处理流程：
+     * 1. 校验用户参数；
+     * 2. 查询最近 2 条身体指标记录；
+     * 3. 计算 BMI 与体重变化率。
+     */
+    @Override
+    public BodyMetricsSummaryDTO getBodyMetricsSummary(Long userId) {
+        if (userId == null) {
+            throw new IllegalArgumentException("用户未登录");
+        }
+        List<BodyMetrics> logs = bodyMetricsMapper.selectList(
+                new LambdaQueryWrapper<BodyMetrics>()
+                        .eq(BodyMetrics::getUserId, userId)
+                        .orderByDesc(BodyMetrics::getRecordDate)
+                        .last("limit 2")
+        );
+        if (logs.isEmpty()) {
+            return new BodyMetricsSummaryDTO(null, null, null, null);
+        }
+        BodyMetrics latest = logs.get(0);
+        BodyMetrics previous = logs.size() > 1 ? logs.get(1) : null;
+
+        BigDecimal latestWeight = latest.getWeight();
+        BigDecimal previousWeight = previous == null ? null : previous.getWeight();
+        BigDecimal changeRate = null;
+        if (latestWeight != null && previousWeight != null && previousWeight.signum() != 0) {
+            changeRate = latestWeight.subtract(previousWeight)
+                    .divide(previousWeight, 4, RoundingMode.HALF_UP)
+                    .multiply(new BigDecimal("100"))
+                    .setScale(2, RoundingMode.HALF_UP);
+        }
+
+        BigDecimal bmi = null;
+        Integer heightCm = userPreferenceService.getHeightCm(userId);
+        if (latestWeight != null && heightCm != null && heightCm > 0) {
+            double heightM = heightCm / 100.0;
+            bmi = latestWeight.divide(new BigDecimal(heightM * heightM), 2, RoundingMode.HALF_UP);
+        }
+
+        return new BodyMetricsSummaryDTO(bmi, changeRate, latestWeight, previousWeight);
     }
 
     /**

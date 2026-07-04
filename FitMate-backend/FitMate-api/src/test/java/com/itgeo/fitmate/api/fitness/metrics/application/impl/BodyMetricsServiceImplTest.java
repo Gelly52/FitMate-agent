@@ -4,7 +4,9 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
+import com.itgeo.fitmate.api.auth.application.UserPreferenceService;
 import com.itgeo.fitmate.api.fitness.metrics.dto.BodyMetricsLogRequest;
+import com.itgeo.fitmate.api.fitness.metrics.dto.BodyMetricsSummaryDTO;
 import com.itgeo.fitmate.api.fitness.metrics.infrastructure.entity.BodyMetrics;
 import com.itgeo.fitmate.api.fitness.metrics.infrastructure.mapper.BodyMetricsMapper;
 import java.math.BigDecimal;
@@ -15,12 +17,14 @@ import org.mockito.ArgumentCaptor;
 class BodyMetricsServiceImplTest {
 
     private BodyMetricsMapper bodyMetricsMapper;
+    private UserPreferenceService userPreferenceService;
     private BodyMetricsServiceImpl service;
 
     @BeforeEach
     void setUp() {
         bodyMetricsMapper = mock(BodyMetricsMapper.class);
-        service = new BodyMetricsServiceImpl(bodyMetricsMapper);
+        userPreferenceService = mock(UserPreferenceService.class);
+        service = new BodyMetricsServiceImpl(bodyMetricsMapper, userPreferenceService);
     }
 
     @Test
@@ -74,5 +78,42 @@ class BodyMetricsServiceImplTest {
         ArgumentCaptor<BodyMetrics> captor = ArgumentCaptor.forClass(BodyMetrics.class);
         verify(bodyMetricsMapper).insert(captor.capture());
         assertEquals("manual", captor.getValue().getSource());
+    }
+
+    @Test
+    void getBodyMetricsSummary_withHeight_calculatesBmiAndChangeRate() {
+        // 准备：最新体重 70.5，上一次 71.5，身高 175cm
+        BodyMetrics latest = new BodyMetrics();
+        latest.setWeight(new BigDecimal("70.5"));
+        latest.setRecordDate(java.time.LocalDate.now());
+        BodyMetrics previous = new BodyMetrics();
+        previous.setWeight(new BigDecimal("71.5"));
+        previous.setRecordDate(java.time.LocalDate.now().minusDays(7));
+        when(bodyMetricsMapper.selectList(any())).thenReturn(java.util.Arrays.asList(latest, previous));
+        when(userPreferenceService.getHeightCm(1L)).thenReturn(175);
+
+        // 执行
+        BodyMetricsSummaryDTO summary = service.getBodyMetricsSummary(1L);
+
+        // 验证：BMI = 70.5 / (1.75)^2 = 23.02
+        assertEquals(new BigDecimal("23.02"), summary.getBmi());
+        assertEquals(new BigDecimal("-1.40"), summary.getWeightChangeRate());
+        assertEquals(new BigDecimal("70.5"), summary.getLatestWeight());
+        assertEquals(new BigDecimal("71.5"), summary.getPreviousWeight());
+    }
+
+    @Test
+    void getBodyMetricsSummary_noHeight_bmiNull() {
+        BodyMetrics latest = new BodyMetrics();
+        latest.setWeight(new BigDecimal("70.5"));
+        when(bodyMetricsMapper.selectList(any())).thenReturn(java.util.Collections.singletonList(latest));
+        when(userPreferenceService.getHeightCm(1L)).thenReturn(null);
+
+        BodyMetricsSummaryDTO summary = service.getBodyMetricsSummary(1L);
+
+        assertNull(summary.getBmi());
+        assertEquals(new BigDecimal("70.5"), summary.getLatestWeight());
+        assertNull(summary.getPreviousWeight());
+        assertNull(summary.getWeightChangeRate());
     }
 }
