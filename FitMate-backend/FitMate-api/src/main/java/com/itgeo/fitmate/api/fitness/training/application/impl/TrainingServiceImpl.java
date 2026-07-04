@@ -6,6 +6,7 @@ import com.itgeo.fitmate.api.fitness.training.domain.MuscleGroupDictionary;
 import com.itgeo.fitmate.api.fitness.training.dto.DateSummaryItem;
 import com.itgeo.fitmate.api.fitness.training.dto.TrainingExerciseItem;
 import com.itgeo.fitmate.api.fitness.training.dto.TrainingLogRequest;
+import com.itgeo.fitmate.api.fitness.training.dto.TrainingSummaryDTO;
 import com.itgeo.fitmate.api.fitness.training.infrastructure.entity.TrainingExercise;
 import com.itgeo.fitmate.api.fitness.training.infrastructure.entity.TrainingLog;
 import com.itgeo.fitmate.api.fitness.training.infrastructure.mapper.TrainingExerciseMapper;
@@ -192,5 +193,42 @@ public class TrainingServiceImpl implements TrainingService {
                         log.getTrainingDate() == null ? null : log.getTrainingDate().toString(),
                         log.getSummary()))
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * 查询训练派生指标（周/月训练量与训练天数）。
+     * 处理流程：
+     * 1. 校验用户参数；
+     * 2. 查询最近 30 天训练记录；
+     * 3. 遍历统计周/月训练量与训练天数。
+     */
+    @Override
+    public TrainingSummaryDTO getTrainingSummary(Long userId) {
+        if (userId == null) {
+            throw new IllegalArgumentException("用户未登录");
+        }
+        LocalDate now = LocalDate.now();
+        LocalDate weekAgo = now.minusDays(7);
+        LocalDate monthAgo = now.minusDays(30);
+
+        List<TrainingLog> logs = trainingLogMapper.selectList(
+                new LambdaQueryWrapper<TrainingLog>()
+                        .eq(TrainingLog::getUserId, userId)
+                        .ge(TrainingLog::getTrainingDate, monthAgo)
+        );
+
+        BigDecimal weekVolume = BigDecimal.ZERO;
+        BigDecimal monthVolume = BigDecimal.ZERO;
+        int weekDays = 0;
+        int monthDays = 0;
+        for (TrainingLog log : logs) {
+            monthVolume = monthVolume.add(log.getTotalVolume() == null ? BigDecimal.ZERO : log.getTotalVolume());
+            monthDays++;
+            if (log.getTrainingDate() != null && !log.getTrainingDate().isBefore(weekAgo)) {
+                weekVolume = weekVolume.add(log.getTotalVolume() == null ? BigDecimal.ZERO : log.getTotalVolume());
+                weekDays++;
+            }
+        }
+        return new TrainingSummaryDTO(weekVolume, monthVolume, weekDays, monthDays);
     }
 }

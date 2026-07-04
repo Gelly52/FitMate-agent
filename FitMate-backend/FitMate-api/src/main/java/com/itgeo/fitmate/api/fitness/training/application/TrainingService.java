@@ -2,6 +2,7 @@ package com.itgeo.fitmate.api.fitness.training.application;
 
 import com.itgeo.fitmate.api.fitness.training.dto.DateSummaryItem;
 import com.itgeo.fitmate.api.fitness.training.dto.TrainingLogRequest;
+import com.itgeo.fitmate.api.fitness.training.dto.TrainingSummaryDTO;
 import java.util.List;
 
 /**
@@ -33,4 +34,12 @@ public interface TrainingService {
      * @return 日期摘要列表
      */
     List<DateSummaryItem> getRecentTraining(Long userId, Integer limit);
+
+    /**
+     * 查询指定用户的训练派生指标（周/月训练量与训练天数）。
+     *
+     * @param userId 用户主键
+     * @return 训练派生指标 DTO
+     */
+    TrainingSummaryDTO getTrainingSummary(Long userId);
 }

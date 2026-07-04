@@ -6,6 +6,7 @@ import static org.mockito.Mockito.*;
 
 import com.itgeo.fitmate.api.fitness.training.dto.TrainingExerciseItem;
 import com.itgeo.fitmate.api.fitness.training.dto.TrainingLogRequest;
+import com.itgeo.fitmate.api.fitness.training.dto.TrainingSummaryDTO;
 import com.itgeo.fitmate.api.fitness.training.infrastructure.entity.TrainingLog;
 import com.itgeo.fitmate.api.fitness.training.infrastructure.mapper.TrainingExerciseMapper;
 import com.itgeo.fitmate.api.fitness.training.infrastructure.mapper.TrainingLogMapper;
@@ -112,5 +113,29 @@ class TrainingServiceImplTest {
         verify(trainingLogMapper).insert(captor.capture());
         TrainingLog saved = captor.getValue();
         assertEquals("胸肌", saved.getPrimaryMuscleGroup());
+    }
+
+    @Test
+    void getTrainingSummary_calculatesWeekAndMonthAggregates() {
+        // 准备：构造 2 条最近 7 天内 + 1 条 30 天内 7 天外的训练记录
+        TrainingLog recent1 = new TrainingLog();
+        recent1.setTotalVolume(new BigDecimal("5000"));
+        recent1.setTrainingDate(java.time.LocalDate.now());
+        TrainingLog recent2 = new TrainingLog();
+        recent2.setTotalVolume(new BigDecimal("3000"));
+        recent2.setTrainingDate(java.time.LocalDate.now().minusDays(3));
+        TrainingLog old = new TrainingLog();
+        old.setTotalVolume(new BigDecimal("8000"));
+        old.setTrainingDate(java.time.LocalDate.now().minusDays(20));
+        when(trainingLogMapper.selectList(any())).thenReturn(java.util.Arrays.asList(recent1, recent2, old));
+
+        // 执行
+        TrainingSummaryDTO summary = service.getTrainingSummary(1L);
+
+        // 验证
+        assertEquals(new BigDecimal("8000"), summary.getWeekVolume());
+        assertEquals(new BigDecimal("16000"), summary.getMonthVolume());
+        assertEquals(2, summary.getWeekTrainingDays());
+        assertEquals(3, summary.getMonthTrainingDays());
     }
 }
