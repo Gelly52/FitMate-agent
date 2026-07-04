@@ -62,4 +62,20 @@ public class BodyMetricsController {
             return LeeResult.errorException("查询最近身体指标失败");
         }
     }
+
+    /**
+     * 查询当前登录用户的身体指标派生指标（BMI、体重变化率）。
+     */
+    @GetMapping("/summary")
+    public LeeResult getBodyMetricsSummary() {
+        try {
+            Long userId = UserContextHolder.getRequired().getUserId();
+            return LeeResult.ok(bodyMetricsService.getBodyMetricsSummary(userId));
+        } catch (IllegalArgumentException e) {
+            return LeeResult.errorMsg(e.getMessage());
+        } catch (Exception e) {
+            log.error("查询身体指标汇总失败", e);
+            return LeeResult.errorException("查询身体指标汇总失败");
+        }
+    }
 }
