@@ -62,4 +62,20 @@ public class TrainingController {
             return LeeResult.errorException("查询最近训练记录失败");
         }
     }
+
+    /**
+     * 查询当前登录用户的训练派生指标（周/月训练量与天数）。
+     */
+    @GetMapping("/summary")
+    public LeeResult getTrainingSummary() {
+        try {
+            Long userId = UserContextHolder.getRequired().getUserId();
+            return LeeResult.ok(trainingService.getTrainingSummary(userId));
+        } catch (IllegalArgumentException e) {
+            return LeeResult.errorMsg(e.getMessage());
+        } catch (Exception e) {
+            log.error("查询训练汇总失败", e);
+            return LeeResult.errorException("查询训练汇总失败");
+        }
+    }
 }
