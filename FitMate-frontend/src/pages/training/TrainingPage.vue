@@ -11,6 +11,22 @@
         </p>
       </header>
 
+      <!-- Tab Bar -->
+      <div class="tab-bar">
+        <button
+          v-for="tab in [
+            { key: 'strength', label: '力量' },
+            { key: 'cardio', label: '有氧' },
+            { key: 'diet', label: '训练营养' }
+          ]"
+          :key="tab.key"
+          class="tab-btn"
+          :class="{ 'tab-btn-active': activeTrainingTab === tab.key }"
+          @click="switchTrainingTab(tab.key)"
+        >{{ tab.label }}</button>
+      </div>
+
+      <div v-if="activeTrainingTab === 'strength'">
       <!-- Strength Protocol -->
       <section class="form-section">
         <div class="form-section-head">
@@ -114,6 +130,88 @@
           COMMIT LOG
         </button>
       </div>
+      </div><!-- end strength tab -->
+
+      <!-- Cardio Tab -->
+      <div v-if="activeTrainingTab === 'cardio'" class="cardio-section">
+        <div class="form-block">
+          <div class="form-label">DATE</div>
+          <input v-model="cardioForm.date" class="metric-input" type="date" />
+        </div>
+        <div class="form-block">
+          <div class="form-label">TYPE</div>
+          <select v-model="cardioForm.cardioType" class="metric-input">
+            <option v-for="opt in cardioTypeOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <div class="form-block">
+            <div class="form-label">DISTANCE (KM)</div>
+            <input v-model.number="cardioForm.distanceKm" class="metric-input" type="number" step="0.1" placeholder="0.0" />
+          </div>
+          <div class="form-block">
+            <div class="form-label">DURATION (MIN)</div>
+            <input v-model.number="cardioForm.durationMinutes" class="metric-input" type="number" placeholder="0" />
+          </div>
+        </div>
+        <div class="form-block">
+          <div class="form-label">AVG HEART RATE</div>
+          <input v-model.number="cardioForm.avgHeartRate" class="metric-input" type="number" placeholder="optional" />
+        </div>
+        <div class="form-block">
+          <div class="form-label">NOTE</div>
+          <textarea v-model="cardioForm.note" class="metric-input" rows="2"></textarea>
+        </div>
+        <button class="form-submit-btn" @click="submitCardio">COMMIT LOG</button>
+
+        <div class="history-section">
+          <div class="section-title">RECENT · 有氧</div>
+          <div v-for="(record, idx) in recentCardio" :key="idx" class="history-item">
+            <span class="history-date">{{ record.date }}</span>
+            <span class="history-detail">{{ record.summary }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Diet Tab -->
+      <div v-if="activeTrainingTab === 'diet'" class="diet-section">
+        <div class="form-block">
+          <div class="form-label">DATE</div>
+          <input v-model="dietForm.date" class="metric-input" type="date" />
+        </div>
+        <div class="form-block">
+          <div class="form-label">MEAL</div>
+          <select v-model="dietForm.mealType" class="metric-input">
+            <option v-for="opt in mealTypeOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+          </select>
+        </div>
+        <div class="form-block">
+          <div class="form-label">FOOD ITEMS</div>
+          <div v-for="(item, idx) in dietForm.items" :key="idx" class="diet-item-row">
+            <input v-model="item.foodName" class="metric-input" placeholder="食物名" />
+            <input v-model="item.portion" class="metric-input" placeholder="份量" />
+            <input v-model.number="item.calories" class="metric-input" type="number" placeholder="kcal" />
+            <input v-model.number="item.protein" class="metric-input" type="number" placeholder="蛋白g" />
+            <input v-model.number="item.carbs" class="metric-input" type="number" placeholder="碳水g" />
+            <input v-model.number="item.fat" class="metric-input" type="number" placeholder="脂肪g" />
+            <button class="remove-item-btn" @click="dietForm.items.splice(idx, 1)">×</button>
+          </div>
+          <button class="add-item-btn" @click="dietForm.items.push({ foodName: '', portion: '', calories: null, protein: null, carbs: null, fat: null })">ADD ITEM</button>
+        </div>
+        <div class="form-block">
+          <div class="form-label">NOTE</div>
+          <textarea v-model="dietForm.note" class="metric-input" rows="2"></textarea>
+        </div>
+        <button class="form-submit-btn" @click="submitDiet">COMMIT LOG</button>
+
+        <div class="history-section">
+          <div class="section-title">RECENT · 训练营养</div>
+          <div v-for="(record, idx) in recentDiet" :key="idx" class="history-item">
+            <span class="history-date">{{ record.date }}</span>
+            <span class="history-detail">{{ record.summary }}</span>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Week at a glance -->
@@ -147,6 +245,35 @@ export default {
   data() {
     return {
       exercises: [{ name: "", sets: 4, reps: 10, weight: 0 }],
+      activeTrainingTab: 'strength',
+      cardioForm: {
+        date: new Date().toISOString().slice(0, 10),
+        cardioType: 'running',
+        distanceKm: null,
+        durationMinutes: null,
+        avgHeartRate: null,
+        note: ''
+      },
+      cardioTypeOptions: [
+        { value: 'running', label: '跑步' },
+        { value: 'cycling', label: '骑行' },
+        { value: 'swimming', label: '游泳' },
+        { value: 'rowing', label: '划船' },
+        { value: 'jump_rope', label: '跳绳' },
+        { value: 'other', label: '其他' }
+      ],
+      dietForm: {
+        date: new Date().toISOString().slice(0, 10),
+        mealType: 'breakfast',
+        items: [{ foodName: '', portion: '', calories: null, protein: null, carbs: null, fat: null }],
+        note: ''
+      },
+      mealTypeOptions: [
+        { value: 'breakfast', label: '早餐' },
+        { value: 'lunch', label: '午餐' },
+        { value: 'dinner', label: '晚餐' },
+        { value: 'snack', label: '加餐' }
+      ],
     };
   },
   computed: {
@@ -171,6 +298,7 @@ export default {
   },
   mounted() {
     this.fetchRecentTraining();
+    this.fetchTrainingSummary();
   },
   methods: {
     addExercise() {
@@ -218,6 +346,59 @@ export default {
           );
           me.$router.push("/chat");
         });
+    },
+    switchTrainingTab: function (tab) {
+      this.activeTrainingTab = tab;
+      if (tab === 'cardio' && this.recentCardio.length === 0) this.fetchRecentCardio();
+      if (tab === 'diet' && this.recentDiet.length === 0) this.fetchRecentDiet();
+    },
+    submitCardio: function () {
+      var me = this;
+      var formData = {
+        date: this.cardioForm.date,
+        cardioType: this.cardioForm.cardioType,
+        distanceKm: this.cardioForm.distanceKm,
+        durationMinutes: this.cardioForm.durationMinutes,
+        avgHeartRate: this.cardioForm.avgHeartRate,
+        note: this.cardioForm.note
+      };
+      doctorApi.logCardio(formData).then(function () {
+        me.fetchRecentCardio();
+        me.fetchTrainingSummary();
+      }).catch(function () {
+        window.sessionStorage.setItem("fitmate:pending-draft", me.buildCardioPrompt(formData));
+        me.$router.push("/chat");
+      });
+    },
+    submitDiet: function () {
+      var me = this;
+      var validItems = this.dietForm.items.filter(function (it) { return (it.foodName || '').trim(); });
+      var formData = {
+        date: this.dietForm.date,
+        mealType: this.dietForm.mealType,
+        items: validItems,
+        note: this.dietForm.note
+      };
+      doctorApi.logDiet(formData).then(function () {
+        me.fetchRecentDiet();
+      }).catch(function () {
+        window.sessionStorage.setItem("fitmate:pending-draft", me.buildDietPrompt(formData));
+        me.$router.push("/chat");
+      });
+    },
+    buildCardioPrompt: function (data) {
+      var typeMap = { running: '跑步', cycling: '骑行', swimming: '游泳', rowing: '划船', jump_rope: '跳绳', other: '其他' };
+      var parts = [data.date, typeMap[data.cardioType] || data.cardioType];
+      if (data.distanceKm) parts.push(data.distanceKm + 'km');
+      if (data.durationMinutes) parts.push(data.durationMinutes + 'min');
+      return '我今天做了' + parts.join(' ') + '，请帮我记录';
+    },
+    buildDietPrompt: function (data) {
+      var mealMap = { breakfast: '早餐', lunch: '午餐', dinner: '晚餐', snack: '加餐' };
+      var items = data.items.map(function (it) {
+        return it.foodName + (it.portion ? '(' + it.portion + ')' : '') + (it.calories ? ' ' + it.calories + 'kcal' : '');
+      }).join('、');
+      return '我今天' + (mealMap[data.mealType] || data.mealType) + '吃了：' + items + '，请帮我记录';
     },
   },
 };
@@ -478,6 +659,134 @@ export default {
 
 .trend-stable {
   color: var(--color-on-surface-variant);
+}
+
+.tab-bar {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+
+.tab-btn {
+  padding: 6px 16px;
+  border: none;
+  background: transparent;
+  color: var(--color-on-surface-variant);
+  cursor: pointer;
+  border-radius: 999px;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  font-family: "Inter", sans-serif;
+}
+
+.tab-btn-active {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.cardio-section,
+.diet-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-label {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-on-surface-variant);
+}
+
+.metric-input {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--color-outline-variant);
+  color: var(--color-on-surface);
+  font-size: 15px;
+  font-family: "Inter", sans-serif;
+  padding: 4px 0;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.metric-input:focus {
+  border-bottom-color: var(--color-primary);
+}
+
+.metric-input::placeholder {
+  color: var(--color-surface-bright);
+}
+
+.metric-input::-webkit-outer-spin-button,
+.metric-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.metric-input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+.diet-item-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.diet-item-row .metric-input {
+  flex: 1;
+  min-width: 80px;
+}
+
+.remove-item-btn {
+  background: transparent;
+  border: none;
+  color: var(--color-error);
+  cursor: pointer;
+  font-size: 18px;
+  padding: 0 4px;
+}
+
+.add-item-btn {
+  background: transparent;
+  border: 1px dashed var(--color-outline);
+  color: var(--color-on-surface-variant);
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-family: "Inter", sans-serif;
+}
+
+.form-row {
+  display: flex;
+  gap: 12px;
+}
+
+.form-row .form-block {
+  flex: 1;
+}
+
+.history-section {
+  margin-top: 24px;
+}
+
+.section-title {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-on-surface-variant);
+  margin-bottom: 8px;
 }
 
 @media (max-width: 900px) {
