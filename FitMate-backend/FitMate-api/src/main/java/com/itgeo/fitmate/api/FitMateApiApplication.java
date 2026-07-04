@@ -14,10 +14,14 @@ import org.springframework.scheduling.annotation.EnableAsync;
 @MapperScan({
         "com.itgeo.fitmate.api.auth.infrastructure.mapper",
         "com.itgeo.fitmate.api.chat.infrastructure.mapper",
+        "com.itgeo.fitmate.api.fitness.cardio.infrastructure.mapper",
+        "com.itgeo.fitmate.api.fitness.diet.infrastructure.mapper",
+        "com.itgeo.fitmate.api.fitness.heartrate.infrastructure.mapper",
         "com.itgeo.fitmate.api.fitness.metrics.infrastructure.mapper",
         "com.itgeo.fitmate.api.fitness.training.infrastructure.mapper",
         "com.itgeo.fitmate.api.rag.infrastructure.mapper",
         "com.itgeo.fitmate.api.agent.infrastructure.mapper",
+        "com.itgeo.fitmate.api.agent.memory.longterm.infrastructure.mapper",
         "com.itgeo.fitmate.api.wiki.infrastructure.mapper"
 })
 @EnableAsync
