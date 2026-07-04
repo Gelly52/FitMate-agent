@@ -15,4 +15,13 @@ public interface HeartRateService {
      * @param source 来源：manual/chat/import
      */
     void logHeartRate(Long userId, HeartRateLogRequest request, String source);
+
+    /**
+     * 查询最近心率摘要。
+     *
+     * @param userId 用户ID
+     * @param limit  返回条数
+     * @return 日期摘要列表
+     */
+    java.util.List<com.itgeo.fitmate.api.fitness.training.dto.DateSummaryItem> getRecentHeartRate(Long userId, Integer limit);
 }

@@ -71,4 +71,24 @@ class HeartRateServiceImplTest {
         assertThrows(IllegalArgumentException.class,
                 () -> service.logHeartRate(1L, req, "chat"));
     }
+
+    @Test
+    void getRecentHeartRate_returnsDateSummaryList() {
+        com.itgeo.fitmate.api.fitness.heartrate.infrastructure.entity.HeartRate hr1 =
+                new com.itgeo.fitmate.api.fitness.heartrate.infrastructure.entity.HeartRate();
+        hr1.setRecordDate(java.time.LocalDate.of(2026, 7, 3));
+        hr1.setSummary("静息心率 60");
+        com.itgeo.fitmate.api.fitness.heartrate.infrastructure.entity.HeartRate hr2 =
+                new com.itgeo.fitmate.api.fitness.heartrate.infrastructure.entity.HeartRate();
+        hr2.setRecordDate(java.time.LocalDate.of(2026, 7, 2));
+        hr2.setSummary("静息心率 62");
+        when(heartRateMapper.selectList(any())).thenReturn(java.util.Arrays.asList(hr1, hr2));
+
+        java.util.List<com.itgeo.fitmate.api.fitness.training.dto.DateSummaryItem> result =
+                service.getRecentHeartRate(1L, 10);
+
+        assertEquals(2, result.size());
+        assertEquals("2026-07-03", result.get(0).getDate());
+        assertEquals("静息心率 60", result.get(0).getSummary());
+    }
 }

@@ -5,9 +5,12 @@ import com.itgeo.fitmate.api.fitness.heartrate.application.HeartRateService;
 import com.itgeo.fitmate.api.fitness.heartrate.dto.HeartRateLogRequest;
 import com.itgeo.fitmate.api.fitness.heartrate.infrastructure.entity.HeartRate;
 import com.itgeo.fitmate.api.fitness.heartrate.infrastructure.mapper.HeartRateMapper;
+import com.itgeo.fitmate.api.fitness.training.dto.DateSummaryItem;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.List;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -64,6 +67,25 @@ public class HeartRateServiceImpl implements HeartRateService {
             entity.setSource(normalizedSource);
             heartRateMapper.insert(entity);
         }
+    }
+
+    @Override
+    public List<DateSummaryItem> getRecentHeartRate(Long userId, Integer limit) {
+        if (userId == null) {
+            throw new IllegalArgumentException("用户ID不能为空");
+        }
+        int safeLimit = (limit == null || limit <= 0) ? 10 : Math.min(limit, 50);
+        List<HeartRate> logs = heartRateMapper.selectList(
+                new LambdaQueryWrapper<HeartRate>()
+                        .eq(HeartRate::getUserId, userId)
+                        .orderByDesc(HeartRate::getRecordDate)
+                        .last("limit " + safeLimit)
+        );
+        return logs.stream()
+                .map(log -> new DateSummaryItem(
+                        log.getRecordDate() == null ? null : log.getRecordDate().toString(),
+                        log.getSummary()))
+                .collect(Collectors.toList());
     }
 
     private String buildSummary(HeartRateLogRequest req) {
