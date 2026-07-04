@@ -2,15 +2,21 @@ package com.itgeo.fitmate.api.fitness.cardio.application.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.itgeo.fitmate.api.fitness.cardio.application.CardioService;
+import com.itgeo.fitmate.api.fitness.cardio.domain.CardioMetTable;
 import com.itgeo.fitmate.api.fitness.cardio.dto.CardioLogRequest;
 import com.itgeo.fitmate.api.fitness.cardio.infrastructure.entity.CardioLog;
 import com.itgeo.fitmate.api.fitness.cardio.infrastructure.mapper.CardioLogMapper;
+import com.itgeo.fitmate.api.fitness.metrics.infrastructure.entity.BodyMetrics;
+import com.itgeo.fitmate.api.fitness.metrics.infrastructure.mapper.BodyMetricsMapper;
+import com.itgeo.fitmate.api.fitness.training.dto.DateSummaryItem;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,8 +37,11 @@ public class CardioServiceImpl implements CardioService {
 
     private final CardioLogMapper cardioLogMapper;
 
-    public CardioServiceImpl(CardioLogMapper cardioLogMapper) {
+    private final BodyMetricsMapper bodyMetricsMapper;
+
+    public CardioServiceImpl(CardioLogMapper cardioLogMapper, BodyMetricsMapper bodyMetricsMapper) {
         this.cardioLogMapper = cardioLogMapper;
+        this.bodyMetricsMapper = bodyMetricsMapper;
     }
 
     @Override
@@ -52,7 +61,8 @@ public class CardioServiceImpl implements CardioService {
         }
 
         String avgPace = calculatePace(request.getDistanceKm(), request.getDurationMinutes());
-        String summary = buildSummary(request, avgPace);
+        Integer caloriesBurned = calculateCaloriesBurned(request.getCardioType(), request.getDurationMinutes(), userId);
+        String summary = buildSummary(request, avgPace, caloriesBurned);
         String normalizedSource = normalizeSource(source);
 
         CardioLog existing = cardioLogMapper.selectOne(
@@ -68,6 +78,7 @@ public class CardioServiceImpl implements CardioService {
             existing.setDurationMinutes(request.getDurationMinutes());
             existing.setAvgPace(avgPace);
             existing.setAvgHeartRate(request.getAvgHeartRate());
+            existing.setCaloriesBurned(caloriesBurned);
             existing.setNote(blankToNull(request.getNote()));
             existing.setSummary(summary);
             existing.setSource(normalizedSource);
@@ -81,6 +92,7 @@ public class CardioServiceImpl implements CardioService {
             entity.setDurationMinutes(request.getDurationMinutes());
             entity.setAvgPace(avgPace);
             entity.setAvgHeartRate(request.getAvgHeartRate());
+            entity.setCaloriesBurned(caloriesBurned);
             entity.setNote(blankToNull(request.getNote()));
             entity.setSummary(summary);
             entity.setSource(normalizedSource);
@@ -98,7 +110,7 @@ public class CardioServiceImpl implements CardioService {
         return String.format("%02d:%02d/km", mm, ss);
     }
 
-    private String buildSummary(CardioLogRequest req, String avgPace) {
+    private String buildSummary(CardioLogRequest req, String avgPace, Integer caloriesBurned) {
         StringBuilder sb = new StringBuilder();
         sb.append(TYPE_CN.getOrDefault(req.getCardioType(), req.getCardioType()));
         if (req.getDistanceKm() != null) {
@@ -113,7 +125,49 @@ public class CardioServiceImpl implements CardioService {
         if (req.getAvgHeartRate() != null) {
             sb.append(" / 平均心率 ").append(req.getAvgHeartRate());
         }
+        if (caloriesBurned != null) {
+            sb.append(" / 消耗 ").append(caloriesBurned).append("kcal");
+        }
         return sb.toString();
+    }
+
+    private Integer calculateCaloriesBurned(String cardioType, Integer durationMinutes, Long userId) {
+        if (durationMinutes == null || durationMinutes <= 0) {
+            return null;
+        }
+        BodyMetrics latest = bodyMetricsMapper.selectOne(
+                new LambdaQueryWrapper<BodyMetrics>()
+                        .eq(BodyMetrics::getUserId, userId)
+                        .isNotNull(BodyMetrics::getWeight)
+                        .orderByDesc(BodyMetrics::getRecordDate)
+                        .last("limit 1")
+        );
+        if (latest == null || latest.getWeight() == null) {
+            return null;
+        }
+        double met = CardioMetTable.getMet(cardioType);
+        double weightKg = latest.getWeight().doubleValue();
+        double durationH = durationMinutes / 60.0;
+        return (int) Math.round(met * weightKg * durationH);
+    }
+
+    @Override
+    public List<DateSummaryItem> getRecentCardio(Long userId, Integer limit) {
+        if (userId == null) {
+            throw new IllegalArgumentException("用户ID不能为空");
+        }
+        int safeLimit = (limit == null || limit <= 0) ? 10 : Math.min(limit, 50);
+        List<CardioLog> logs = cardioLogMapper.selectList(
+                new LambdaQueryWrapper<CardioLog>()
+                        .eq(CardioLog::getUserId, userId)
+                        .orderByDesc(CardioLog::getTrainingDate)
+                        .last("limit " + safeLimit)
+        );
+        return logs.stream()
+                .map(log -> new DateSummaryItem(
+                        log.getTrainingDate() == null ? null : log.getTrainingDate().toString(),
+                        log.getSummary()))
+                .collect(Collectors.toList());
     }
 
     private LocalDate parseDate(String date) {

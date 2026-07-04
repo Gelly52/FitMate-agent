@@ -8,6 +8,8 @@ import com.itgeo.fitmate.api.fitness.cardio.application.impl.CardioServiceImpl;
 import com.itgeo.fitmate.api.fitness.cardio.dto.CardioLogRequest;
 import com.itgeo.fitmate.api.fitness.cardio.infrastructure.entity.CardioLog;
 import com.itgeo.fitmate.api.fitness.cardio.infrastructure.mapper.CardioLogMapper;
+import com.itgeo.fitmate.api.fitness.metrics.infrastructure.entity.BodyMetrics;
+import com.itgeo.fitmate.api.fitness.metrics.infrastructure.mapper.BodyMetricsMapper;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,12 +19,14 @@ import org.mockito.ArgumentCaptor;
 class CardioServiceImplTest {
 
     private CardioLogMapper cardioLogMapper;
+    private BodyMetricsMapper bodyMetricsMapper;
     private CardioServiceImpl service;
 
     @BeforeEach
     void setUp() {
         cardioLogMapper = mock(CardioLogMapper.class);
-        service = new CardioServiceImpl(cardioLogMapper);
+        bodyMetricsMapper = mock(BodyMetricsMapper.class);
+        service = new CardioServiceImpl(cardioLogMapper, bodyMetricsMapper);
     }
 
     @Test
@@ -92,5 +96,51 @@ class CardioServiceImplTest {
                 "2026/07/03", "running", new BigDecimal("5"), 30, null, null);
         assertThrows(IllegalArgumentException.class,
                 () -> service.logCardio(1L, req, "chat"));
+    }
+
+    @Test
+    void logCardio_withWeight_calculatesCaloriesBurned() {
+        // 准备：有最近体重记录 70kg
+        BodyMetrics bm = new BodyMetrics();
+        bm.setWeight(new BigDecimal("70"));
+        when(bodyMetricsMapper.selectOne(any())).thenReturn(bm);
+        when(cardioLogMapper.selectOne(any())).thenReturn(null);
+
+        CardioLogRequest request = new CardioLogRequest();
+        request.setDate("2026-07-03");
+        request.setCardioType("running");
+        request.setDistanceKm(new BigDecimal("5"));
+        request.setDurationMinutes(30);
+
+        // 执行
+        service.logCardio(1L, request, "manual");
+
+        // 验证：caloriesBurned = 9.8 × 70 × 0.5 = 343
+        ArgumentCaptor<CardioLog> captor = ArgumentCaptor.forClass(CardioLog.class);
+        verify(cardioLogMapper).insert(captor.capture());
+        CardioLog saved = captor.getValue();
+        assertEquals(343, saved.getCaloriesBurned());
+    }
+
+    @Test
+    void logCardio_noWeightRecord_caloriesBurnedNull() {
+        // 准备：无体重记录
+        when(bodyMetricsMapper.selectOne(any())).thenReturn(null);
+        when(cardioLogMapper.selectOne(any())).thenReturn(null);
+
+        CardioLogRequest request = new CardioLogRequest();
+        request.setDate("2026-07-03");
+        request.setCardioType("running");
+        request.setDistanceKm(new BigDecimal("5"));
+        request.setDurationMinutes(30);
+
+        // 执行
+        service.logCardio(1L, request, "manual");
+
+        // 验证：caloriesBurned 为 null（不报错）
+        ArgumentCaptor<CardioLog> captor = ArgumentCaptor.forClass(CardioLog.class);
+        verify(cardioLogMapper).insert(captor.capture());
+        CardioLog saved = captor.getValue();
+        assertNull(saved.getCaloriesBurned());
     }
 }
