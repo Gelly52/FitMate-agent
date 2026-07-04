@@ -239,6 +239,38 @@ export function getLlmBalance(bo) {
   });
 }
 
+// ========== 有氧训练 ==========
+export function logCardio(bo) {
+  return instance({ url: "/cardio/log", method: "post", data: bo });
+}
+export function getRecentCardio(limit) {
+  return instance({ url: "/cardio/recent?limit=" + (limit || 10), method: "get" });
+}
+
+// ========== 心率 ==========
+export function logHeartRate(bo) {
+  return instance({ url: "/heart-rate/log", method: "post", data: bo });
+}
+export function getRecentHeartRate(limit) {
+  return instance({ url: "/heart-rate/recent?limit=" + (limit || 10), method: "get" });
+}
+
+// ========== 饮食 ==========
+export function logDiet(bo) {
+  return instance({ url: "/diet/log", method: "post", data: bo });
+}
+export function getRecentDiet(limit) {
+  return instance({ url: "/diet/recent?limit=" + (limit || 10), method: "get" });
+}
+
+// ========== 派生指标 ==========
+export function getTrainingSummary() {
+  return instance({ url: "/training/summary", method: "get" });
+}
+export function getBodyMetricsSummary() {
+  return instance({ url: "/body-metrics/summary", method: "get" });
+}
+
 const doctorApi = {
   sendUserCode,
   userLogin,
@@ -268,6 +300,14 @@ const doctorApi = {
   listLlmModels,
   testLlmConnection,
   getLlmBalance,
+  logCardio,
+  getRecentCardio,
+  logHeartRate,
+  getRecentHeartRate,
+  logDiet,
+  getRecentDiet,
+  getTrainingSummary,
+  getBodyMetricsSummary,
 };
 
 if (typeof window !== "undefined") {
