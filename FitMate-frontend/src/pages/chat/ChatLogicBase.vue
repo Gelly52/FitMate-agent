@@ -23,6 +23,7 @@ import {
 } from "../../utils/agentEventAdapter";
 import { extractSourcesFromResponse as extractSourcesFromResponseUtil } from "../../utils/sourceNormalizer";
 import { llmConfig } from "../../services/llmConfig";
+import { DEFAULT_LLM_MAX_INPUT_CONTEXT_TOKENS } from "../../types/settings";
 
 export default {
   name: "ChatLogicBase",
@@ -52,6 +53,14 @@ export default {
       isStreaming: false,
       tokenUsage: null,
       isCompressing: false,
+      // 自定义确认条状态（替代 window.confirm，显示在消息列表与输入框之间）
+      confirmBar: {
+        visible: false,
+        text: "",
+        confirmText: "确认",
+        cancelText: "取消",
+        resolve: null,
+      },
       showBackToBottom: false,
       selectedUploadName: "",
       sseState: "idle",
@@ -85,6 +94,11 @@ export default {
       uploadedDocs: [],
       recentTraining: [],
       recentMetrics: [],
+      recentCardio: [],
+      recentHeartRate: [],
+      recentDiet: [],
+      trainingSummary: null,
+      bodyMetricsSummary: null,
       lastTtft: null,
       lastExecTime: "",
       taskStartTime: null,
@@ -98,11 +112,13 @@ export default {
   computed: {
     canCompressContext() {
       // 有活动会话且消息数 >= 8 时才允许主动压缩
-      return this.activeChatSessionId != null
-        && Array.isArray(this.chatList)
-        && this.chatList.filter(function (item) {
-             return item && (item.chatType === "user" || item.chatType === "bot");
-           }).length >= 8;
+      return (
+        this.activeChatSessionId != null &&
+        Array.isArray(this.chatList) &&
+        this.chatList.filter(function (item) {
+          return item && (item.chatType === "user" || item.chatType === "bot");
+        }).length >= 8
+      );
     },
     activeModeLabel() {
       var mainLabel = "Agent";
@@ -216,7 +232,8 @@ export default {
   },
   methods: {
     applyRouteView() {
-      var forceView = this.$route && this.$route.meta && this.$route.meta.forceView;
+      var forceView =
+        this.$route && this.$route.meta && this.$route.meta.forceView;
       if (forceView && forceView !== this.activeView) {
         this.activeView = forceView;
         this.handleSwitchView(forceView);
@@ -308,7 +325,9 @@ export default {
       this.chatList = mappedChatList;
       this.agentSteps = [];
       this.botMsgId = null;
-      this.tokenUsage = this.resolveLastUsageFromMessages(targetSession.messages);
+      this.tokenUsage = this.resolveLastUsageFromMessages(
+        targetSession.messages
+      );
       this.showBackToBottom = false;
       this.knowledgeSources = this.resolveChatHistorySources(mappedChatList);
       this.closeMobileDrawers();
@@ -433,6 +452,36 @@ export default {
         .catch(function () {
           // API not available, keep empty
         });
+    },
+    fetchRecentCardio: function () {
+      var me = this;
+      doctorApi.getRecentCardio(10).then(function (res) {
+        me.recentCardio = (res && res.data) || [];
+      }).catch(function () { me.recentCardio = []; });
+    },
+    fetchRecentHeartRate: function () {
+      var me = this;
+      doctorApi.getRecentHeartRate(10).then(function (res) {
+        me.recentHeartRate = (res && res.data) || [];
+      }).catch(function () { me.recentHeartRate = []; });
+    },
+    fetchRecentDiet: function () {
+      var me = this;
+      doctorApi.getRecentDiet(10).then(function (res) {
+        me.recentDiet = (res && res.data) || [];
+      }).catch(function () { me.recentDiet = []; });
+    },
+    fetchTrainingSummary: function () {
+      var me = this;
+      doctorApi.getTrainingSummary().then(function (res) {
+        me.trainingSummary = (res && res.data) || null;
+      }).catch(function () { me.trainingSummary = null; });
+    },
+    fetchBodyMetricsSummary: function () {
+      var me = this;
+      doctorApi.getBodyMetricsSummary().then(function (res) {
+        me.bodyMetricsSummary = (res && res.data) || null;
+      }).catch(function () { me.bodyMetricsSummary = null; });
     },
     fetchUploadedDocs() {
       var me = this;
@@ -641,7 +690,8 @@ export default {
           : "chat";
 
       this.imageReadSelected = false;
-      this.knowledgeBaseSelected = sourceType === "rag" || sourceType === "wiki";
+      this.knowledgeBaseSelected =
+        sourceType === "rag" || sourceType === "wiki";
       this.ragSelected = sourceType === "rag";
       this.internetSearchSelected = sourceType === "internet";
     },
@@ -684,6 +734,38 @@ export default {
     showUiMessage(type, text) {
       if (this.$message && typeof this.$message[type] === "function") {
         this.$message[type](text);
+      }
+    },
+    /**
+     * 弹出自定义确认条，返回 Promise<boolean>（true=确认，false=取消）。
+     * 用于替代 window.confirm，UI 显示在消息列表与输入框之间。
+     */
+    showConfirmBar(text, options) {
+      var me = this;
+      return new Promise(function (resolve) {
+        me.confirmBar.text = text || "确认操作？";
+        me.confirmBar.confirmText = (options && options.confirmText) || "确认";
+        me.confirmBar.cancelText = (options && options.cancelText) || "取消";
+        me.confirmBar.resolve = resolve;
+        me.confirmBar.visible = true;
+      });
+    },
+    confirmBarAccept() {
+      var resolve = this.confirmBar.resolve;
+      this.confirmBar.visible = false;
+      this.confirmBar.resolve = null;
+      this.confirmBar.text = "";
+      if (typeof resolve === "function") {
+        resolve(true);
+      }
+    },
+    confirmBarCancel() {
+      var resolve = this.confirmBar.resolve;
+      this.confirmBar.visible = false;
+      this.confirmBar.resolve = null;
+      this.confirmBar.text = "";
+      if (typeof resolve === "function") {
+        resolve(false);
       }
     },
     unwrapApiData(res, fallbackMsg) {
@@ -914,7 +996,9 @@ export default {
             targetSession.sceneType || me.currentSessionSceneType;
           me.chatList = mappedChatList;
           me.knowledgeSources = me.resolveChatHistorySources(mappedChatList);
-          me.tokenUsage = me.resolveLastUsageFromMessages(targetSession.messages);
+          me.tokenUsage = me.resolveLastUsageFromMessages(
+            targetSession.messages
+          );
           me.scrollToBottom(true);
           return targetSession;
         })
@@ -1167,7 +1251,8 @@ export default {
       if (botMsgId) {
         var targetMsg = this.findOrCreateBotMessage(botMsgId, payload);
         if (targetMsg) {
-          targetMsg.thinkingContent = (targetMsg.thinkingContent || "") + thinkingText;
+          targetMsg.thinkingContent =
+            (targetMsg.thinkingContent || "") + thinkingText;
           targetMsg.isThinking = true;
           if (payload.runId != null) {
             targetMsg.runId = payload.runId;
@@ -1229,7 +1314,13 @@ export default {
           this.botMsgId;
       }
       for (var i = 0; i < this.chatList.length; i++) {
-        if (botMsgId && this.chatList[i].botMsgId == botMsgId) {
+        // 跳过 user 消息：user 消息也携带 botMsgId（用于回滚定位），
+        // 但 THINKING/ADD/FINISH 事件只应匹配 bot 消息，否则会把回答覆盖到用户消息上
+        if (
+          botMsgId &&
+          this.chatList[i].botMsgId == botMsgId &&
+          this.chatList[i].chatType !== "user"
+        ) {
           return this.chatList[i];
         }
         if (
@@ -1244,8 +1335,12 @@ export default {
         return null;
       }
       var sessionMeta = {
-        sessionCode: (payload && payload.sessionCode) || this.currentSessionCode || null,
-        sceneType: (payload && payload.sceneType) || this.currentSessionSceneType || this.resolveExpectedSessionSceneType(),
+        sessionCode:
+          (payload && payload.sessionCode) || this.currentSessionCode || null,
+        sceneType:
+          (payload && payload.sceneType) ||
+          this.currentSessionSceneType ||
+          this.resolveExpectedSessionSceneType(),
       };
       var newMsg = {
         id: "temp-" + this.generateRandomId(8),
@@ -1340,7 +1435,7 @@ export default {
       var targetChatItem = null;
       for (var i = 0; i < this.chatList.length; i++) {
         var chatItem = this.chatList[i];
-        if (chatItem.botMsgId == botMsgId) {
+        if (chatItem.botMsgId == botMsgId && chatItem.chatType !== "user") {
           targetChatItem = chatItem;
           break;
         }
@@ -1396,7 +1491,11 @@ export default {
       if (rawValue && typeof rawValue === "object") {
         payload = rawValue;
       } else if (typeof rawValue === "string") {
-        try { payload = JSON.parse(rawValue); } catch (e) { payload = null; }
+        try {
+          payload = JSON.parse(rawValue);
+        } catch (e) {
+          payload = null;
+        }
       }
       if (!payload || typeof payload !== "object") return false;
       var evt = payload.event;
@@ -1412,16 +1511,22 @@ export default {
             promptTokens: payload.tokenAfter,
             completionTokens: 0,
             totalTokens: payload.tokenAfter,
-            cumulativeTotalTokens: this.tokenUsage && this.tokenUsage.cumulativeTotalTokens != null
-              ? this.tokenUsage.cumulativeTotalTokens : payload.tokenAfter,
-            contextWindow: payload.contextWindow != null ? payload.contextWindow
-              : (this.tokenUsage && this.tokenUsage.contextWindow) || 65536,
+            cumulativeTotalTokens:
+              this.tokenUsage && this.tokenUsage.cumulativeTotalTokens != null
+                ? this.tokenUsage.cumulativeTotalTokens
+                : payload.tokenAfter,
+            contextWindow:
+              payload.contextWindow != null
+                ? payload.contextWindow
+                : (this.tokenUsage && this.tokenUsage.contextWindow) ||
+                  llmConfig.getConfig().maxInputContextTokens ||
+                  DEFAULT_LLM_MAX_INPUT_CONTEXT_TOKENS,
             cacheHitTokens: null,
             cacheMissTokens: null,
             reasoningTokens: null,
           };
         }
-        // 插入胶囊提示
+
         this.chatList.push({
           id: "compress-" + Date.now(),
           chatType: "system",
@@ -1435,7 +1540,9 @@ export default {
       if (evt === "context_compress_failed") {
         this.isCompressing = false;
         if (this.toast && typeof this.toast.info === "function") {
-          this.toast.info("上下文压缩失败" + (payload.reason ? "：" + payload.reason : ""));
+          this.toast.info(
+            "上下文压缩失败" + (payload.reason ? "：" + payload.reason : "")
+          );
         }
         return true;
       }
@@ -1471,7 +1578,8 @@ export default {
       var matchedIndex = -1;
       for (var i = 0; i < this.agentSteps.length; i++) {
         var currentStep = this.agentSteps[i];
-        var currentId = currentStep && currentStep.id ? String(currentStep.id) : null;
+        var currentId =
+          currentStep && currentStep.id ? String(currentStep.id) : null;
         var nextId = stepEvent && stepEvent.id ? String(stepEvent.id) : null;
         var sameStableId = currentId && nextId && currentId === nextId;
         var sameLegacyStep =
@@ -1558,18 +1666,23 @@ export default {
         (this.activeAgentRun && this.activeAgentRun.botMsgId) ||
         this.botMsgId;
       if (agentBotMsgId) {
-        var targetMsg = this.findOrCreateBotMessage(agentBotMsgId, eventPayload);
+        var targetMsg = this.findOrCreateBotMessage(
+          agentBotMsgId,
+          eventPayload
+        );
         if (targetMsg) {
           targetMsg.agentSteps = this.agentSteps.slice();
         }
       }
       var normalizedEvent = normalizeAgentTraceEvent(eventPayload || stepEvent);
-      var eventType = normalizedEvent && normalizedEvent.eventType
-        ? normalizedEvent.eventType
-        : "";
-      var runStatus = normalizedEvent && normalizedEvent.runStatus
-        ? this.normalizeAgentRunStatus(normalizedEvent.runStatus)
-        : null;
+      var eventType =
+        normalizedEvent && normalizedEvent.eventType
+          ? normalizedEvent.eventType
+          : "";
+      var runStatus =
+        normalizedEvent && normalizedEvent.runStatus
+          ? this.normalizeAgentRunStatus(normalizedEvent.runStatus)
+          : null;
       if (
         eventType === "run_failed" ||
         runStatus === "failed" ||
@@ -1577,7 +1690,9 @@ export default {
       ) {
         this.activeAgentRun.status = "failed";
         this.guidanceMessage =
-          stepEvent.errorMessage || stepEvent.message || "任务执行失败，请调整后重试。";
+          stepEvent.errorMessage ||
+          stepEvent.message ||
+          "任务执行失败，请调整后重试。";
         this.isSending = false;
         this.isStreaming = false;
         this.isThinking = false;
@@ -1630,7 +1745,7 @@ export default {
 
       for (var i = 0; i < this.chatList.length; i++) {
         var chatItem = this.chatList[i];
-        if (chatItem.botMsgId == botMsgId) {
+        if (chatItem.botMsgId == botMsgId && chatItem.chatType !== "user") {
           chatItem.content = marked.parse(message || "");
           chatItem.interrupted = isInterrupted;
           chatItem.sources = normalizedSources;
@@ -2098,7 +2213,11 @@ export default {
       // 识别上下文压缩摘要记录（role=system, messageType=summary）
       if (message.role === "system" && message.messageType === "summary") {
         var meta = {};
-        try { meta = message.sourcesJson ? JSON.parse(message.sourcesJson) : {}; } catch (e) { meta = {}; }
+        try {
+          meta = message.sourcesJson ? JSON.parse(message.sourcesJson) : {};
+        } catch (e) {
+          meta = {};
+        }
         return {
           id: "summary-" + (message.seqNo != null ? message.seqNo : index),
           content: "",
@@ -2288,12 +2407,17 @@ export default {
     },
     async stopGeneration(skipConfirm) {
       // 二次确认（retryUserMessage 内部调用时已确认过，跳过）
-      if (!skipConfirm && !window.confirm("确定要停止生成吗？")) {
-        return;
+      if (!skipConfirm) {
+        var stopConfirmed = await this.showConfirmBar("确定要停止生成吗？", {
+          confirmText: "停止",
+          cancelText: "取消",
+        });
+        if (!stopConfirmed) {
+          return;
+        }
       }
       // 获取当前 runId
-      var runId =
-        (this.activeAgentRun && this.activeAgentRun.runId) || null;
+      var runId = (this.activeAgentRun && this.activeAgentRun.runId) || null;
       if (!runId) {
         // 没有 runId 时仅做前端状态重置
         this.botMsgId = null;
@@ -2338,7 +2462,11 @@ export default {
       }
 
       // 二次确认（回滚会删除该消息及之后的历史，不可恢复）
-      if (!window.confirm("确定要回滚到该消息吗？该消息及其后的所有回复将被删除。")) {
+      var rollbackConfirmed = await this.showConfirmBar(
+        "确定要回滚到该消息吗？该消息及其后的所有回复将被删除。",
+        { confirmText: "回滚", cancelText: "取消" }
+      );
+      if (!rollbackConfirmed) {
         return;
       }
 
@@ -2351,45 +2479,63 @@ export default {
         // 这里用轮询等待 isStreaming 变为 false
         var waitCount = 0;
         while ((this.isStreaming || this.isSending) && waitCount < 60) {
-          await new Promise(function (resolve) { setTimeout(resolve, 100); });
+          await new Promise(function (resolve) {
+            setTimeout(resolve, 100);
+          });
           waitCount++;
         }
       }
 
-      // 执行回滚删除
-      var botMsgId = item && item.botMsgId;
+      // 在 chatList 中定位被点击的 user 消息 index
+      var userIndex = -1;
+      for (var i = 0; i < this.chatList.length; i++) {
+        if (this.chatList[i] === item) {
+          userIndex = i;
+          break;
+        }
+      }
+      // 兜底：按内容匹配（item 可能是历史加载的副本，引用不同）
+      if (userIndex < 0) {
+        for (var k = 0; k < this.chatList.length; k++) {
+          if (
+            this.chatList[k].chatType === "user" &&
+            this.extractMessageText(this.chatList[k].content).trim() === text
+          ) {
+            userIndex = k;
+            break;
+          }
+        }
+      }
+
+      // 找该 user 消息后面紧跟的 assistant 消息的 botMsgId（后端按 botMsgId 定位删除起点）
+      var assistantBotMsgId = null;
+      if (userIndex >= 0) {
+        for (var j = userIndex + 1; j < this.chatList.length; j++) {
+          if (
+            this.chatList[j].chatType === "bot" ||
+            this.chatList[j].chatType === "assistant"
+          ) {
+            assistantBotMsgId = this.chatList[j].botMsgId;
+            break;
+          }
+        }
+      }
+
+      // 调后端回滚接口删除（user 消息 + 之后所有消息）
       var sessionId = this.activeChatSessionId;
-      if (botMsgId && sessionId) {
+      if (assistantBotMsgId && sessionId) {
         try {
-          await doctorApi.rollbackMessage(sessionId, botMsgId);
+          await doctorApi.rollbackMessage(sessionId, assistantBotMsgId);
         } catch (e) {
           console.error("回滚消息失败:", e);
           this.showUiMessage("error", "回滚失败，请稍后重试");
           return;
         }
+      }
 
-        // 从前端 chatList 中移除该用户消息及之后的所有消息
-        var rollbackIndex = -1;
-        for (var i = 0; i < this.chatList.length; i++) {
-          if (this.chatList[i].botMsgId === botMsgId) {
-            // 找到 botMsgId 对应的 assistant 消息，用户消息在它前一条
-            rollbackIndex = i - 1;
-            break;
-          }
-        }
-        if (rollbackIndex < 0) {
-          // 兜底：如果没找到 botMsgId，尝试按消息内容匹配
-          for (var j = 0; j < this.chatList.length; j++) {
-            if (this.chatList[j].chatType === "user"
-                && this.extractMessageText(this.chatList[j].content).trim() === text) {
-              rollbackIndex = j;
-              break;
-            }
-          }
-        }
-        if (rollbackIndex >= 0) {
-          this.chatList.splice(rollbackIndex);
-        }
+      // 从前端 chatList 中移除该 user 消息及之后的所有消息
+      if (userIndex >= 0) {
+        this.chatList.splice(userIndex);
       }
 
       // 回填输入框
@@ -2430,7 +2576,10 @@ export default {
         // 结果由 SSE handler 统一处理（context_compressing / context_compressed / context_compress_failed）
       } catch (e) {
         this.isCompressing = false;
-        this.showUiMessage("error", "触发压缩失败：" + (e && e.message ? e.message : "未知错误"));
+        this.showUiMessage(
+          "error",
+          "触发压缩失败：" + (e && e.message ? e.message : "未知错误")
+        );
       }
     },
     async doChat() {
