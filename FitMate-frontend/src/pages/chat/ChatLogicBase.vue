@@ -917,9 +917,9 @@ export default {
     normalizeAgentStepStatus(status) {
       return normalizeAgentTraceStatusValue(status);
     },
-    isTerminalAgentRunStatus(status) {
-      var normalized = this.normalizeAgentRunStatus(status);
-      return normalized === "success" || normalized === "failed";
+    isTerminalAgentRunStatus(status: any): boolean {
+      const s = this.normalizeAgentRunStatus(status);
+      return s === "success" || s === "failed" || s === "cancelled" || s === "interrupted";
     },
     hasPendingAgentRun(): boolean {
       return this.hasPendingRunInCurrentSession;

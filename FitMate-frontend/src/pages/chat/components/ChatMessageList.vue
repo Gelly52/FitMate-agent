@@ -16,8 +16,9 @@
 
       <agent-step-card
         v-if="shouldShowTaskCard()"
-        :steps="agentSteps"
-        :thinking-content="thinkingContent"
+        :steps="innerSteps"
+        :thinking-content="innerThinkingContent"
+        :thinking-segments="innerThinkingSegments"
         :is-thinking="isThinking"
         :thinking-expanded="thinkingExpanded"
         :is-sending="isSending"
@@ -79,11 +80,15 @@
         >
           <div class="msg-bubble msg-bubble-bot">
             <reasoning-trace-block
-              v-if="item.thinkingContent || (item.agentSteps && item.agentSteps.length > 0) || item.isThinking"
+              v-if="item.thinkingContent || (item.agentSteps && item.agentSteps.length > 0) || (item.thinkingSegments && item.thinkingSegments.length > 0) || item.isThinking || item.messageId"
               :thinking-content="item.thinkingContent || ''"
+              :thinking-segments="item.thinkingSegments || []"
               :steps="item.agentSteps || []"
               :is-thinking="!!item.isThinking"
               :expanded="item.thinkingExpanded !== false"
+              :thinking-loaded="!!item.thinkingLoaded"
+              :thinking-loading="!!item.thinkingLoading"
+              :message-id="item.messageId"
               @toggle-thinking="$emit('toggle-thinking', item)"
             />
             <div class="msg-text markdown-body" v-html="item.content"></div>
@@ -162,21 +167,11 @@ export default {
       type: Boolean,
       default: false,
     },
-    agentSteps: {
-      type: Array,
-      default: function () {
-        return [];
-      },
-    },
     activeAgentRun: {
       type: Object,
       default: function () {
         return null;
       },
-    },
-    thinkingContent: {
-      type: String,
-      default: "",
     },
     isThinking: {
       type: Boolean,
@@ -185,6 +180,23 @@ export default {
     thinkingExpanded: {
       type: Boolean,
       default: true,
+    },
+  },
+  computed: {
+    innerSteps() {
+      return this.activeAgentRun && this.activeAgentRun.steps
+        ? this.activeAgentRun.steps
+        : [];
+    },
+    innerThinkingContent() {
+      return this.activeAgentRun && this.activeAgentRun.thinkingContent
+        ? this.activeAgentRun.thinkingContent
+        : "";
+    },
+    innerThinkingSegments() {
+      return this.activeAgentRun && this.activeAgentRun.thinkingSegments
+        ? this.activeAgentRun.thinkingSegments
+        : [];
     },
   },
   methods: {
@@ -205,8 +217,8 @@ export default {
       );
       return (
         hasRunningAgentRun ||
-        (this.agentSteps && this.agentSteps.length > 0) ||
-        (this.thinkingContent && this.thinkingContent.length > 0) ||
+        (this.innerSteps && this.innerSteps.length > 0) ||
+        (this.innerThinkingContent && this.innerThinkingContent.length > 0) ||
         (this.isSending && !this.isStreaming)
       );
     },
@@ -272,6 +284,20 @@ export default {
       }
       var hours = date.getHours().toString().padStart(2, "0");
       var minutes = date.getMinutes().toString().padStart(2, "0");
+      // 跟随系统 12/24 小时制：用 toLocaleTimeString 检测系统偏好
+      try {
+        var sample = date.toLocaleTimeString(undefined, { hour: "numeric" });
+        // 若系统输出含 AM/PM（或本地化的上/下午），则用 12 小时制
+        if (/\d\s*[ap]\.?m\.?$/i.test(sample) || /[上下]午$/.test(sample)) {
+          return date.toLocaleTimeString(undefined, {
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: true,
+          });
+        }
+      } catch (_e) {
+        // 降级：保持 24 小时制
+      }
       return hours + ":" + minutes;
     },
     getMessageSources(item) {
@@ -287,6 +313,31 @@ export default {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
+  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--color-on-surface) 15%, transparent) transparent;
+}
+
+/* Webkit (Chrome / Edge / Safari) */
+.chat-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.chat-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-scroll::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-on-surface) 15%, transparent);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.chat-scroll::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--color-on-surface) 25%, transparent);
+  background-clip: padding-box;
 }
 
 .chat-scroll-inner {
@@ -366,6 +417,11 @@ export default {
   width: 92%;
 }
 
+/* 用户气泡：子元素右对齐，让短消息 .msg-text 按内容宽度收缩，避免尾部留空 */
+.msg-row-user .msg-bubble {
+  align-items: flex-end;
+}
+
 .msg-bubble-user .msg-text {
   background: var(--color-surface-container);
   border: 1px solid var(--color-surface-container-high);
@@ -376,6 +432,7 @@ export default {
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
+  max-width: 100%;
 }
 
 .msg-bubble-bot .msg-text {
