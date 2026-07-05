@@ -2150,6 +2150,13 @@ export default {
         this.isSending = false;
         this.isStreaming = false;
         this.isThinking = false;
+      } else if (runStatus === "cancelled" || runStatus === "interrupted") {
+        // 中断/取消：保留具体终态，避免被下方 success 分支吞掉
+        run.status = runStatus;
+        this.guidanceMessage = "任务已中断，可继续发起新任务。";
+        this.isSending = false;
+        this.isStreaming = false;
+        this.isThinking = false;
       } else if (
         eventType === "final_answer" ||
         eventType === "run_finished" ||
@@ -3185,11 +3192,27 @@ export default {
         requestPromise.catch(
           function (error) {
             console.error("任务请求失败:", error);
-            this.showUiMessage("error", "请求失败，请稍后重试！");
+            // 识别 429 并发上限，给出友好提示（ack 未到达，不会创建 run entry）
+            var errStatus =
+              error && error.response && error.response.status != null
+                ? error.response.status
+                : error && error.status != null
+                ? error.status
+                : null;
+            if (errStatus === 429) {
+              this.showUiMessage(
+                "error",
+                "当前并发任务数已达上限（3），请稍后再试。"
+              );
+              this.guidanceMessage =
+                "当前并发任务数已达上限（3），请稍后再试。";
+            } else {
+              this.showUiMessage("error", "请求失败，请稍后重试！");
+              this.guidanceMessage = "任务发送失败，请稍后重试。";
+            }
             this.isSending = false;
             this.isStreaming = false;
             this.clearThinkingState();
-            this.guidanceMessage = "任务发送失败，请稍后重试。";
             this.failCurrentAgentStep();
           }.bind(this)
         );

@@ -43,10 +43,15 @@ export function normalizeAgentRunStatus(status: unknown): AgentRunStatus {
   if (
     normalized === "error" ||
     normalized === "failed" ||
-    normalized === "cancelled" ||
     normalized === "timeout"
   ) {
     return "failed";
+  }
+  if (normalized === "cancelled") {
+    return "cancelled";
+  }
+  if (normalized === "interrupted") {
+    return "interrupted";
   }
   if (normalized === "running") {
     return "running";
@@ -101,7 +106,12 @@ export function isTerminalAgentEvent(event: AgentTraceEvent | null): boolean {
   if (["final_answer", "run_finished", "run_failed"].includes(eventType)) {
     return true;
   }
-  return !!event.runStatus && ["success", "failed"].includes(normalizeAgentRunStatus(event.runStatus));
+  return (
+    !!event.runStatus &&
+    ["success", "failed", "cancelled", "interrupted"].includes(
+      normalizeAgentRunStatus(event.runStatus)
+    )
+  );
 }
 
 export function normalizeAgentTraceEvent(payload: unknown): AgentTraceEvent | null {
@@ -213,4 +223,38 @@ export function collectAgentTraceItems(detail: Record<string, unknown>): unknown
     }
   }
   return emptySource || [];
+}
+
+/**
+ * 判断 step 是否为 LLM 轮次锚点。
+ * 实时流式：llm_started；历史消息：DB 里 markStepSuccess 用 llm_finished 覆盖了 eventType。
+ */
+export function isLlmAnchorStep(step: { eventType?: string } | null | undefined): boolean {
+  if (!step || !step.eventType) return false;
+  const et = String(step.eventType).toLowerCase();
+  return et === "llm_started" || et === "llm_finished";
+}
+
+/**
+ * 从 LLM 锚点 step 的 outputJson 中提取该轮思考内容（reasoningContent）。
+ * 后端在 llm_finished 时把 {"decision":"...","reasoningContent":"<本轮思考>"} 序列化为 JSON 存入 output_json。
+ * 兼容 outputJson 为字符串或对象；解析失败或字段缺失返回空字符串。
+ */
+export function extractThinkingFromStepOutput(step: { outputJson?: unknown } | null | undefined): string {
+  if (!step || step.outputJson == null || step.outputJson === "") {
+    return "";
+  }
+  let parsed: unknown = step.outputJson;
+  if (typeof parsed === "string") {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      return "";
+    }
+  }
+  if (!isRecord(parsed)) {
+    return "";
+  }
+  const reasoning = parsed.reasoningContent ?? parsed.reasoning ?? parsed.thinking;
+  return reasoning == null ? "" : String(reasoning);
 }

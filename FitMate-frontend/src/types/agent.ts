@@ -1,4 +1,10 @@
-export type AgentRunStatus = "pending" | "running" | "success" | "failed";
+export type AgentRunStatus =
+  | "pending"
+  | "running"
+  | "success"
+  | "failed"
+  | "cancelled"
+  | "interrupted";
 
 export type AgentTraceStatus =
   | "pending"
