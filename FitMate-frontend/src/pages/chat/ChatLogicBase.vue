@@ -427,6 +427,14 @@ export default {
     },
     handleSelectChatSession(sessionId) {
       // 不再阻止：任务运行时也可切换会话，旧 run 在 Map 中继续追踪
+      // flush 当前 run 的 buffer（避免丢失累积的 thinking/content delta），再清理所有 buffer
+      var currentRun = this.currentAgentRun;
+      if (currentRun && currentRun.runId) {
+        this.flushRunBuffer(currentRun.runId);
+      }
+      this.clearRunBuffers();
+      this.scrollRAFScheduled = false;
+      this.cachedChatMessagesEl = null;
       var targetSession = null;
       for (var i = 0; i < this.chatSessionList.length; i++) {
         if (this.chatSessionList[i].sessionId == sessionId) {
@@ -589,6 +597,14 @@ export default {
     },
     handleCreateChat() {
       // 不再阻止：任务运行时也可新建聊天，旧 run 在 Map 中继续追踪
+      // flush 当前 run 的 buffer（避免丢失累积的 thinking/content delta），再清理所有 buffer
+      var currentRun = this.currentAgentRun;
+      if (currentRun && currentRun.runId) {
+        this.flushRunBuffer(currentRun.runId);
+      }
+      this.clearRunBuffers();
+      this.scrollRAFScheduled = false;
+      this.cachedChatMessagesEl = null;
       this.clearThinkingState();
       this.activeView = "chat";
       this.activeChatSessionId = null;
@@ -3307,7 +3323,14 @@ export default {
       return copied;
     },
     copyMessageContent(item) {
-      var text = this.extractMessageText(item && item.content).trim();
+      // 优先用 rawContent（markdown 原文），fallback 到 content（HTML）
+      var raw = item && item.rawContent;
+      var text;
+      if (raw) {
+        text = String(raw).trim();
+      } else {
+        text = this.extractMessageText(item && item.content).trim();
+      }
       if (!text) {
         this.showUiMessage("error", "暂无可复制内容");
         return;
