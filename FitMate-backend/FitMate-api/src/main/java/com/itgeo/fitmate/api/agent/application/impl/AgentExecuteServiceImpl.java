@@ -297,9 +297,8 @@ public class AgentExecuteServiceImpl implements AgentExecuteService {
         boolean ragEnabled = chatEntity != null && Boolean.TRUE.equals(chatEntity.getRagEnabled());
         boolean internetEnabled = chatEntity != null && Boolean.TRUE.equals(chatEntity.getInternetEnabled());
 
-        if (ragEnabled && internetEnabled) {
-            throw new IllegalArgumentException("暂不支持同时开启知识库增强与联网补充");
-        }
+        // Agent 流程下，RAG 与联网都仅作为可选工具由 LLM 自主调用，无需互斥。
+        // sourceType 这里仅作为消息元数据用于展示与回溯，按 RAG 优先记录。
         if (ragEnabled) {
             return "rag";
         }
