@@ -1216,6 +1216,21 @@ export default {
       this.runBuffers = {};
     },
     /**
+     * 收尾流式中的 bot 消息：flush buffer + 保存 rawContent + 渲染 markdown。
+     * 用于 SSE 断连、stopGeneration 超时等非正常 finish 路径，避免消息卡在纯文本状态。
+     */
+    finalizeStreamingChatItem(botMsgId, interrupted) {
+      if (!botMsgId) return;
+      var target = this.findBotMessage(botMsgId);
+      if (!target || !target.isStreaming) return;
+      var rawContent = target.content || "";
+      target.rawContent = rawContent;
+      target.content = marked.parse(rawContent);
+      target.isStreaming = false;
+      target.isFinished = true;
+      if (interrupted) target.interrupted = true;
+    },
+    /**
      * 判断 run 是否为后台 run（不属于当前活跃会话）。
      * 后台 run 的 SSE 事件只更新 run entry 状态，不操作全局 UI 状态与 chatList，
      * 避免任务 A 的实时内容串入任务 B 的窗口。
@@ -2618,10 +2633,19 @@ export default {
       this.applyServerSessionMeta(payload);
 
       var matched = false;
+      // finish 前 flush 残留 buffer，确保流式期间累积的 content 已写入 chatItem
+      if (runId) this.flushRunBuffer(runId);
       for (var i = 0; i < this.chatList.length; i++) {
         var chatItem = this.chatList[i];
         if (chatItem.botMsgId == botMsgId && chatItem.chatType !== "user") {
-          chatItem.content = marked.parse(message || "");
+          // 优先用 chatItem 已累积的 content（流式原文），否则用 finish payload 的 message
+          var rawContent = chatItem.isStreaming
+            ? (chatItem.content || message || "")
+            : (message || chatItem.content || "");
+          chatItem.rawContent = rawContent;
+          chatItem.content = marked.parse(rawContent);
+          chatItem.isStreaming = false;
+          chatItem.isFinished = true;
           chatItem.interrupted = isInterrupted;
           chatItem.sources = normalizedSources;
           chatItem.sourceType =
@@ -2637,6 +2661,9 @@ export default {
         this.chatList.push({
           id: "temp-" + this.generateRandomId(8),
           content: marked.parse(message || ""),
+          rawContent: message || "",
+          isStreaming: false,
+          isFinished: true,
           userName: "bot",
           chatType: "bot",
           botMsgId: botMsgId,
@@ -2912,6 +2939,11 @@ export default {
                     failingRun &&
                     !me.isTerminalAgentRunStatus(failingRun.status)
                   ) {
+                    // flush 残留 buffer + 收尾流式消息（渲染 markdown）
+                    if (failingRun.runId) me.flushRunBuffer(failingRun.runId);
+                    if (failingRun.botMsgId) {
+                      me.finalizeStreamingChatItem(failingRun.botMsgId, true);
+                    }
                     failingRun.status = "failed";
                     me.snapshotRunState(failingRun.runId);
                   }
@@ -3129,6 +3161,9 @@ export default {
             : "record-" + index + "-" + this.generateRandomId(6),
         messageId: message.messageId != null ? message.messageId : null,
         content: role === "assistant" ? marked.parse(rawContent) : rawContent,
+        rawContent: rawContent,
+        isStreaming: false,
+        isFinished: true,
         userName: role === "assistant" ? "bot" : this.currentUserName || "用户",
         chatType: role === "assistant" ? "bot" : "user",
         botMsgId: message.botMsgId || null,
@@ -3386,6 +3421,11 @@ export default {
       this._stopTimeout = setTimeout(function () {
         if (me.isStreaming || me.isSending) {
           console.warn("停止超时，强制重置状态");
+          // flush 残留 buffer + 收尾流式消息（渲染 markdown）
+          if (runId) me.flushRunBuffer(runId);
+          if (currentStopRun && currentStopRun.botMsgId) {
+            me.finalizeStreamingChatItem(currentStopRun.botMsgId, true);
+          }
           me.isSending = false;
           me.isStreaming = false;
           me.isThinking = false;
