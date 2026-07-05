@@ -445,6 +445,8 @@ export default {
       this.currentSessionSceneType = targetSession.sceneType || null;
       this.applyChatMode(this.resolvePreferredModeFromSession(targetSession));
       this.chatList = mappedChatList;
+      // 应用思考内容缓存：命中则默认展开
+      this.applyThinkingCacheToChatList(targetSession.sessionId);
       // 恢复会话级 tokenUsage（从历史消息解析）；同时同步到活跃 run entry（若有）
       var restoredUsage = this.resolveLastUsageFromMessages(
         targetSession.messages
@@ -1284,6 +1286,8 @@ export default {
           me.currentSessionCode = targetSession.sessionCode || null;
           me.currentSessionSceneType = targetSession.sceneType || null;
           me.chatList = mappedChatList;
+          // 应用思考内容缓存：命中则默认展开
+          me.applyThinkingCacheToChatList(targetSession.sessionId);
           me.knowledgeSources = me.resolveChatHistorySources(mappedChatList);
           // 恢复会话级 tokenUsage；同时同步到活跃 run entry（若有）
           var restoredUsage = me.resolveLastUsageFromMessages(
@@ -3034,6 +3038,35 @@ export default {
         thinkingLoaded: false,
         thinkingLoading: false,
       };
+    },
+    /**
+     * 遍历 chatList，对 assistant 消息查思考内容缓存。
+     * 命中则填充 thinkingContent/thinkingSegments/agentSteps，
+     * 置 thinkingLoaded=true 与 thinkingExpanded=true（默认展开）。
+     * 未命中保持原状（折叠 + 未加载）。
+     */
+    applyThinkingCacheToChatList(sessionId) {
+      if (!Array.isArray(this.chatList) || sessionId == null) return;
+      var userKey = this.resolveStableUserKey();
+      if (!userKey) return;
+      for (var i = 0; i < this.chatList.length; i++) {
+        var item = this.chatList[i];
+        if (!item || item.chatType !== "bot") continue;
+        if (!item.botMsgId) continue;
+        if (item.thinkingLoaded) continue; // 已加载过则跳过
+        var cached = getThinkingCache(
+          String(userKey),
+          String(sessionId),
+          String(item.botMsgId)
+        );
+        if (cached) {
+          item.thinkingContent = cached.thinkingContent;
+          item.thinkingSegments = cached.thinkingSegments;
+          item.agentSteps = cached.agentSteps;
+          item.thinkingLoaded = true;
+          item.thinkingExpanded = true;
+        }
+      }
     },
     resolveChatHistorySources(chatItems) {
       if (!Array.isArray(chatItems)) {
