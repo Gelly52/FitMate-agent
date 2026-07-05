@@ -91,7 +91,15 @@
               :message-id="item.messageId"
               @toggle-thinking="$emit('toggle-thinking', item)"
             />
-            <div class="msg-text markdown-body" v-html="item.content"></div>
+            <div
+              v-if="item.isStreaming && !item.isFinished"
+              class="msg-text msg-text-streaming"
+            >{{ item.content }}</div>
+            <div
+              v-else
+              class="msg-text markdown-body"
+              v-html="item.content"
+            ></div>
             <div v-if="item.interrupted" class="msg-interrupted-badge">
               <span class="material-symbols-outlined">pause_circle</span>
               <span>已中断</span>
@@ -439,6 +447,12 @@ export default {
   color: var(--color-on-surface);
   font-size: 15px;
   line-height: 1.6;
+  word-break: break-word;
+}
+
+/* 流式期间纯文本容器：避免每个 token 触发 innerHTML 重建 */
+.msg-text-streaming {
+  white-space: pre-wrap;
   word-break: break-word;
 }
 
