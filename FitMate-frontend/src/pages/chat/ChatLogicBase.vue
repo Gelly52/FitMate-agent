@@ -53,6 +53,9 @@ export default {
       imageReadSelected: false,
       isSending: false,
       isStreaming: false,
+      // 会话级状态：run 结束后仍保留，用于 token 用量显示与回滚重发
+      tokenUsage: null,
+      botMsgId: null,
       isCompressing: false,
       // 自定义确认条状态（替代 window.confirm，显示在消息列表与输入框之间）
       confirmBar: {
@@ -157,14 +160,6 @@ export default {
     thinkingContent(): string {
       const run = this.currentAgentRun;
       return run ? run.thinkingContent : "";
-    },
-    botMsgId(): any {
-      const run = this.currentAgentRun;
-      return run ? run.botMsgId : null;
-    },
-    tokenUsage(): any {
-      const run = this.currentAgentRun;
-      return run ? run.tokenUsage : null;
     },
     canCompressContext() {
       // 有活动会话且消息数 >= 8 时才允许主动压缩
@@ -433,11 +428,14 @@ export default {
       this.currentSessionSceneType = targetSession.sceneType || null;
       this.applyChatMode(this.resolvePreferredModeFromSession(targetSession));
       this.chatList = mappedChatList;
+      // 恢复会话级 tokenUsage（从历史消息解析）；同时同步到活跃 run entry（若有）
+      var restoredUsage = this.resolveLastUsageFromMessages(
+        targetSession.messages
+      );
+      this.tokenUsage = restoredUsage;
       var restoreRun = this.currentAgentRun;
       if (restoreRun) {
-        restoreRun.tokenUsage = this.resolveLastUsageFromMessages(
-          targetSession.messages
-        );
+        restoreRun.tokenUsage = restoredUsage;
       }
       this.showBackToBottom = false;
       this.knowledgeSources = this.resolveChatHistorySources(mappedChatList);
@@ -455,6 +453,105 @@ export default {
     },
     handleBackToChat() {
       this.activeView = "chat";
+    },
+    /**
+     * 删除指定会话。
+     * - 若删除的是当前活动会话：清空聊天界面回到"新建会话"状态
+     * - 同步从 chatSessionList 中移除该项
+     * - 清理 sessionStorage 中的最近会话记录（若被删的正是它）
+     */
+    async handleDeleteSession(sessionId) {
+      if (sessionId == null) {
+        return;
+      }
+      if (this.isSending || this.isStreaming || this.hasPendingAgentRun()) {
+        this.showUiMessage("error", "当前有运行中的任务，请稍后再删除会话。");
+        return;
+      }
+      var confirmed = await this.showConfirmBar(
+        "确定要删除该会话吗？该会话及其全部消息将永久删除，不可恢复。",
+        { confirmText: "删除", cancelText: "取消" }
+      );
+      if (!confirmed) {
+        return;
+      }
+      var me = this;
+      try {
+        await doctorApi.deleteChatSession(sessionId);
+      } catch (e) {
+        console.error("删除会话失败:", e);
+        this.showUiMessage("error", "删除会话失败，请稍后重试");
+        return;
+      }
+      // 从列表中移除
+      this.chatSessionList = this.chatSessionList.filter(function (s) {
+        return s && s.sessionId !== sessionId;
+      });
+      // 若删除的是当前活动会话：清空界面并回到新建会话状态
+      if (this.activeChatSessionId === sessionId) {
+        this.clearActiveAgentRun();
+        this.clearThinkingState();
+        this.activeView = "chat";
+        this.activeChatSessionId = null;
+        this.currentSessionCode = null;
+        this.currentSessionSceneType = null;
+        this.chatList = [];
+        // agentSteps/thinkingSegments 是 computed（从 currentAgentRun 派生），无需赋值
+        this.draftMessage = "";
+        this.botMsgId = null;
+        this.tokenUsage = null;
+        this.showBackToBottom = false;
+        this.knowledgeSources = [];
+        this.persistRecentChatSession(null);
+        // URL 同步：/chat/{id} → /chat
+        this.syncChatSessionToUrlAndStorage();
+        this.scrollToBottom(true);
+      }
+      this.showUiMessage("success", "会话已删除");
+    },
+    /**
+     * 重命名指定会话。弹出确认条输入新标题。
+     * 同步更新 chatSessionList 中对应项的 title。
+     */
+    async handleRenameSession(session) {
+      if (!session || session.sessionId == null) {
+        return;
+      }
+      var currentTitle = this.resolveSessionTitle(session);
+      // 用 window.prompt 简单收集新标题（避免再做一个输入框确认条组件）
+      // 确认条组件当前只支持 yes/no，不适合文本输入场景
+      var newTitle = window.prompt("请输入新的会话标题", currentTitle);
+      if (newTitle == null) {
+        // 用户点击取消
+        return;
+      }
+      newTitle = String(newTitle).trim();
+      if (!newTitle) {
+        this.showUiMessage("error", "标题不能为空");
+        return;
+      }
+      if (newTitle.length > 50) {
+        newTitle = newTitle.slice(0, 50);
+      }
+      if (newTitle === currentTitle) {
+        return;
+      }
+      var me = this;
+      try {
+        await doctorApi.renameChatSession(session.sessionId, newTitle);
+      } catch (e) {
+        console.error("重命名会话失败:", e);
+        this.showUiMessage("error", "重命名会话失败，请稍后重试");
+        return;
+      }
+      // 同步更新列表中的 title
+      this.chatSessionList = this.chatSessionList.map(function (s) {
+        if (s && s.sessionId === session.sessionId) {
+          return Object.assign({}, s, { title: newTitle });
+        }
+        return s;
+      });
+      this.showUiMessage("success", "会话已重命名");
     },
     handleCreateChat() {
       // 不再阻止：任务运行时也可新建聊天，旧 run 在 Map 中继续追踪
@@ -1128,11 +1225,14 @@ export default {
           me.currentSessionSceneType = targetSession.sceneType || null;
           me.chatList = mappedChatList;
           me.knowledgeSources = me.resolveChatHistorySources(mappedChatList);
+          // 恢复会话级 tokenUsage；同时同步到活跃 run entry（若有）
+          var restoredUsage = me.resolveLastUsageFromMessages(
+            targetSession.messages
+          );
+          me.tokenUsage = restoredUsage;
           var restoreRun = me.currentAgentRun;
           if (restoreRun) {
-            restoreRun.tokenUsage = me.resolveLastUsageFromMessages(
-              targetSession.messages
-            );
+            restoreRun.tokenUsage = restoredUsage;
           }
           me.scrollToBottom(true);
           return targetSession;
@@ -1387,6 +1487,8 @@ export default {
         : requestPayload && requestPayload.botMsgId
         ? String(requestPayload.botMsgId)
         : run.botMsgId;
+      // botMsgId 双写：会话级 data 字段，用于回滚重发与 stopGeneration
+      this.botMsgId = run.botMsgId;
       run.status = "running";
       run.sceneType = expectedSceneType || "agent";
       run.sourceType = sourceType || "chat";
@@ -1497,6 +1599,10 @@ export default {
       this.isThinking = true;
       var botMsgId =
         payload.botMsgId || run.botMsgId || this.botMsgId;
+      // botMsgId 双写：会话级 data 字段
+      if (botMsgId) {
+        this.botMsgId = botMsgId;
+      }
       if (botMsgId) {
         var targetMsg = this.findOrCreateBotMessage(botMsgId, payload);
         if (targetMsg) {
@@ -2289,6 +2395,15 @@ export default {
 
       // 当前 run：更新 chatList + UI 状态
       this.guidanceMessage = nextGuidance;
+      // tokenUsage 双写：run entry 已在守卫前更新，这里同步到会话级 data 字段
+      // （run 终态后 removeRunEntry 不会影响 this.tokenUsage，UI 持续显示用量）
+      if (run && run.tokenUsage) {
+        this.tokenUsage = run.tokenUsage;
+      }
+      // botMsgId 双写：会话级，用于回滚重发
+      if (botMsgId) {
+        this.botMsgId = botMsgId;
+      }
       // finish 事件可能来自后台 run，不更新当前会话指针
       this.applyServerSessionMeta(payload);
 
