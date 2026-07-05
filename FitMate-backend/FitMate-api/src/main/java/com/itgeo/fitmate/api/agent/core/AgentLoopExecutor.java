@@ -242,6 +242,8 @@ public class AgentLoopExecutor {
             }
 
             if (!"tool_call".equalsIgnoreCase(action)) {
+                // 异常决策分支：未流式推送过，需要显式推送一次 final_answer
+                sendContentChunk(context, LlmJsonSanitizer.sanitize(decisionText));
                 finishWithAnswer(context, LlmJsonSanitizer.sanitize(decisionText), observations, memory, allowedTools, summarySection, userProfileSection);
                 return;
             }
@@ -338,7 +340,7 @@ public class AgentLoopExecutor {
         if (cancellationRegistry.isCancelled(context.getRunId())) {
             throw new AgentCancelledException(extractPartialContent(context));
         }
-        sendContentChunk(context, finalAnswer);
+        // final_answer 已在调用方通过流式或整段 sendContentChunk 推送，这里不再重复推送
         TokenUsage accumulatedUsage = context.getAccumulatedUsage();
         String usageJson = (accumulatedUsage != null && accumulatedUsage.getTotalTokens() != null)
                 ? JSONUtil.toJsonStr(accumulatedUsage) : null;

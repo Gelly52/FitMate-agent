@@ -10,6 +10,8 @@
  * console UI from ever rendering.
  */
 import { marked } from "marked";
+// 启用 GFM 表格与单换行转 <br>，改善 LLM 输出渲染
+marked.setOptions({ gfm: true, breaks: true });
 import doctorApi from "../../services/doctorApi";
 import {
   getThinking as getThinkingCache,
@@ -372,6 +374,13 @@ export default {
       this.mobileRightOpen = false;
     },
     handleDirectTask(prompt) {
+      var currentPath = this.$route && this.$route.path;
+      var isOnChat = currentPath && currentPath.startsWith("/chat");
+      if (!isOnChat) {
+        window.sessionStorage.setItem("fitmate:pending-draft", prompt);
+        this.$router.push({ path: "/chat" });
+        return;
+      }
       this.activeView = "chat";
       this.closeMobileDrawers();
       this.draftMessage = prompt;
@@ -2827,11 +2836,6 @@ export default {
         return null;
       }
       var handleCustomEvent = function (event, context) {
-        var eventName =
-          context && context.eventName ? context.eventName : "customEvent";
-        console.log(eventName + "事件...");
-        console.log(event && event.lastEventId);
-        console.log(event && event.data);
         me.handleAgentCustomEvent(event && event.data);
       };
 
@@ -2839,7 +2843,6 @@ export default {
       this.teardownSSE();
       this.sseState = "connecting";
       this.guidanceMessage = "正在连接 SSE 实时通道，请稍候。";
-      console.log("连接用户=" + resolvedUserKey);
 
       try {
         var ticketResponse = await doctorApi.createSseTicket();
@@ -2874,14 +2877,11 @@ export default {
           connection = connectSse({
             ticket: ticket,
             onOpen: function () {
-              console.log("建立连接。。。");
               me.sseState = "connected";
               me.guidanceMessage = "SSE 已连接，可开始执行任务。";
               settle(connection);
             },
             onThinking: function (event) {
-              console.log("thinking事件...");
-              console.log(event && event.data);
               me.handleThinkingEvent(event && event.data);
             },
             onAdd: function (event) {
@@ -2898,9 +2898,6 @@ export default {
               me.upsertStreamingBotMessage(payload);
             },
             onFinish: function (event) {
-              console.log("finish事件...");
-              console.log(event && event.data);
-
               if (me.taskStartTime) {
                 var elapsed = Date.now() - me.taskStartTime;
                 if (elapsed < 1000) {
