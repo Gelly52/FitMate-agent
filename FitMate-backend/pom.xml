@@ -18,7 +18,6 @@
 
     <modules>
         <module>FitMate-common</module>
-        <module>FitMate-domain</module>
         <module>FitMate-api</module>
         <module>FitMate-mcpServer</module>
     </modules>
