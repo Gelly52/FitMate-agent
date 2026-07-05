@@ -15,6 +15,8 @@ import { clearUserSession, getUserInfo } from "../../services/http";
 import { connectSse, closeSse } from "../../services/sseService";
 import {
   collectAgentTraceItems,
+  extractThinkingFromStepOutput,
+  isLlmAnchorStep,
   isTerminalAgentEvent,
   normalizeAgentRunStatus as normalizeAgentRunStatusValue,
   normalizeAgentTraceEvent,
@@ -47,7 +49,7 @@ export default {
 
       knowledgeBaseSelected: true,
       ragSelected: false,
-      internetSearchSelected: false,
+      internetSearchSelected: true,
       imageReadSelected: false,
       isSending: false,
       isStreaming: false,
@@ -62,6 +64,10 @@ export default {
         resolve: null,
       },
       showBackToBottom: false,
+      // 用户主动向上滚动标志：true 时流式输出不自动跟随，点击"回到底部"重置
+      isUserScrolledUp: false,
+      // 程序滚动标志：避免程序触发的 scroll 事件被误判为用户主动滚动
+      isProgrammaticScroll: false,
       selectedUploadName: "",
       sseState: "idle",
       guidanceMessage: "选择任务模式后，输入指令开始执行。",
@@ -89,6 +95,11 @@ export default {
       knowledgeSources: [],
       agentSteps: [],
       thinkingContent: "",
+      thinkingSegments: [] as Array<{
+        iteration: number;
+        content: string;
+        isStreaming: boolean;
+      }>,
       isThinking: false,
       thinkingExpanded: true,
       docCount: 0,
@@ -154,18 +165,28 @@ export default {
         }).length >= 8
       );
     },
+    recentChatSessions() {
+      var list = Array.isArray(this.chatSessionList)
+        ? this.chatSessionList
+        : [];
+      return list.slice(0, 12);
+    },
     activeModeLabel() {
       var mainLabel = "Agent";
-      if (this.knowledgeBaseSelected && this.ragSelected) {
-        return mainLabel + " + 知识库 Wiki + 原始文档";
-      }
+      var parts = [];
       if (this.knowledgeBaseSelected) {
-        return mainLabel + " + 知识库 Wiki";
+        parts.push("知识库 Wiki");
+      }
+      if (this.ragSelected) {
+        parts.push("原始文档");
       }
       if (this.internetSearchSelected) {
-        return mainLabel + " + 联网补充";
+        parts.push("联网补充");
       }
-      return mainLabel;
+      if (parts.length === 0) {
+        return mainLabel;
+      }
+      return mainLabel + " + " + parts.join(" + ");
     },
     connectionBadgeText() {
       if (this.isStreaming) {
@@ -220,6 +241,8 @@ export default {
     this._sseConnection = null;
     this._sseSource = null;
     this._sseConnectingPromise = null;
+    // 恢复会话期间的标志：避免 activeChatSessionId 变化时 watch 反向同步 URL/storage 造成循环
+    this._isRestoringSession = false;
     this.loadUserSessionFromCookie();
     this.restoreActiveAgentRun();
     this.applyRouteView();
@@ -250,6 +273,10 @@ export default {
     if (this._stopTimeout) {
       clearTimeout(this._stopTimeout);
     }
+    if (this._chatHistoryHoverTimer) {
+      clearTimeout(this._chatHistoryHoverTimer);
+      this._chatHistoryHoverTimer = null;
+    }
     this.teardownSSE({ clearPending: true });
     if (this._llmConfigUnsub) {
       this._llmConfigUnsub();
@@ -262,6 +289,17 @@ export default {
     },
     "$route.path"() {
       this.applyRouteView();
+    },
+    // 会话 ID 变化时同步到 URL 路径参数与 sessionStorage，
+    // 实现切换其他页面再回来时仍能恢复原会话（类似 DeepSeek /chat/s/{id} 行为）
+    activeChatSessionId(newVal, oldVal) {
+      if (this._isRestoringSession) {
+        return;
+      }
+      if (newVal === oldVal) {
+        return;
+      }
+      this.syncChatSessionToUrlAndStorage();
     },
   },
   methods: {
@@ -324,6 +362,27 @@ export default {
         await this.fetchChatRecords();
       }
     },
+    async handleChatHistoryHover(enter) {
+      if (this._chatHistoryHoverTimer) {
+        clearTimeout(this._chatHistoryHoverTimer);
+        this._chatHistoryHoverTimer = null;
+      }
+      if (enter) {
+        if (this.chatExpanded) {
+          return;
+        }
+        this.chatExpanded = true;
+        if (!this.chatRecordsLoaded && !this.chatRecordsLoading) {
+          await this.fetchChatRecords();
+        }
+      } else {
+        var me = this;
+        this._chatHistoryHoverTimer = setTimeout(function () {
+          me.chatExpanded = false;
+          me._chatHistoryHoverTimer = null;
+        }, 200);
+      }
+    },
     handleSelectChatSession(sessionId) {
       if (this.isSending || this.isStreaming || this.hasPendingAgentRun()) {
         this.showUiMessage(
@@ -358,6 +417,7 @@ export default {
       this.applyChatMode(this.resolvePreferredModeFromSession(targetSession));
       this.chatList = mappedChatList;
       this.agentSteps = [];
+      this.thinkingSegments = [];
       this.botMsgId = null;
       this.tokenUsage = this.resolveLastUsageFromMessages(
         targetSession.messages
@@ -365,7 +425,19 @@ export default {
       this.showBackToBottom = false;
       this.knowledgeSources = this.resolveChatHistorySources(mappedChatList);
       this.closeMobileDrawers();
+      this.chatExpanded = false;
+      this.activeView = "chat";
       this.scrollToBottom(true);
+    },
+    async handleShowAllChatSessions() {
+      this.chatExpanded = false;
+      this.activeView = "chat-history";
+      if (!this.chatRecordsLoaded && !this.chatRecordsLoading) {
+        await this.fetchChatRecords();
+      }
+    },
+    handleBackToChat() {
+      this.activeView = "chat";
     },
     handleCreateChat() {
       if (this.isSending || this.isStreaming || this.hasPendingAgentRun()) {
@@ -381,6 +453,7 @@ export default {
       this.currentSessionSceneType = null;
       this.chatList = [];
       this.agentSteps = [];
+      this.thinkingSegments = [];
       this.draftMessage = "";
       this.botMsgId = null;
       this.tokenUsage = null;
@@ -901,6 +974,53 @@ export default {
       }
       window.sessionStorage.setItem(key, JSON.stringify(snapshot));
     },
+    /**
+     * 按 runId 取 run entry；不存在时按需创建。
+     * @param payload SSE 事件载荷，至少含 runId
+     * @param options.createIfMissing 为 true 时，若无 runId 则降级到 currentAgentRun，若仍无则新建空骨架
+     */
+    resolveRunForEvent(payload: any, options: { createIfMissing?: boolean } = {}): any | null {
+      const runId = payload && payload.runId != null ? String(payload.runId) : null;
+      if (!runId) {
+        return this.currentAgentRun;
+      }
+      const existing = (this.activeAgentRuns || {})[runId];
+      if (existing) return existing;
+      if (options.createIfMissing) {
+        return this.createRunEntry({ runId });
+      }
+      return null;
+    },
+    /**
+     * 创建 run entry 并放入 Map。chatSessionId 创建时固定。
+     */
+    createRunEntry(init: any): any {
+      const runId = String(init.runId);
+      const run = {
+        runId: runId,
+        chatSessionId: init.chatSessionId != null ? init.chatSessionId : this.activeChatSessionId,
+        sessionCode: init.sessionCode != null ? String(init.sessionCode) : null,
+        botMsgId: init.botMsgId != null ? String(init.botMsgId) : null,
+        status: init.status || "pending",
+        requestText: init.requestText || "",
+        sceneType: init.sceneType || "agent",
+        sourceType: init.sourceType || "chat",
+        finishReceived: false,
+        steps: [],
+        thinkingSegments: [],
+        thinkingContent: "",
+        tokenUsage: null,
+      };
+      this.activeAgentRuns[runId] = run;
+      return run;
+    },
+    /**
+     * 从 Map 移除 run entry。
+     */
+    removeRunEntry(runId: string) {
+      if (!runId) return;
+      delete this.activeAgentRuns[runId];
+    },
     clearActiveAgentRun(options) {
       var key = this.getActiveAgentRunStorageKey();
       if (key && typeof window !== "undefined") {
@@ -910,6 +1030,7 @@ export default {
       this.agentStepEventReceived = false;
       if (!options || options.clearSteps !== false) {
         this.agentSteps = [];
+        this.thinkingSegments = [];
       }
     },
     restoreActiveAgentRun() {
@@ -976,6 +1097,7 @@ export default {
         this.agentSteps = steps;
       } else {
         this.agentSteps = [];
+        this.thinkingSegments = [];
         this.guidanceMessage = "正在恢复 Agent 执行轨迹，请稍候。";
       }
       this.silentRestoreChatSession(this.activeAgentRun.chatSessionId);
@@ -1010,6 +1132,9 @@ export default {
         return Promise.resolve(null);
       }
       var me = this;
+      // 恢复期间设置标志，避免 activeChatSessionId 变化触发 watch 反向同步 URL/storage
+      var previousFlag = this._isRestoringSession;
+      this._isRestoringSession = true;
       return doctorApi
         .getRecords(stableUserKey, sessionId, 1)
         .then(function (res) {
@@ -1039,7 +1164,131 @@ export default {
         .catch(function (error) {
           console.warn("静默恢复聊天会话失败:", error);
           return null;
+        })
+        .finally(function () {
+          me._isRestoringSession = previousFlag;
         });
+    },
+    /**
+     * 当前用户在 sessionStorage 中持久化"最近活动会话 ID"用的 key。
+     * 用于：用户切换到其他页面（如 dashboard、training）再点回聊天入口时，
+     * 即使 URL 没带 sessionId，也能从 sessionStorage 兜底恢复到上次的会话。
+     */
+    getRecentChatSessionStorageKey() {
+      var stableUserKey = this.resolveStableUserKey();
+      if (!stableUserKey || typeof window === "undefined") {
+        return null;
+      }
+      return "fitmate:recent-chat-session:" + String(stableUserKey);
+    },
+    /**
+     * 将当前会话 ID 写入/移出 sessionStorage（持久化最近活动会话）。
+     * sessionId 为 null 时移除记录，对应"新建会话"场景。
+     */
+    persistRecentChatSession(sessionId) {
+      var key = this.getRecentChatSessionStorageKey();
+      if (!key || typeof window === "undefined") {
+        return;
+      }
+      try {
+        if (sessionId == null) {
+          window.sessionStorage.removeItem(key);
+        } else {
+          window.sessionStorage.setItem(key, String(sessionId));
+        }
+      } catch (e) {
+        // sessionStorage 不可用时静默忽略
+      }
+    },
+    /**
+     * 解析可恢复的会话 ID。优先级：
+     *   1) URL 路径参数 sessionId（直接访问 /chat/123 或从其他页面 router-link 回到该 URL）
+     *   2) sessionStorage 中持久化的最近会话 ID（兜底，覆盖侧栏点击 /chat 入口的场景）
+     *   3) 都没有则返回 null（呈现"新建会话"页）
+     */
+    resolveRestorableSessionId() {
+      var urlSessionId =
+        this.$route &&
+        this.$route.params &&
+        this.$route.params.sessionId;
+      if (urlSessionId != null && urlSessionId !== "") {
+        return { sessionId: urlSessionId, source: "url" };
+      }
+      var key = this.getRecentChatSessionStorageKey();
+      if (key && typeof window !== "undefined") {
+        var storedSessionId = null;
+        try {
+          storedSessionId = window.sessionStorage.getItem(key);
+        } catch (e) {
+          storedSessionId = null;
+        }
+        if (storedSessionId != null && storedSessionId !== "") {
+          return { sessionId: storedSessionId, source: "storage" };
+        }
+      }
+      return { sessionId: null, source: "none" };
+    },
+    /**
+     * 在 ChatPage mounted 阶段触发：从 URL/sessionStorage 恢复上次会话。
+     * 跳过条件：
+     *   - 已有活动 Agent run（restoreActiveAgentRun 已处理）
+     *   - chatList 已非空（已处于会话中，如刚发完消息）
+     *   - 已有 activeChatSessionId（doChat 已建立会话）
+     */
+    restoreChatSessionFromRoute() {
+      if (this.hasPendingAgentRun()) {
+        return Promise.resolve(null);
+      }
+      if (Array.isArray(this.chatList) && this.chatList.length > 0) {
+        return Promise.resolve(null);
+      }
+      if (this.activeChatSessionId != null) {
+        return Promise.resolve(null);
+      }
+      var restorable = this.resolveRestorableSessionId();
+      if (restorable.sessionId == null) {
+        return Promise.resolve(null);
+      }
+      var me = this;
+      // silentRestoreChatSession 内部用 _isRestoringSession 跳过 watch 反向同步，
+      // 恢复完成后这里主动同步一次 URL，让 /chat 替换为 /chat/{sessionId}
+      return this.silentRestoreChatSession(restorable.sessionId).then(
+        function () {
+          me.syncChatSessionToUrlAndStorage();
+        }
+      );
+    },
+    /**
+     * 将当前 activeChatSessionId 同步到 URL 路径参数与 sessionStorage。
+     * 仅在当前路由为 /chat 时才更新 URL，避免在 training/dashboard 等页面误改 URL。
+     */
+    syncChatSessionToUrlAndStorage() {
+      var sessionId = this.activeChatSessionId;
+      // 同步到 sessionStorage（兜底恢复来源）
+      this.persistRecentChatSession(sessionId);
+      // 同步到 URL 路径参数
+      if (!this.$route || !/^\/chat(\/|$)/.test(this.$route.path || "")) {
+        return;
+      }
+      var currentUrlSessionId =
+        this.$route.params && this.$route.params.sessionId;
+      var nextUrlSessionId =
+        sessionId != null ? String(sessionId) : null;
+      if (
+        String(currentUrlSessionId || "") ===
+        String(nextUrlSessionId || "")
+      ) {
+        return;
+      }
+      var nextPath =
+        nextUrlSessionId != null
+          ? "/chat/" + nextUrlSessionId
+          : "/chat";
+      var me = this;
+      // 用 replace 避免污染浏览历史（每次会话变化都堆历史会让后退按钮体验糟糕）
+      this.$router.replace(nextPath).catch(function () {
+        // 忽略重复路由/导航取消等错误
+      });
     },
     applyAgentRunDetail(detail) {
       if (!detail || typeof detail !== "object") {
@@ -1106,6 +1355,7 @@ export default {
         this.activeAgentRun.steps = steps;
       } else if (hasServerTrace) {
         this.agentSteps = [];
+        this.thinkingSegments = [];
         this.agentStepEventReceived = false;
         this.activeAgentRun.steps = [];
       }
@@ -1273,6 +1523,11 @@ export default {
         return;
       }
       this.thinkingContent = (this.thinkingContent || "") + thinkingText;
+      // 同步追加到 thinkingSegments：找到当前 active 段追加；若无 active 段则兜底新建
+      this.thinkingSegments = this.appendThinkingChunkToSegments(
+        this.thinkingSegments.slice(),
+        thinkingText
+      );
       this.isThinking = true;
       if (payload.botMsgId) {
         this.botMsgId = payload.botMsgId;
@@ -1287,6 +1542,12 @@ export default {
         if (targetMsg) {
           targetMsg.thinkingContent =
             (targetMsg.thinkingContent || "") + thinkingText;
+          // 直接同步 this.thinkingSegments 到 targetMsg（深拷贝避免引用共享）
+          // 注意：不要给 targetMsg 独立调用 appendThinkingChunkToSegments，
+          // 否则 applyAgentStepEvent 处理 step 事件时会覆盖 targetMsg 的 thinking 数据
+          targetMsg.thinkingSegments = this.cloneThinkingSegments(
+            this.thinkingSegments
+          );
           targetMsg.isThinking = true;
           if (payload.runId != null) {
             targetMsg.runId = payload.runId;
@@ -1329,15 +1590,264 @@ export default {
     },
     clearThinkingState() {
       this.thinkingContent = "";
+      this.thinkingSegments = [];
       this.isThinking = false;
       this.thinkingExpanded = true;
     },
-    toggleThinkingExpanded(message) {
-      if (message && typeof message === "object" && message.botMsgId) {
-        message.thinkingExpanded = !message.thinkingExpanded;
+    // 找到当前正在流式输出（isStreaming=true）的最新 thinking segment
+    // 用于把 thinking chunk 追加到正确的轮次桶里
+    findActiveThinkingSegment(segments) {
+      if (!Array.isArray(segments) || segments.length === 0) {
+        return -1;
+      }
+      for (var i = segments.length - 1; i >= 0; i--) {
+        if (segments[i] && segments[i].isStreaming) {
+          return i;
+        }
+      }
+      return -1;
+    },
+    // 把 thinking chunk 追加到 segments 的最新 active 段；
+    // 若没有 active 段（异常情况或历史消息恢复后），创建一个 iteration=0 的兜底段
+    appendThinkingChunkToSegments(segments, text, iteration) {
+      if (!Array.isArray(segments)) {
+        return [{ iteration: 0, content: text, isStreaming: true }];
+      }
+      var activeIdx = this.findActiveThinkingSegment(segments);
+      if (activeIdx >= 0) {
+        // 不可变更新：创建新 segment 对象，避免与其它引用共享对象时重复追加
+        var oldSeg = segments[activeIdx];
+        var newSeg = {
+          iteration: oldSeg.iteration,
+          content: (oldSeg.content || "") + text,
+          isStreaming: true,
+        };
+        var newSegments = segments.slice();
+        newSegments[activeIdx] = newSeg;
+        return newSegments;
+      }
+      var newSegments2 = segments.slice();
+      newSegments2.push({
+        iteration: iteration != null ? iteration : 0,
+        content: text,
+        isStreaming: true,
+      });
+      return newSegments2;
+    },
+    // 深拷贝 thinkingSegments 数组（含 segment 对象），避免引用共享导致重复追加
+    cloneThinkingSegments(segments) {
+      if (!Array.isArray(segments)) {
+        return [];
+      }
+      return segments.map(function (s) {
+        return {
+          iteration: s.iteration,
+          content: s.content,
+          isStreaming: s.isStreaming,
+        };
+      });
+    },
+    // 历史消息 thinking 整段切分：按 steps 里 llm_started 的数量均匀切分成多个 segment
+    // 这样 mergedTimeline 能按顺序匹配（第 N 个 llm_started → 第 N 个 segment）产生交错效果
+    // 若没有 steps 或没有 llm_started，降级为单个 segment
+    splitThinkingIntoSegments(thinkingText, steps) {
+      var text = thinkingText || "";
+      if (!text) {
+        return [];
+      }
+      // 统计 steps 里 LLM 轮次锚点的数量
+      // 实时流式：llm_started
+      // 历史消息：DB 里 markStepSuccess 用 llm_finished 覆盖了 eventType
+      var llmAnchorCount = 0;
+      if (Array.isArray(steps)) {
+        for (var i = 0; i < steps.length; i++) {
+          var step = steps[i];
+          if (step && step.eventType) {
+            var et = String(step.eventType).toLowerCase();
+            if (et === "llm_started" || et === "llm_finished") {
+              llmAnchorCount++;
+            }
+          }
+        }
+      }
+      // 没有 LLM 锚点或只有 1 个，不切分
+      if (llmAnchorCount <= 1) {
+        return [{ iteration: 1, content: text, isStreaming: false }];
+      }
+      // 按段数均匀切分（按字符数等分），iteration 从 1 开始（与实时流式一致）
+      var segments = [];
+      var totalLen = text.length;
+      var segLen = Math.floor(totalLen / llmAnchorCount);
+      for (var j = 0; j < llmAnchorCount; j++) {
+        var start = j * segLen;
+        var end = j === llmAnchorCount - 1 ? totalLen : (j + 1) * segLen;
+        segments.push({
+          iteration: j + 1,
+          content: text.substring(start, end),
+          isStreaming: false,
+        });
+      }
+      return segments;
+    },
+    // 历史消息：从 steps 的 LLM 锚点 outputJson 直接提取每轮 thinking，构造 segments
+    // 与实时流式保持一致（第 N 个 LLM 锚点 → 第 N 个 segment），不再按字符切分
+    // 返回 null 表示无法从 steps 提取（调用方降级到 splitThinkingIntoSegments）
+    buildThinkingSegmentsFromSteps(steps) {
+      if (!Array.isArray(steps) || steps.length === 0) {
+        return null;
+      }
+      var segments = [];
+      var anchorCount = 0;
+      for (var i = 0; i < steps.length; i++) {
+        var step = steps[i];
+        if (!isLlmAnchorStep(step)) {
+          continue;
+        }
+        anchorCount++;
+        var content = extractThinkingFromStepOutput(step);
+        segments.push({
+          iteration: anchorCount,
+          content: content || "",
+          isStreaming: false,
+        });
+      }
+      if (anchorCount === 0) {
+        return null;
+      }
+      // 所有锚点都提取不到 reasoningContent（旧数据/异常）→ 返回 null 让调用方降级
+      var hasAnyContent = false;
+      for (var j = 0; j < segments.length; j++) {
+        if (segments[j].content) {
+          hasAnyContent = true;
+          break;
+        }
+      }
+      return hasAnyContent ? segments : null;
+    },
+    startThinkingSegment(iteration) {
+      var iterNo =
+        iteration != null && !isNaN(Number(iteration))
+          ? Number(iteration)
+          : 0;
+      // 若最新 segment 已是该 iteration 且仍是 streaming，直接复用，避免重复开段
+      var lastSeg = this.thinkingSegments[this.thinkingSegments.length - 1];
+      if (
+        lastSeg &&
+        lastSeg.iteration === iterNo &&
+        lastSeg.isStreaming
+      ) {
         return;
       }
-      this.thinkingExpanded = !this.thinkingExpanded;
+      // 不可变更新：创建新数组，确保 Vue 响应式触发
+      this.thinkingSegments = this.thinkingSegments.concat([
+        {
+          iteration: iterNo,
+          content: "",
+          isStreaming: true,
+        },
+      ]);
+    },
+    // llm_finished 事件：结束对应 iteration 的 thinking segment
+    finishThinkingSegment(iteration) {
+      var iterNo =
+        iteration != null && !isNaN(Number(iteration))
+          ? Number(iteration)
+          : null;
+      // 不可变更新：创建新数组和新 segment 对象
+      var newSegments = this.thinkingSegments.map(function (seg) {
+        if (seg && seg.isStreaming) {
+          if (iterNo == null || seg.iteration === iterNo) {
+            return {
+              iteration: seg.iteration,
+              content: seg.content,
+              isStreaming: false,
+            };
+          }
+        }
+        return seg;
+      });
+      this.thinkingSegments = newSegments;
+    },
+    async toggleThinkingExpanded(message) {
+      // 全局思考卡片（无 message 对象）切换
+      if (!message || typeof message !== "object" || !message.botMsgId) {
+        this.thinkingExpanded = !this.thinkingExpanded;
+        return;
+      }
+
+      // 折叠 → 直接切换
+      if (message.thinkingExpanded) {
+        message.thinkingExpanded = false;
+        return;
+      }
+
+      // 展开：历史消息且 thinking 未加载过，先调接口加载
+      if (
+        !message.thinkingLoaded &&
+        !message.thinkingLoading &&
+        message.messageId &&
+        !message.thinkingContent
+      ) {
+        message.thinkingLoading = true;
+        try {
+          // 分别加载 thinking 和 steps，任一失败不影响另一个
+          var thinkingText = "";
+          var normalizedSteps = [];
+
+          // 1. 加载执行轨迹 steps（按 botMsgId）—— 主路径：从 step.outputJson 提取每轮 thinking
+          if (message.botMsgId) {
+            try {
+              var runRes = await doctorApi.getAgentRunDetailByBotMsgId(
+                message.botMsgId
+              );
+              if (runRes && runRes.data) {
+                var rawSteps = collectAgentTraceItems(runRes.data);
+                for (var i = 0; i < rawSteps.length; i++) {
+                  var node = normalizeAgentTraceNode(rawSteps[i], i);
+                  if (node) {
+                    normalizedSteps.push(node);
+                  }
+                }
+                message.agentSteps = normalizedSteps;
+              }
+            } catch (se) {
+              console.warn("加载执行轨迹失败:", se);
+            }
+          }
+
+          // 2. 加载思考内容（按 messageId）—— 用于折叠态摘要 + 降级兜底
+          try {
+            var thinkingRes = await doctorApi.getThinkingByMessageId(
+              message.messageId
+            );
+            thinkingText =
+              (thinkingRes && thinkingRes.data != null ? thinkingRes.data : "") ||
+              "";
+          } catch (te) {
+            console.warn("加载思考内容失败:", te);
+            thinkingText = "";
+          }
+
+          message.thinkingContent = String(thinkingText);
+          // 主路径：从 steps 的 LLM 锚点 outputJson 直接提取每轮 reasoningContent，
+          // 与实时流式"第 N 个 llm_started → 第 N 个 segment"完全对齐
+          var segmentsFromSteps = this.buildThinkingSegmentsFromSteps(normalizedSteps);
+          if (segmentsFromSteps) {
+            message.thinkingSegments = segmentsFromSteps;
+          } else {
+            // 降级：steps 无 LLM 锚点或 outputJson 无 reasoningContent（旧数据），
+            // 用整段 thinkingText 按字符均匀切分
+            message.thinkingSegments = this.splitThinkingIntoSegments(
+              String(thinkingText),
+              normalizedSteps
+            );
+          }
+          message.thinkingLoaded = true;
+        } finally {
+          message.thinkingLoading = false;
+        }
+      }
+      message.thinkingExpanded = true;
     },
     findOrCreateBotMessage(botMsgId, payload) {
       var payloadRunId =
@@ -1389,6 +1899,7 @@ export default {
         sessionCode: sessionMeta.sessionCode,
         sceneType: sessionMeta.sceneType,
         thinkingContent: "",
+        thinkingSegments: [],
         isThinking: false,
         thinkingExpanded: true,
         agentSteps: [],
@@ -1699,6 +2210,26 @@ export default {
         (eventPayload && eventPayload.botMsgId) ||
         (this.activeAgentRun && this.activeAgentRun.botMsgId) ||
         this.botMsgId;
+      // 预解析 eventType / iterationNo：用于驱动 thinking segment 生命周期
+      var preNormalizedEvent = normalizeAgentTraceEvent(eventPayload || stepEvent);
+      var preEventType =
+        preNormalizedEvent && preNormalizedEvent.eventType
+          ? String(preNormalizedEvent.eventType).toLowerCase()
+          : "";
+      var preIteration =
+        stepEvent && stepEvent.iterationNo != null
+          ? stepEvent.iterationNo
+          : preNormalizedEvent && preNormalizedEvent.iterationNo != null
+          ? preNormalizedEvent.iterationNo
+          : null;
+      // llm_started → 开启新 thinking segment（这一轮的思考内容将追加到此段）
+      if (preEventType === "llm_started") {
+        this.startThinkingSegment(preIteration);
+      }
+      // llm_finished → 结束对应 iteration 的 thinking segment
+      if (preEventType === "llm_finished") {
+        this.finishThinkingSegment(preIteration);
+      }
       if (agentBotMsgId) {
         var targetMsg = this.findOrCreateBotMessage(
           agentBotMsgId,
@@ -1706,13 +2237,12 @@ export default {
         );
         if (targetMsg) {
           targetMsg.agentSteps = this.agentSteps.slice();
+          // 同步 thinkingSegments 到 bot 消息对象（直接引用最新值，保持响应式）
+          targetMsg.thinkingSegments = this.cloneThinkingSegments(this.thinkingSegments);
         }
       }
-      var normalizedEvent = normalizeAgentTraceEvent(eventPayload || stepEvent);
-      var eventType =
-        normalizedEvent && normalizedEvent.eventType
-          ? normalizedEvent.eventType
-          : "";
+      var normalizedEvent = preNormalizedEvent;
+      var eventType = preEventType;
       var runStatus =
         normalizedEvent && normalizedEvent.runStatus
           ? this.normalizeAgentRunStatus(normalizedEvent.runStatus)
@@ -1746,6 +2276,8 @@ export default {
         this.activeAgentRun.status = "running";
       }
       this.snapshotActiveAgentRun();
+      // 决策轨迹新增/更新时也触发自动滚动，与思考内容流式输出一致
+      this.scrollToBottom();
     },
     applyFinishPayload(chatResponse) {
       var payload =
@@ -2273,6 +2805,7 @@ export default {
           message.messageId != null
             ? String(message.messageId)
             : "record-" + index + "-" + this.generateRandomId(6),
+        messageId: message.messageId != null ? message.messageId : null,
         content: role === "assistant" ? marked.parse(rawContent) : rawContent,
         userName: role === "assistant" ? "bot" : this.currentUserName || "用户",
         chatType: role === "assistant" ? "bot" : "user",
@@ -2286,6 +2819,13 @@ export default {
             ? this.parseRecordSources(message.sourcesJson)
             : [],
         interrupted: role === "assistant" && rawContent.indexOf("已中断") >= 0,
+        // 历史消息思考内容状态：默认空 + 折叠 + 未加载
+        thinkingContent:
+          role === "assistant" ? "" : null,
+        thinkingSegments: [],
+        thinkingExpanded: false,
+        thinkingLoaded: false,
+        thinkingLoading: false,
       };
     },
     resolveChatHistorySources(chatItems) {
@@ -2327,7 +2867,22 @@ export default {
       var distanceFromBottom =
         chatMessages.scrollHeight -
         (chatMessages.scrollTop + chatMessages.clientHeight);
-      this.showBackToBottom = distanceFromBottom > 120;
+
+      // 程序触发的滚动不更新用户标志（避免 scrollToBottom 自身触发 scroll 事件误判）
+      if (this.isProgrammaticScroll) {
+        this.showBackToBottom = distanceFromBottom > 200;
+        return;
+      }
+
+      // 用户主动滚动：远离底部时标记停止跟随，靠近底部时恢复跟随
+      // 阈值 200px，避免内容布局抖动导致的误判
+      if (distanceFromBottom > 200) {
+        this.isUserScrolledUp = true;
+        this.showBackToBottom = true;
+      } else {
+        this.isUserScrolledUp = false;
+        this.showBackToBottom = false;
+      }
     },
     extractMessageText(content) {
       if (content == null) {
@@ -2604,16 +3159,21 @@ export default {
         this.showUiMessage("error", "当前没有活动会话，无法压缩。");
         return;
       }
+      // 二次确认（与回滚/中断一致的 confirmBar）
+      var confirmed = await this.showConfirmBar(
+        "确定压缩当前会话上下文？压缩后早期对话将被摘要替代。",
+        { confirmText: "压缩", cancelText: "取消" }
+      );
+      if (!confirmed) {
+        return;
+      }
       this.isCompressing = true;
       try {
         await doctorApi.compressContext(sessionId);
         // 结果由 SSE handler 统一处理（context_compressing / context_compressed / context_compress_failed）
       } catch (e) {
         this.isCompressing = false;
-        this.showUiMessage(
-          "error",
-          "触发压缩失败：" + (e && e.message ? e.message : "未知错误")
-        );
+        this.showUiMessage("error", "触发压缩失败：" + (e && e.message ? e.message : "未知错误"));
       }
     },
     async doChat() {
@@ -2665,6 +3225,7 @@ export default {
       this.lastTtft = null;
 
       this.agentSteps = [];
+      this.thinkingSegments = [];
 
       var internetSearchSelected = this.internetSearchSelected;
       var knowledgeBaseSelected = this.knowledgeBaseSelected;
@@ -2739,7 +3300,7 @@ export default {
 
       this.draftMessage = "";
       this.guidanceMessage = "任务已提交，正在执行中。";
-      this.scrollToBottom();
+      this.scrollToBottom(true);
     },
     generateRandomId(length) {
       var characters =
@@ -2761,13 +3322,24 @@ export default {
           return;
         }
 
-        var distanceFromBottom =
-          chatMessages.scrollHeight -
-          (chatMessages.scrollTop + chatMessages.clientHeight);
-        var nearBottom = distanceFromBottom <= 120;
+        // 流式输出（无 force）：只要用户没主动向上滚就跟随
+        // 强制滚动（force=true）：发送消息/回到底部按钮，重置用户标志
+        var shouldScroll = force === true || !me.isUserScrolledUp;
 
-        if (force === true || nearBottom || !me.showBackToBottom) {
+        if (shouldScroll) {
+          // 标记程序滚动，避免触发的 scroll 事件被 handleChatScroll 误判为用户操作
+          me.isProgrammaticScroll = true;
           chatMessages.scrollTop = chatMessages.scrollHeight;
+          if (force === true) {
+            me.isUserScrolledUp = false;
+            me.showBackToBottom = false;
+          }
+          // 用 rAF 保持程序滚动标志到下一帧绘制后，避免布局抖动期被误判
+          requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+              me.isProgrammaticScroll = false;
+            });
+          });
         }
 
         me.handleChatScroll();
@@ -2777,8 +3349,6 @@ export default {
       this.internetSearchSelected = !internetSearchSelected;
 
       if (this.internetSearchSelected) {
-        this.knowledgeBaseSelected = false;
-        this.ragSelected = false;
         this.imageReadSelected = false;
       }
 
@@ -2793,7 +3363,6 @@ export default {
       if (!this.knowledgeBaseSelected) {
         this.ragSelected = false;
       } else {
-        this.internetSearchSelected = false;
         this.imageReadSelected = false;
       }
 
@@ -2810,7 +3379,6 @@ export default {
       this.ragSelected = nextValue;
 
       if (this.ragSelected) {
-        this.internetSearchSelected = false;
         this.imageReadSelected = false;
       }
 
