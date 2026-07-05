@@ -92,6 +92,8 @@ export default {
       guidanceMessage: "选择任务模式后，输入指令开始执行。",
       // 多 run 追踪表：按 runId 索引，每个 entry 自带完整 per-run 状态
       activeAgentRuns: {} as Record<string, any>,
+      // per-run token 批处理缓冲：按 runId 索引，rAF 合并更新 UI
+      runBuffers: {} as Record<string, any>,
       // Console-specific state
       mobileLeftOpen: false,
       mobileRightOpen: false,
@@ -1116,6 +1118,99 @@ export default {
         return;
       }
       window.sessionStorage.setItem(key, JSON.stringify({ version: 3, ...run }));
+    },
+    /**
+     * per-run token 批处理缓冲：取得或创建 buffer entry。
+     * thinkingDelta / contentDelta 累积到此缓冲，由 rAF flush 统一写入 UI，
+     * 避免每个 SSE token 都触发 Vue 响应式更新与 DOM 重排。
+     */
+    getOrCreateBuffer(runId: string) {
+      if (!runId) return null;
+      if (!this.runBuffers[runId]) {
+        this.runBuffers[runId] = {
+          runId: runId,
+          thinkingDelta: "",
+          contentDelta: "",
+          pendingFlush: false,
+          lastSnapshotTime: 0,
+        };
+      }
+      return this.runBuffers[runId];
+    },
+    scheduleFlush(runId: string) {
+      var buffer = this.getOrCreateBuffer(runId);
+      if (!buffer || buffer.pendingFlush) return;
+      buffer.pendingFlush = true;
+      var me = this;
+      requestAnimationFrame(function () {
+        me.flushRunBuffer(runId);
+      });
+    },
+    flushRunBuffer(runId: string) {
+      var buffer = this.runBuffers[runId];
+      if (!buffer) return;
+      var run = this.activeAgentRuns[runId];
+
+      // 1. 更新 thinking（如果有增量）
+      if (buffer.thinkingDelta) {
+        if (run) {
+          run.thinkingContent = (run.thinkingContent || "") + buffer.thinkingDelta;
+          run.thinkingSegments = this.appendThinkingChunkToSegments(
+            (run.thinkingSegments || []).slice(),
+            buffer.thinkingDelta
+          );
+        }
+        var botMsgId = run ? run.botMsgId : null;
+        var targetMsg = this.findBotMessage(botMsgId);
+        if (targetMsg) {
+          targetMsg.thinkingContent =
+            (targetMsg.thinkingContent || "") + buffer.thinkingDelta;
+          targetMsg.thinkingSegments = this.cloneThinkingSegments(
+            run ? run.thinkingSegments : []
+          );
+          targetMsg.isThinking = true;
+        }
+        buffer.thinkingDelta = "";
+      }
+
+      // 2. 更新 content（如果有增量）
+      if (buffer.contentDelta) {
+        var contentBotMsgId = run ? run.botMsgId : null;
+        var contentTarget = this.findBotMessage(contentBotMsgId);
+        if (contentTarget) {
+          contentTarget.content =
+            (contentTarget.content || "") + buffer.contentDelta;
+          contentTarget.isStreaming = true;
+        }
+        buffer.contentDelta = "";
+      }
+
+      // 3. scrollToBottom（每帧最多一次，所有 run 共享）
+      this.scrollToBottomThrottled();
+
+      // 4. snapshotRunState 节流（500ms 一次）
+      if (run && Date.now() - buffer.lastSnapshotTime > 500) {
+        this.snapshotRunState(runId);
+        buffer.lastSnapshotTime = Date.now();
+      }
+
+      buffer.pendingFlush = false;
+    },
+    /**
+     * 仅查找（不创建）bot 消息：用于 flushRunBuffer 写入累积内容。
+     */
+    findBotMessage(botMsgId: string) {
+      if (!botMsgId) return null;
+      for (var i = 0; i < this.chatList.length; i++) {
+        var item = this.chatList[i];
+        if (item.botMsgId == botMsgId && item.chatType !== "user") {
+          return item;
+        }
+      }
+      return null;
+    },
+    clearRunBuffers() {
+      this.runBuffers = {};
     },
     /**
      * 判断 run 是否为后台 run（不属于当前活跃会话）。
@@ -3574,6 +3669,10 @@ export default {
         );
       }
       return result;
+    },
+    // 临时 stub：Task 6 将替换为 rAF 节流版本
+    scrollToBottomThrottled() {
+      this.scrollToBottom();
     },
     scrollToBottom(force) {
       var me = this;
