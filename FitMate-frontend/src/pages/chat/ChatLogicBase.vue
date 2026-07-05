@@ -260,7 +260,7 @@ export default {
     // 恢复会话期间的标志：避免 activeChatSessionId 变化时 watch 反向同步 URL/storage 造成循环
     this._isRestoringSession = false;
     this.loadUserSessionFromCookie();
-    this.restoreActiveAgentRun();
+    this.restoreActiveAgentRuns();
     this.applyRouteView();
     var stableUserKey = this.resolveStableUserKey();
     if (stableUserKey) {
@@ -894,12 +894,21 @@ export default {
       }
       return this.currentUserName || null;
     },
-    getActiveAgentRunStorageKey() {
-      var stableUserKey = this.resolveStableUserKey();
-      if (!stableUserKey || typeof window === "undefined") {
-        return null;
-      }
-      return "fitmate:active-run:" + String(stableUserKey);
+    /**
+     * 单个 run 的 sessionStorage key。
+     */
+    getRunStorageKey(runId: string): string | null {
+      const userKey = this.resolveStableUserKey();
+      if (!userKey || !runId) return null;
+      return "fitmate:active-run:" + String(userKey) + ":" + String(runId);
+    },
+    /**
+     * 当前用户的 run storage key 前缀（用于遍历清理/恢复）。
+     */
+    getRunStorageKeyPrefix(): string | null {
+      const userKey = this.resolveStableUserKey();
+      if (!userKey) return null;
+      return "fitmate:active-run:" + String(userKey) + ":";
     },
     normalizeAgentRunStatus(status) {
       return normalizeAgentRunStatusValue(status);
@@ -925,49 +934,18 @@ export default {
       }
       return normalizeAgentTraceNode(step, index);
     },
-    buildActiveAgentRunSnapshot() {
-      if (!this.activeAgentRun || this.activeAgentRun.runId == null) {
-        return null;
-      }
-      var steps = [];
-      if (Array.isArray(this.agentSteps)) {
-        for (var i = 0; i < this.agentSteps.length; i++) {
-          var normalizedStep = this.normalizeAgentStepItem(
-            this.agentSteps[i],
-            i
-          );
-          if (normalizedStep) {
-            steps.push(normalizedStep);
-          }
-        }
-      }
-      return {
-        version: 2,
-        runId: this.activeAgentRun.runId,
-        chatSessionId: this.activeAgentRun.chatSessionId || null,
-        sessionCode: this.activeAgentRun.sessionCode || null,
-        botMsgId: this.activeAgentRun.botMsgId || this.botMsgId || null,
-        status: this.normalizeAgentRunStatus(this.activeAgentRun.status),
-        requestText: this.activeAgentRun.requestText || "",
-        sceneType: this.activeAgentRun.sceneType || "agent",
-        sourceType: this.activeAgentRun.sourceType || "chat",
-        finishReceived: !!this.activeAgentRun.finishReceived,
-        steps: steps,
-        traceNodes: steps,
-        lastUpdatedAt: new Date().toISOString(),
-      };
-    },
-    snapshotActiveAgentRun() {
-      var key = this.getActiveAgentRunStorageKey();
-      if (!key || typeof window === "undefined") {
-        return;
-      }
-      var snapshot = this.buildActiveAgentRunSnapshot();
-      if (!snapshot || this.isTerminalAgentRunStatus(snapshot.status)) {
+    /**
+     * 写入单个 run 的快照；终态时自动删除 key。
+     */
+    snapshotRunState(runId: string) {
+      const key = this.getRunStorageKey(runId);
+      if (!key || typeof window === "undefined") return;
+      const run = (this.activeAgentRuns || {})[runId];
+      if (!run || this.isTerminalAgentRunStatus(run.status)) {
         window.sessionStorage.removeItem(key);
         return;
       }
-      window.sessionStorage.setItem(key, JSON.stringify(snapshot));
+      window.sessionStorage.setItem(key, JSON.stringify({ version: 3, ...run }));
     },
     /**
      * 按 runId 取 run entry；不存在时按需创建。
@@ -1016,70 +994,70 @@ export default {
       if (!runId) return;
       delete this.activeAgentRuns[runId];
     },
-    clearActiveAgentRun(options?: any) {
-      // Task 6 会改造为按 runId 删单个 entry；此步先清空整个 Map
-      this.activeAgentRuns = {};
-    },
-    restoreActiveAgentRun() {
-      var key = this.getActiveAgentRunStorageKey();
-      if (!key || typeof window === "undefined") {
-        return;
-      }
-      var rawValue = window.sessionStorage.getItem(key);
-      if (!rawValue) {
-        return;
-      }
-      var snapshot = this.safeParseJson(rawValue);
-      if (!snapshot || typeof snapshot !== "object" || snapshot.runId == null) {
-        window.sessionStorage.removeItem(key);
-        return;
-      }
-      if (this.isTerminalAgentRunStatus(snapshot.status)) {
-        window.sessionStorage.removeItem(key);
-        return;
-      }
-
-      var snapshotTraceItems = Array.isArray(snapshot.traceNodes)
-        ? snapshot.traceNodes
-        : snapshot.steps;
-      var steps = [];
-      if (Array.isArray(snapshotTraceItems)) {
-        for (var i = 0; i < snapshotTraceItems.length; i++) {
-          var normalizedStep = this.normalizeAgentStepItem(
-            snapshotTraceItems[i],
-            i
-          );
-          if (normalizedStep) {
-            steps.push(normalizedStep);
+    /**
+     * 清空 run 追踪。传 runId 删单个；不传清整个 Map（logout 用）。
+     */
+    clearActiveAgentRun(runId?: string) {
+      if (runId) {
+        const key = this.getRunStorageKey(runId);
+        if (key && typeof window !== "undefined") {
+          window.sessionStorage.removeItem(key);
+        }
+        delete this.activeAgentRuns[runId];
+      } else {
+        const prefix = this.getRunStorageKeyPrefix();
+        if (prefix && typeof window !== "undefined") {
+          for (let i = window.sessionStorage.length - 1; i >= 0; i--) {
+            const key = window.sessionStorage.key(i);
+            if (key && key.indexOf(prefix) === 0) {
+              window.sessionStorage.removeItem(key);
+            }
           }
         }
+        this.activeAgentRuns = {};
       }
-
-      var run = {
-        runId: snapshot.runId,
-        chatSessionId:
-          snapshot.chatSessionId != null ? snapshot.chatSessionId : null,
-        sessionCode: snapshot.sessionCode ? String(snapshot.sessionCode) : null,
-        botMsgId: snapshot.botMsgId ? String(snapshot.botMsgId) : null,
-        status: this.normalizeAgentRunStatus(snapshot.status),
-        requestText: snapshot.requestText || "",
-        sceneType: snapshot.sceneType || "agent",
-        sourceType: snapshot.sourceType || "chat",
-        steps: steps,
-        finishReceived: !!snapshot.finishReceived,
-      };
-      if (run.runId) {
-        this.activeAgentRuns[run.runId] = run;
+    },
+    /**
+     * 遍历 sessionStorage 前缀重建整个 activeAgentRuns Map。
+     * 不切换 activeChatSessionId；由路由恢复流程决定。
+     */
+    restoreActiveAgentRuns() {
+      const prefix = this.getRunStorageKeyPrefix();
+      if (!prefix || typeof window === "undefined") return;
+      for (let i = window.sessionStorage.length - 1; i >= 0; i--) {
+        const key = window.sessionStorage.key(i);
+        if (!key || key.indexOf(prefix) !== 0) continue;
+        const raw = window.sessionStorage.getItem(key);
+        if (!raw) continue;
+        try {
+          const snap = JSON.parse(raw);
+          if (!snap.runId || this.isTerminalAgentRunStatus(snap.status)) {
+            window.sessionStorage.removeItem(key);
+            continue;
+          }
+          // hydrate：补全字段
+          const run = {
+            runId: String(snap.runId),
+            chatSessionId: snap.chatSessionId != null ? snap.chatSessionId : null,
+            sessionCode: snap.sessionCode || null,
+            botMsgId: snap.botMsgId || null,
+            status: snap.status,
+            requestText: snap.requestText || "",
+            sceneType: snap.sceneType || "agent",
+            sourceType: snap.sourceType || "chat",
+            finishReceived: !!snap.finishReceived,
+            steps: Array.isArray(snap.steps) ? snap.steps : (Array.isArray(snap.traceNodes) ? snap.traceNodes : []),
+            thinkingSegments: Array.isArray(snap.thinkingSegments) ? snap.thinkingSegments : [],
+            thinkingContent: snap.thinkingContent || "",
+            tokenUsage: snap.tokenUsage || null,
+          };
+          this.activeAgentRuns[run.runId] = run;
+          // 后台补拉最新详情（覆盖终态等）
+          this.silentFetchAgentRunDetail(run.runId);
+        } catch (e) {
+          window.sessionStorage.removeItem(key);
+        }
       }
-      this.activeView = "chat";
-      if (run.chatSessionId != null) {
-        this.activeChatSessionId = run.chatSessionId;
-      }
-      if (steps.length === 0) {
-        this.guidanceMessage = "正在恢复 Agent 执行轨迹，请稍候。";
-      }
-      this.silentRestoreChatSession(run.chatSessionId);
-      this.silentFetchAgentRunDetail(run.runId);
     },
     safeParseJson(rawValue) {
       if (rawValue == null) {
@@ -1208,7 +1186,7 @@ export default {
     /**
      * 在 ChatPage mounted 阶段触发：从 URL/sessionStorage 恢复上次会话。
      * 跳过条件：
-     *   - 已有活动 Agent run（restoreActiveAgentRun 已处理）
+     *   - 已有活动 Agent run（restoreActiveAgentRuns 已处理）
      *   - chatList 已非空（已处于会话中，如刚发完消息）
      *   - 已有 activeChatSessionId（doChat 已建立会话）
      */
@@ -1320,7 +1298,7 @@ export default {
       }
 
       this.applyServerSessionMeta(detail, "agent");
-      this.snapshotActiveAgentRun();
+      this.snapshotRunState(run.runId);
       if (this.isTerminalAgentRunStatus(normalizedStatus)) {
         this.guidanceMessage =
           normalizedStatus === "success"
@@ -1386,7 +1364,7 @@ export default {
           ? requestPayload.message
           : run.requestText;
       this.applyServerSessionMeta(payload, expectedSceneType || "agent");
-      this.snapshotActiveAgentRun();
+      this.snapshotRunState(run.runId);
       this.silentFetchAgentRunDetail(payload.runId);
       return true;
     },
@@ -1515,7 +1493,7 @@ export default {
           this.currentSessionSceneType ||
           this.resolveExpectedSessionSceneType()
       );
-      this.snapshotActiveAgentRun();
+      this.snapshotRunState(run.runId);
       this.scrollToBottom();
     },
     clearThinkingState() {
@@ -1895,7 +1873,7 @@ export default {
       if (!this.isTerminalAgentRunStatus(run.status)) {
         run.status = "running";
       }
-      this.snapshotActiveAgentRun();
+      this.snapshotRunState(run.runId);
 
       var targetChatItem = null;
       for (var i = 0; i < this.chatList.length; i++) {
@@ -2177,7 +2155,7 @@ export default {
       } else if (!this.isTerminalAgentRunStatus(run.status)) {
         run.status = "running";
       }
-      this.snapshotActiveAgentRun();
+      this.snapshotRunState(run.runId);
       // 决策轨迹新增/更新时也触发自动滚动，与思考内容流式输出一致
       this.scrollToBottom();
     },
@@ -2279,8 +2257,8 @@ export default {
           this.guidanceMessage = "本轮任务已完成，可继续发起新任务。";
         }
         run.finishReceived = true;
-        // snapshot 须在 removeRunEntry 之前调用（仍读 this.activeAgentRun）
-        this.snapshotActiveAgentRun();
+        // snapshot 须在 removeRunEntry 之前调用（仍读 this.activeAgentRuns[runId]）
+        this.snapshotRunState(run.runId);
         this.silentFetchAgentRunDetail(
           payload.runId != null ? payload.runId : run.runId
         );
@@ -2509,11 +2487,20 @@ export default {
               }
 
               if (
-                me.activeAgentRun &&
-                !me.isTerminalAgentRunStatus(me.activeAgentRun.status)
+                me.activeAgentRuns &&
+                typeof me.activeAgentRuns === "object"
               ) {
-                me.activeAgentRun.status = "failed";
-                me.snapshotActiveAgentRun();
+                var failingRunIds = Object.keys(me.activeAgentRuns);
+                for (var fri = 0; fri < failingRunIds.length; fri++) {
+                  var failingRun = me.activeAgentRuns[failingRunIds[fri]];
+                  if (
+                    failingRun &&
+                    !me.isTerminalAgentRunStatus(failingRun.status)
+                  ) {
+                    failingRun.status = "failed";
+                    me.snapshotRunState(failingRun.runId);
+                  }
+                }
               }
 
               me.clearThinkingState();
