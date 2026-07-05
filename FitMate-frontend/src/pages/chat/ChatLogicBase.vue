@@ -39,6 +39,9 @@ export default {
       chatExpanded: false,
       chatSessionList: [],
       activeChatSessionId: null,
+      // 会话级属性：不依赖 run 生命周期，run 结束后仍保留用于回滚重发
+      currentSessionCode: null,
+      currentSessionSceneType: null,
       chatRecordsLoading: false,
       chatRecordsLoaded: false,
       chatList: [],
@@ -162,14 +165,6 @@ export default {
     tokenUsage(): any {
       const run = this.currentAgentRun;
       return run ? run.tokenUsage : null;
-    },
-    currentSessionCode(): any {
-      const run = this.currentAgentRun;
-      return run ? run.sessionCode : null;
-    },
-    currentSessionSceneType(): any {
-      const run = this.currentAgentRun;
-      return run ? run.sceneType : null;
     },
     canCompressContext() {
       // 有活动会话且消息数 >= 8 时才允许主动压缩
@@ -434,6 +429,8 @@ export default {
       this.clearThinkingState();
       this.activeView = "chat";
       this.activeChatSessionId = targetSession.sessionId;
+      this.currentSessionCode = targetSession.sessionCode || null;
+      this.currentSessionSceneType = targetSession.sceneType || null;
       this.applyChatMode(this.resolvePreferredModeFromSession(targetSession));
       this.chatList = mappedChatList;
       var restoreRun = this.currentAgentRun;
@@ -464,6 +461,8 @@ export default {
       this.clearThinkingState();
       this.activeView = "chat";
       this.activeChatSessionId = null;
+      this.currentSessionCode = null;
+      this.currentSessionSceneType = null;
       this.chatList = [];
       this.draftMessage = "";
       this.showBackToBottom = false;
@@ -825,7 +824,13 @@ export default {
         if (payload.chatSessionId != null) {
           this.activeChatSessionId = payload.chatSessionId;
         }
-        // currentSessionCode / currentSessionSceneType 已是 computed，不再写入
+        // 会话级属性：ack 路径补全（首次创建会话时后端返回 sessionCode/sceneType）
+        if (payload.sessionCode != null) {
+          this.currentSessionCode = String(payload.sessionCode);
+        }
+        if (payload.sceneType != null) {
+          this.currentSessionSceneType = payload.sceneType;
+        }
       }
     },
     refreshChatRecordsIfNeeded() {
@@ -1119,6 +1124,8 @@ export default {
           );
           me.activeView = "chat";
           me.activeChatSessionId = targetSession.sessionId;
+          me.currentSessionCode = targetSession.sessionCode || null;
+          me.currentSessionSceneType = targetSession.sceneType || null;
           me.chatList = mappedChatList;
           me.knowledgeSources = me.resolveChatHistorySources(mappedChatList);
           var restoreRun = me.currentAgentRun;
