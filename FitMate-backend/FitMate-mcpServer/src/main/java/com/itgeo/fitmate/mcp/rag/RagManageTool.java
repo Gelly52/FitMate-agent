@@ -1,7 +1,7 @@
 package com.itgeo.fitmate.mcp.rag;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.itgeo.fitmate.domain.common.ListSortEnum;
+import com.itgeo.fitmate.common.enums.ListSortEnum;
 import com.itgeo.fitmate.mcp.rag.infrastructure.entity.RagBenchmarkRun;
 import com.itgeo.fitmate.mcp.rag.infrastructure.entity.RagDocumentMeta;
 import com.itgeo.fitmate.mcp.rag.infrastructure.mapper.RagBenchmarkRunMapper;
