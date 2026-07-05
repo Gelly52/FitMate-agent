@@ -949,6 +949,19 @@ export default {
       window.sessionStorage.setItem(key, JSON.stringify({ version: 3, ...run }));
     },
     /**
+     * 判断 run 是否为后台 run（不属于当前活跃会话）。
+     * 后台 run 的 SSE 事件只更新 run entry 状态，不操作全局 UI 状态与 chatList，
+     * 避免任务 A 的实时内容串入任务 B 的窗口。
+     */
+    isBackgroundRun(run: any): boolean {
+      return (
+        !!run &&
+        run.chatSessionId != null &&
+        this.activeChatSessionId != null &&
+        run.chatSessionId !== this.activeChatSessionId
+      );
+    },
+    /**
      * 按 runId 取 run entry；不存在时按需创建。
      * @param payload SSE 事件载荷，至少含 runId
      * @param options.createIfMissing 为 true 时，若无 runId 则降级到 currentAgentRun，若仍无则新建空骨架
@@ -1458,17 +1471,23 @@ export default {
       if (!thinkingText) {
         return;
       }
+      // run entry 更新（后台 run 也需要持久化）
       run.thinkingContent = (run.thinkingContent || "") + thinkingText;
       // 同步追加到 thinkingSegments：找到当前 active 段追加；若无 active 段则兜底新建
       run.thinkingSegments = this.appendThinkingChunkToSegments(
         (run.thinkingSegments || []).slice(),
         thinkingText
       );
-      this.isThinking = true;
       if (payload.botMsgId) {
         run.botMsgId = payload.botMsgId;
       }
+      this.snapshotRunState(run.runId);
 
+      // 后台 run：跳过 UI 状态与 chatList 操作，避免串入当前窗口
+      if (this.isBackgroundRun(run)) return;
+
+      // 当前 run：更新 UI 状态与 chatList
+      this.isThinking = true;
       var botMsgId =
         payload.botMsgId || run.botMsgId || this.botMsgId;
       if (botMsgId) {
@@ -1492,7 +1511,6 @@ export default {
         }
       }
 
-      // thinking 事件属后台 run 流式更新，不更新当前会话指针
       this.applyServerSessionMeta({
         chatSessionId: payload.chatSessionId,
         sessionCode: payload.sessionCode,
@@ -1501,7 +1519,6 @@ export default {
           this.currentSessionSceneType ||
           this.resolveExpectedSessionSceneType(),
       });
-      this.snapshotRunState(run.runId);
       this.scrollToBottom();
     },
     clearThinkingState() {
@@ -1845,6 +1862,23 @@ export default {
       if (!botMsgId) {
         return;
       }
+      // run entry 更新（后台 run 也需要持久化）
+      run.botMsgId = botMsgId;
+      if (payload.sessionCode) {
+        run.sessionCode = payload.sessionCode;
+      }
+      if (payload.runId != null) {
+        run.runId = payload.runId;
+      }
+      if (!this.isTerminalAgentRunStatus(run.status)) {
+        run.status = "running";
+      }
+      this.snapshotRunState(run.runId);
+
+      // 后台 run：跳过 UI 状态与 chatList 操作，避免串入当前窗口
+      if (this.isBackgroundRun(run)) return;
+
+      // 当前 run：更新 UI 状态与 chatList
       if (this.taskStartTime && !this.lastTtft) {
         this.lastTtft = Date.now() - this.taskStartTime;
       }
@@ -1869,20 +1903,7 @@ export default {
           this.currentSessionSceneType ||
           this.resolveExpectedSessionSceneType(),
       };
-      // 流式 bot 消息插入属后台 run 更新，不更新当前会话指针
       this.applyServerSessionMeta(sessionMeta);
-
-      run.botMsgId = botMsgId;
-      if (payload.sessionCode) {
-        run.sessionCode = payload.sessionCode;
-      }
-      if (payload.runId != null) {
-        run.runId = payload.runId;
-      }
-      if (!this.isTerminalAgentRunStatus(run.status)) {
-        run.status = "running";
-      }
-      this.snapshotRunState(run.runId);
 
       var targetChatItem = null;
       for (var i = 0; i < this.chatList.length; i++) {
@@ -1951,15 +1972,16 @@ export default {
       }
       if (!payload || typeof payload !== "object") return false;
       var evt = payload.event;
+      const compressRun = this.resolveRunForEvent(payload);
+      const isBackground = this.isBackgroundRun(compressRun);
       if (evt === "context_compressing") {
-        this.isCompressing = true;
+        if (!isBackground) this.isCompressing = true;
         return true;
       }
       if (evt === "context_compressed") {
-        this.isCompressing = false;
-        // 立即刷新右下角用量为压缩后快照
+        if (!isBackground) this.isCompressing = false;
+        // 更新 run.tokenUsage（后台 run 也需要）
         if (payload.tokenAfter != null) {
-          const compressRun = this.resolveRunForEvent(payload);
           const prevUsage = compressRun
             ? compressRun.tokenUsage
             : this.tokenUsage;
@@ -1986,22 +2008,26 @@ export default {
           }
         }
 
-        this.chatList.push({
-          id: "compress-" + Date.now(),
-          chatType: "system",
-          compressCount: payload.compressedCount || 0,
-          summaryContent: "",
-          createdAt: new Date().toISOString(),
-        });
-        this.scrollToBottom();
+        if (!isBackground) {
+          this.chatList.push({
+            id: "compress-" + Date.now(),
+            chatType: "system",
+            compressCount: payload.compressedCount || 0,
+            summaryContent: "",
+            createdAt: new Date().toISOString(),
+          });
+          this.scrollToBottom();
+        }
         return true;
       }
       if (evt === "context_compress_failed") {
-        this.isCompressing = false;
-        if (this.toast && typeof this.toast.info === "function") {
-          this.toast.info(
-            "上下文压缩失败" + (payload.reason ? "：" + payload.reason : "")
-          );
+        if (!isBackground) {
+          this.isCompressing = false;
+          if (this.toast && typeof this.toast.info === "function") {
+            this.toast.info(
+              "上下文压缩失败" + (payload.reason ? "：" + payload.reason : "")
+            );
+          }
         }
         return true;
       }
@@ -2094,10 +2120,6 @@ export default {
           return !!item;
         });
 
-      var agentBotMsgId =
-        (eventPayload && eventPayload.botMsgId) ||
-        (run && run.botMsgId) ||
-        this.botMsgId;
       // 预解析 eventType / iterationNo：用于驱动 thinking segment 生命周期
       var preNormalizedEvent = normalizeAgentTraceEvent(eventPayload || stepEvent);
       var preEventType =
@@ -2118,6 +2140,56 @@ export default {
       if (preEventType === "llm_finished") {
         this.finishThinkingSegment(preIteration, run);
       }
+
+      // run 状态更新（后台 run 也需要持久化）
+      var normalizedEvent = preNormalizedEvent;
+      var eventType = preEventType;
+      var runStatus =
+        normalizedEvent && normalizedEvent.runStatus
+          ? this.normalizeAgentRunStatus(normalizedEvent.runStatus)
+          : null;
+      var nextGuidance = null;
+      if (
+        eventType === "run_failed" ||
+        runStatus === "failed" ||
+        (!eventType && stepEvent.status === "failed")
+      ) {
+        run.status = "failed";
+        nextGuidance =
+          stepEvent.errorMessage ||
+          stepEvent.message ||
+          "任务执行失败，请调整后重试。";
+      } else if (runStatus === "cancelled" || runStatus === "interrupted") {
+        // 中断/取消：保留具体终态，避免被下方 success 分支吞掉
+        run.status = runStatus;
+        nextGuidance = "任务已中断，可继续发起新任务。";
+      } else if (
+        eventType === "final_answer" ||
+        eventType === "run_finished" ||
+        runStatus === "success" ||
+        isTerminalAgentEvent(normalizedEvent)
+      ) {
+        run.status = "success";
+        nextGuidance = "本轮任务已完成，可继续发起新任务。";
+      } else if (!this.isTerminalAgentRunStatus(run.status)) {
+        run.status = "running";
+      }
+      this.snapshotRunState(run.runId);
+
+      // 后台 run：跳过 UI 状态与 chatList 操作，避免串入当前窗口
+      if (this.isBackgroundRun(run)) return;
+
+      // 当前 run：更新 UI 状态与 chatList
+      if (nextGuidance != null) {
+        this.guidanceMessage = nextGuidance;
+        this.isSending = false;
+        this.isStreaming = false;
+        this.isThinking = false;
+      }
+      var agentBotMsgId =
+        (eventPayload && eventPayload.botMsgId) ||
+        (run && run.botMsgId) ||
+        this.botMsgId;
       if (agentBotMsgId) {
         var targetMsg = this.findOrCreateBotMessage(
           agentBotMsgId,
@@ -2131,47 +2203,6 @@ export default {
           );
         }
       }
-      var normalizedEvent = preNormalizedEvent;
-      var eventType = preEventType;
-      var runStatus =
-        normalizedEvent && normalizedEvent.runStatus
-          ? this.normalizeAgentRunStatus(normalizedEvent.runStatus)
-          : null;
-      if (
-        eventType === "run_failed" ||
-        runStatus === "failed" ||
-        (!eventType && stepEvent.status === "failed")
-      ) {
-        run.status = "failed";
-        this.guidanceMessage =
-          stepEvent.errorMessage ||
-          stepEvent.message ||
-          "任务执行失败，请调整后重试。";
-        this.isSending = false;
-        this.isStreaming = false;
-        this.isThinking = false;
-      } else if (runStatus === "cancelled" || runStatus === "interrupted") {
-        // 中断/取消：保留具体终态，避免被下方 success 分支吞掉
-        run.status = runStatus;
-        this.guidanceMessage = "任务已中断，可继续发起新任务。";
-        this.isSending = false;
-        this.isStreaming = false;
-        this.isThinking = false;
-      } else if (
-        eventType === "final_answer" ||
-        eventType === "run_finished" ||
-        runStatus === "success" ||
-        isTerminalAgentEvent(normalizedEvent)
-      ) {
-        run.status = "success";
-        this.guidanceMessage = "本轮任务已完成，可继续发起新任务。";
-        this.isSending = false;
-        this.isStreaming = false;
-        this.isThinking = false;
-      } else if (!this.isTerminalAgentRunStatus(run.status)) {
-        run.status = "running";
-      }
-      this.snapshotRunState(run.runId);
       // 决策轨迹新增/更新时也触发自动滚动，与思考内容流式输出一致
       this.scrollToBottom();
     },
@@ -2208,10 +2239,53 @@ export default {
         run.tokenUsage = payload.usage;
       }
 
-      var matched = false;
+      // run entry 更新 + 终态（后台 run 也需要持久化）
+      var nextGuidance = null;
+      if (run) {
+        if (run.botMsgId == null && payload.botMsgId) {
+          run.botMsgId = String(payload.botMsgId);
+        }
+        if (run.sessionCode == null && payload.sessionCode) {
+          run.sessionCode = String(payload.sessionCode);
+        }
+        if (payload.chatSessionId != null && run.chatSessionId == null) {
+          run.chatSessionId = payload.chatSessionId;
+        }
+        // 修复 interrupted/cancelled 状态识别（原逻辑仅判 failed 否则一律 success）
+        var normalized = this.normalizeAgentRunStatus(payload.status);
+        if (normalized === "failed") {
+          run.status = "failed";
+          nextGuidance = "任务执行失败，请稍后重试。";
+        } else if (normalized === "interrupted" || normalized === "cancelled") {
+          run.status = normalized;
+          nextGuidance = "任务已中断，可继续发起新任务。";
+        } else {
+          run.status = "success";
+          nextGuidance = "本轮任务已完成，可继续发起新任务。";
+        }
+        run.finishReceived = true;
+        // snapshot 须在 removeRunEntry 之前调用（仍读 this.activeAgentRuns[runId]）
+        this.snapshotRunState(run.runId);
+        this.silentFetchAgentRunDetail(
+          payload.runId != null ? payload.runId : run.runId
+        );
+        // 终态后移除 entry
+        if (runId && this.isTerminalAgentRunStatus(run.status)) {
+          this.removeRunEntry(runId);
+        }
+      } else {
+        nextGuidance = "本轮任务已完成，可继续发起新任务。";
+      }
+
+      // 后台 run：跳过 UI 状态与 chatList 操作，避免串入当前窗口
+      if (this.isBackgroundRun(run)) return;
+
+      // 当前 run：更新 chatList + UI 状态
+      this.guidanceMessage = nextGuidance;
       // finish 事件可能来自后台 run，不更新当前会话指针
       this.applyServerSessionMeta(payload);
 
+      var matched = false;
       for (var i = 0; i < this.chatList.length; i++) {
         var chatItem = this.chatList[i];
         if (chatItem.botMsgId == botMsgId && chatItem.chatType !== "user") {
@@ -2246,43 +2320,6 @@ export default {
         normalizedSources && normalizedSources.length > 0
           ? normalizedSources
           : [];
-
-      // 补全 run 字段并设置终态（仅 run 非空时）
-      if (run) {
-        if (run.botMsgId == null && payload.botMsgId) {
-          run.botMsgId = String(payload.botMsgId);
-        }
-        if (run.sessionCode == null && payload.sessionCode) {
-          run.sessionCode = String(payload.sessionCode);
-        }
-        if (payload.chatSessionId != null && run.chatSessionId == null) {
-          run.chatSessionId = payload.chatSessionId;
-        }
-        // 修复 interrupted/cancelled 状态识别（原逻辑仅判 failed 否则一律 success）
-        var normalized = this.normalizeAgentRunStatus(payload.status);
-        if (normalized === "failed") {
-          run.status = "failed";
-          this.guidanceMessage = "任务执行失败，请稍后重试。";
-        } else if (normalized === "interrupted" || normalized === "cancelled") {
-          run.status = normalized;
-          this.guidanceMessage = "任务已中断，可继续发起新任务。";
-        } else {
-          run.status = "success";
-          this.guidanceMessage = "本轮任务已完成，可继续发起新任务。";
-        }
-        run.finishReceived = true;
-        // snapshot 须在 removeRunEntry 之前调用（仍读 this.activeAgentRuns[runId]）
-        this.snapshotRunState(run.runId);
-        this.silentFetchAgentRunDetail(
-          payload.runId != null ? payload.runId : run.runId
-        );
-        // 终态后移除 entry
-        if (runId && this.isTerminalAgentRunStatus(run.status)) {
-          this.removeRunEntry(runId);
-        }
-      } else {
-        this.guidanceMessage = "本轮任务已完成，可继续发起新任务。";
-      }
 
       this.refreshChatRecordsIfNeeded();
       for (var fi = 0; fi < this.chatList.length; fi++) {
