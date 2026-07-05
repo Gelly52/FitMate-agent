@@ -316,6 +316,20 @@ export default {
         return;
       }
       this.syncChatSessionToUrlAndStorage();
+      // 切换会话：重置 UI 状态为新会话的当前 run 状态
+      const run = this.currentAgentRun;
+      if (run && !this.isTerminalAgentRunStatus(run.status)) {
+        // 切到有运行中 run 的会话：恢复 isSending/isStreaming
+        this.isSending = true;
+        this.isStreaming = true;
+        this.isThinking = false;
+      } else {
+        // 切到无活跃 run 的会话：清 UI 状态
+        this.isSending = false;
+        this.isStreaming = false;
+        this.isThinking = false;
+        this.thinkingExpanded = true;
+      }
     },
   },
   methods: {
@@ -400,14 +414,7 @@ export default {
       }
     },
     handleSelectChatSession(sessionId) {
-      if (this.isSending || this.isStreaming || this.hasPendingAgentRun()) {
-        this.showUiMessage(
-          "error",
-          "当前有运行中的任务，请稍后再切换聊天记录。"
-        );
-        return;
-      }
-
+      // 不再阻止：任务运行时也可切换会话，旧 run 在 Map 中继续追踪
       var targetSession = null;
       for (var i = 0; i < this.chatSessionList.length; i++) {
         if (this.chatSessionList[i].sessionId == sessionId) {
@@ -424,7 +431,6 @@ export default {
         targetSession.messages
       );
 
-      this.clearActiveAgentRun();
       this.clearThinkingState();
       this.activeView = "chat";
       this.activeChatSessionId = targetSession.sessionId;
@@ -454,12 +460,7 @@ export default {
       this.activeView = "chat";
     },
     handleCreateChat() {
-      if (this.isSending || this.isStreaming || this.hasPendingAgentRun()) {
-        this.showUiMessage("error", "当前有运行中的任务，请稍后再新建聊天。");
-        return;
-      }
-
-      this.clearActiveAgentRun();
+      // 不再阻止：任务运行时也可新建聊天，旧 run 在 Map 中继续追踪
       this.clearThinkingState();
       this.activeView = "chat";
       this.activeChatSessionId = null;
@@ -920,13 +921,8 @@ export default {
       var normalized = this.normalizeAgentRunStatus(status);
       return normalized === "success" || normalized === "failed";
     },
-    hasPendingAgentRun() {
-      const run = this.currentAgentRun;
-      return !!(
-        run &&
-        run.runId != null &&
-        !this.isTerminalAgentRunStatus(run.status)
-      );
+    hasPendingAgentRun(): boolean {
+      return this.hasPendingRunInCurrentSession;
     },
     normalizeAgentStepItem(step, index) {
       if (!step) {
