@@ -1744,41 +1744,36 @@ export default {
       if (!thinkingText) {
         return;
       }
-      // run entry 更新（后台 run 也需要持久化）
-      run.thinkingContent = (run.thinkingContent || "") + thinkingText;
-      // 同步追加到 thinkingSegments：找到当前 active 段追加；若无 active 段则兜底新建
-      run.thinkingSegments = this.appendThinkingChunkToSegments(
-        (run.thinkingSegments || []).slice(),
-        thinkingText
-      );
       if (payload.botMsgId) {
         run.botMsgId = payload.botMsgId;
       }
-      this.snapshotRunState(run.runId);
 
-      // 后台 run：跳过 UI 状态与 chatList 操作，避免串入当前窗口
-      if (this.isBackgroundRun(run)) return;
+      // 后台 run：直接更新 run entry（不进 UI buffer），仅节流持久化
+      if (this.isBackgroundRun(run)) {
+        run.thinkingContent = (run.thinkingContent || "") + thinkingText;
+        run.thinkingSegments = this.appendThinkingChunkToSegments(
+          (run.thinkingSegments || []).slice(),
+          thinkingText
+        );
+        var bgBuffer = this.getOrCreateBuffer(run.runId);
+        if (bgBuffer && Date.now() - bgBuffer.lastSnapshotTime > 500) {
+          this.snapshotRunState(run.runId);
+          bgBuffer.lastSnapshotTime = Date.now();
+        }
+        return;
+      }
 
-      // 当前 run：更新 UI 状态与 chatList
+      // 当前 run：累积到 buffer，由 rAF flush 统一更新 UI
       this.isThinking = true;
       var botMsgId =
         payload.botMsgId || run.botMsgId || this.botMsgId;
-      // botMsgId 双写：会话级 data 字段
       if (botMsgId) {
         this.botMsgId = botMsgId;
       }
+      // 首次 ADD 立即创建 bot 消息（保证 UI 响应），后续由 flush 写入累积内容
       if (botMsgId) {
         var targetMsg = this.findOrCreateBotMessage(botMsgId, payload);
         if (targetMsg) {
-          targetMsg.thinkingContent =
-            (targetMsg.thinkingContent || "") + thinkingText;
-          // 直接同步 run.thinkingSegments 到 targetMsg（深拷贝避免引用共享）
-          // 注意：不要给 targetMsg 独立调用 appendThinkingChunkToSegments，
-          // 否则 applyAgentStepEvent 处理 step 事件时会覆盖 targetMsg 的 thinking 数据
-          targetMsg.thinkingSegments = this.cloneThinkingSegments(
-            run.thinkingSegments
-          );
-          targetMsg.isThinking = true;
           if (payload.runId != null) {
             targetMsg.runId = payload.runId;
           }
@@ -1796,7 +1791,11 @@ export default {
           this.currentSessionSceneType ||
           this.resolveExpectedSessionSceneType(),
       });
-      this.scrollToBottom();
+
+      var buffer = this.getOrCreateBuffer(run.runId);
+      if (!buffer) return;
+      buffer.thinkingDelta += thinkingText;
+      this.scheduleFlush(run.runId);
     },
     clearThinkingState() {
       this.isThinking = false;
@@ -2190,12 +2189,18 @@ export default {
       if (!this.isTerminalAgentRunStatus(run.status)) {
         run.status = "running";
       }
-      this.snapshotRunState(run.runId);
 
-      // 后台 run：跳过 UI 状态与 chatList 操作，避免串入当前窗口
-      if (this.isBackgroundRun(run)) return;
+      // 后台 run：仅节流持久化，跳过 UI 状态与 chatList 操作
+      if (this.isBackgroundRun(run)) {
+        var bgBuffer = this.getOrCreateBuffer(run.runId);
+        if (bgBuffer && Date.now() - bgBuffer.lastSnapshotTime > 500) {
+          this.snapshotRunState(run.runId);
+          bgBuffer.lastSnapshotTime = Date.now();
+        }
+        return;
+      }
 
-      // 当前 run：更新 UI 状态与 chatList
+      // 当前 run：更新 UI 状态
       if (this.taskStartTime && !this.lastTtft) {
         this.lastTtft = Date.now() - this.taskStartTime;
       }
@@ -2222,19 +2227,12 @@ export default {
       };
       this.applyServerSessionMeta(sessionMeta);
 
-      var targetChatItem = null;
-      for (var i = 0; i < this.chatList.length; i++) {
-        var chatItem = this.chatList[i];
-        if (chatItem.botMsgId == botMsgId && chatItem.chatType !== "user") {
-          targetChatItem = chatItem;
-          break;
-        }
-      }
-
+      // 首次 ADD 立即创建 bot 消息（保证 UI 响应）；后续由 flush 写入累积内容
+      var targetChatItem = this.findBotMessage(botMsgId);
       if (!targetChatItem) {
         this.chatList.push({
           id: "temp-" + this.generateRandomId(8),
-          content: receiveMsg,
+          content: "",
           userName: "bot",
           chatType: "bot",
           botMsgId: botMsgId,
@@ -2249,9 +2247,9 @@ export default {
           sourceType: payload.sourceType || null,
           sessionCode: sessionMeta.sessionCode,
           sceneType: sessionMeta.sceneType,
+          isStreaming: true,
         });
       } else {
-        targetChatItem.content = (targetChatItem.content || "") + receiveMsg;
         targetChatItem.sessionCode =
           targetChatItem.sessionCode || sessionMeta.sessionCode || null;
         targetChatItem.sceneType =
@@ -2267,7 +2265,12 @@ export default {
             ? run.runId
             : null;
       }
-      this.scrollToBottom();
+
+      // 累积到 buffer，由 rAF flush 统一更新 UI
+      var buffer = this.getOrCreateBuffer(run.runId);
+      if (!buffer) return;
+      buffer.contentDelta += receiveMsg;
+      this.scheduleFlush(run.runId);
     },
     handleAgentCustomEvent(rawValue) {
       // 优先识别上下文压缩事件（context_compressing / context_compressed / context_compress_failed）
