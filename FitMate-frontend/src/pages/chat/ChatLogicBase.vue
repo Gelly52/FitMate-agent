@@ -814,13 +814,18 @@ export default {
     resolveExpectedSessionSceneType() {
       return "agent";
     },
-    applyServerSessionMeta(payload, fallbackSceneType) {
+    applyServerSessionMeta(payload, options) {
       if (!payload || typeof payload !== "object") {
         return;
       }
-
-      if (payload.chatSessionId != null) {
-        this.activeChatSessionId = payload.chatSessionId;
+      options = options || {};
+      // 仅 ack/恢复路径传 updateGlobalSession:true，
+      // 避免后台 run 的 thinking/finish 事件干扰当前会话指针
+      if (options.updateGlobalSession) {
+        if (payload.chatSessionId != null) {
+          this.activeChatSessionId = payload.chatSessionId;
+        }
+        // currentSessionCode / currentSessionSceneType 已是 computed，不再写入
       }
     },
     refreshChatRecordsIfNeeded() {
@@ -1245,6 +1250,16 @@ export default {
       if (!detail || typeof detail !== "object") {
         return;
       }
+      var normalizedStatus = this.normalizeAgentRunStatus(detail.status);
+      // 若 detail 为终态且 run 已被 removeRunEntry 移除，不 re-create
+      // （避免 silentFetchAgentRunDetail 异步回调复活已结束的 run）
+      if (
+        !run &&
+        this.isTerminalAgentRunStatus(normalizedStatus) &&
+        !(this.activeAgentRuns || {})[String(detail.runId)]
+      ) {
+        return;
+      }
       if (!run) {
         run = this.resolveRunForEvent(
           { runId: detail.runId },
@@ -1252,7 +1267,6 @@ export default {
         );
       }
       if (!run) return;
-      var normalizedStatus = this.normalizeAgentRunStatus(detail.status);
       // 用 detail 补全 run 字段
       if (detail.runId != null) {
         run.runId = String(detail.runId);
@@ -1293,7 +1307,8 @@ export default {
         run.steps = [];
       }
 
-      this.applyServerSessionMeta(detail, "agent");
+      // silentFetchAgentRunDetail 后台补拉详情，不更新当前会话指针
+      this.applyServerSessionMeta(detail);
       this.snapshotRunState(run.runId);
       if (this.isTerminalAgentRunStatus(normalizedStatus)) {
         this.guidanceMessage =
@@ -1359,7 +1374,8 @@ export default {
         requestPayload && requestPayload.message
           ? requestPayload.message
           : run.requestText;
-      this.applyServerSessionMeta(payload, expectedSceneType || "agent");
+      // ack 路径：允许更新当前会话指针
+      this.applyServerSessionMeta(payload, { updateGlobalSession: true });
       this.snapshotRunState(run.runId);
       this.silentFetchAgentRunDetail(payload.runId);
       return true;
@@ -1476,19 +1492,15 @@ export default {
         }
       }
 
-      this.applyServerSessionMeta(
-        {
-          chatSessionId: payload.chatSessionId,
-          sessionCode: payload.sessionCode,
-          sceneType:
-            payload.sceneType ||
-            this.currentSessionSceneType ||
-            this.resolveExpectedSessionSceneType(),
-        },
-        payload.sceneType ||
+      // thinking 事件属后台 run 流式更新，不更新当前会话指针
+      this.applyServerSessionMeta({
+        chatSessionId: payload.chatSessionId,
+        sessionCode: payload.sessionCode,
+        sceneType:
+          payload.sceneType ||
           this.currentSessionSceneType ||
-          this.resolveExpectedSessionSceneType()
-      );
+          this.resolveExpectedSessionSceneType(),
+      });
       this.snapshotRunState(run.runId);
       this.scrollToBottom();
     },
@@ -1857,7 +1869,8 @@ export default {
           this.currentSessionSceneType ||
           this.resolveExpectedSessionSceneType(),
       };
-      this.applyServerSessionMeta(sessionMeta, sessionMeta.sceneType);
+      // 流式 bot 消息插入属后台 run 更新，不更新当前会话指针
+      this.applyServerSessionMeta(sessionMeta);
 
       run.botMsgId = botMsgId;
       if (payload.sessionCode) {
@@ -2189,10 +2202,8 @@ export default {
       }
 
       var matched = false;
-      this.applyServerSessionMeta(
-        payload,
-        this.currentSessionSceneType || this.resolveExpectedSessionSceneType()
-      );
+      // finish 事件可能来自后台 run，不更新当前会话指针
+      this.applyServerSessionMeta(payload);
 
       for (var i = 0; i < this.chatList.length; i++) {
         var chatItem = this.chatList[i];
@@ -2449,7 +2460,7 @@ export default {
               } catch (error) {
                 console.error("解析finish事件失败:", error);
                 me.guidanceMessage = "任务已结束，但结果解析失败，请稍后重试。";
-                me.botMsgId = null;
+                // botMsgId 已是 computed（派生自 currentAgentRun），无需手动清空
                 me.isSending = false;
                 me.isStreaming = false;
               }
@@ -2500,9 +2511,8 @@ export default {
               }
 
               me.clearThinkingState();
-              var errBotMsgId =
-                (me.activeAgentRun && me.activeAgentRun.botMsgId) ||
-                me.botMsgId;
+              // activeAgentRun 已删除，botMsgId 由 computed 派生（取 currentAgentRun.botMsgId）
+              var errBotMsgId = me.botMsgId;
               if (errBotMsgId) {
                 for (var ei = 0; ei < me.chatList.length; ei++) {
                   if (me.chatList[ei].botMsgId == errBotMsgId) {
@@ -2511,7 +2521,7 @@ export default {
                   }
                 }
               }
-              me.botMsgId = null;
+              // botMsgId 已是 computed，无需手动清空
               me.isSending = false;
               me.isStreaming = false;
               me.sseState = "disconnected";
@@ -3156,7 +3166,8 @@ export default {
       if (requestPromise && typeof requestPromise.then === "function") {
         requestPromise = requestPromise.then(function (res) {
           var data = me.unwrapApiData(res, "任务请求失败，请稍后重试！");
-          me.applyServerSessionMeta(data, expectedSceneType);
+          // ack 响应路径：允许更新当前会话指针
+          me.applyServerSessionMeta(data, { updateGlobalSession: true });
           var ackApplied = me.applyAgentExecuteAck(
             data,
             singleChat,
