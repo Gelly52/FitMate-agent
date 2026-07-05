@@ -13,6 +13,7 @@ import com.itgeo.fitmate.api.chat.dto.ChatEntity;
 import com.itgeo.fitmate.api.chat.dto.TokenUsage;
 import com.itgeo.fitmate.api.chat.infrastructure.entity.ChatSession;
 import com.itgeo.fitmate.api.sse.infrastructure.SSEServer;
+import com.itgeo.fitmate.common.constant.RedisKeyConstants;
 import jakarta.annotation.Resource;
 import java.util.Collections;
 import java.util.concurrent.TimeUnit;
@@ -37,14 +38,20 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  * 说明：
  * - 本类只负责“受理”阶段，不负责模型调用、流式输出或运行态推进；
  * - 这里使用的锁维度是登录 sessionId，不是 chatSessionId；
- * - 同步受理阶段若抛异常，需要及时释放本次已获取的 Redis 锁，避免假占用。
+ * - 同步受理阶段若抛异常，需要及时释放本次已获取的 Redis 锁，避免假占用；
+ * - 并发上限通过“多槽位锁”实现：同一登录 sessionId 最多允许 MAX_CONCURRENT_AGENTS_PER_SESSION 个任务并行。
  */
 @Slf4j
 @Service
 public class AgentExecuteServiceImpl implements AgentExecuteService {
 
     private static final long AGENT_LOCK_TTL_SECONDS = 120L;
-    private static final String AGENT_LOCK_KEY_PREFIX = "fitmate:dev:agent:lock:session:";
+    private static final String AGENT_LOCK_KEY_PREFIX = RedisKeyConstants.AGENT_LOCK_KEY_PREFIX;
+    /**
+     * 同一登录 sessionId 允许同时运行的 Agent 任务上限。
+     * 通过为每个登录会话维护 N 个独立 slot 锁实现：申请时按序尝试，命中首个空槽即占用。
+     */
+    private static final int MAX_CONCURRENT_AGENTS_PER_SESSION = RedisKeyConstants.AGENT_LOCK_SLOT_COUNT;
     private static final DefaultRedisScript<Long> COMPARE_AND_DELETE_SCRIPT;
 
     static {
@@ -121,7 +128,7 @@ public class AgentExecuteServiceImpl implements AgentExecuteService {
         }
 
         String sourceType = resolveSourceType(chatEntity);
-        String lockKey = buildLockKey(authenticatedUser.getSessionId());
+        String lockKey = null;
         String lockOwner = null;
         boolean lockAcquired = false;
         try {
@@ -148,16 +155,15 @@ public class AgentExecuteServiceImpl implements AgentExecuteService {
             );
 
             // 步骤3：按当前登录 sessionId 维度申请并发锁；限制的是登录会话并发，不是 chatSessionId。
+            // 采用多槽位锁：依次尝试 slot 1..N，命中首个空槽即占用；全部占满则拒绝。
             lockOwner = String.valueOf(runId);
-            Boolean locked = stringRedisTemplate.opsForValue().setIfAbsent(
-                    lockKey,
-                    lockOwner,
-                    AGENT_LOCK_TTL_SECONDS,
-                    TimeUnit.SECONDS
-            );
-            if (!Boolean.TRUE.equals(locked)) {
-                throw new IllegalArgumentException("当前已有任务执行中，请稍后再试");
+            String acquiredLockKey = tryAcquireSlotLock(authenticatedUser.getSessionId(), lockOwner);
+            if (acquiredLockKey == null) {
+                throw new IllegalArgumentException(
+                        "当前并发任务数已达上限（" + MAX_CONCURRENT_AGENTS_PER_SESSION + "），请稍后再试"
+                );
             }
+            lockKey = acquiredLockKey;
             lockAcquired = true;
 
             chatEntity.setSessionCode(session.getSessionCode());
@@ -172,7 +178,8 @@ public class AgentExecuteServiceImpl implements AgentExecuteService {
                     authenticatedUser,
                     chatEntity,
                     new TokenUsage(),
-                    false
+                    false,
+                    new StringBuilder()
             );
 
             final Long dispatchedRunId = runId;
@@ -235,11 +242,41 @@ public class AgentExecuteServiceImpl implements AgentExecuteService {
     }
 
 /**
-     * 基于当前登录 sessionId 构造并发锁 key。
+     * 按序尝试为当前登录 sessionId 申请一个空闲 slot 锁。
+     * <p>
+     * 遍历 slot 1..N，对每个 slotKey 调用 {@code setIfAbsent}；
+     * 命中首个空槽即返回该 slotKey；全部占满返回 null。
+     * <p>
+     * 说明：
+     * - 每个 slot 是独立的 Redis key，拥有独立 TTL，单任务崩溃只会让自己那个槽过期，不影响其他并发；
+     * - 申请过程非全局原子，但单 slot 的 setIfAbsent 是原子的，最坏情况是遍历全部 slot 后被拒绝，调用方重试即可。
+     *
+     * @param sessionId 当前登录 sessionId
+     * @param lockOwner 本次 run 持有的 owner 标识（即 runId 字符串）
+     * @return 成功占用时返回 slotKey；全部占满时返回 null
+     */
+    private String tryAcquireSlotLock(Long sessionId, String lockOwner) {
+        for (int slot = 1; slot <= MAX_CONCURRENT_AGENTS_PER_SESSION; slot++) {
+            String slotKey = buildSlotLockKey(sessionId, slot);
+            Boolean locked = stringRedisTemplate.opsForValue().setIfAbsent(
+                    slotKey,
+                    lockOwner,
+                    AGENT_LOCK_TTL_SECONDS,
+                    TimeUnit.SECONDS
+            );
+            if (Boolean.TRUE.equals(locked)) {
+                return slotKey;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 基于当前登录 sessionId + slot 序号构造并发锁 key。
      * 说明：这里的锁粒度是登录态 sessionId，不是 chatSessionId。
      */
-    private String buildLockKey(Long sessionId) {
-        return AGENT_LOCK_KEY_PREFIX + sessionId;
+    private String buildSlotLockKey(Long sessionId, int slot) {
+        return AGENT_LOCK_KEY_PREFIX + sessionId + ":slot:" + slot;
     }
 
 /**
