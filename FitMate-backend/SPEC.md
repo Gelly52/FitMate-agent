@@ -1,6 +1,6 @@
 # FitMate-AI 后端代码规范 SPEC
 
-适用范围：`FitMate-backend` Maven 多模块后端工程，包括主业务 API 服务、MCP 工具服务、领域模型、通用能力、配置、数据库脚本与测试代码。  
+适用范围：`FitMate-backend` Maven 多模块后端工程，包括主业务 API 服务、MCP 工具服务、通用能力、配置、数据库脚本与测试代码。  
 目录结构、模块命名、包名与 artifactId 遵照项目根目录 `SPEC.md` 中的全局规范。
 
 ---
@@ -14,8 +14,7 @@ FitMate-backend/
 ├─ pom.xml
 ├─ FitMate-api/         # 主业务 API 服务
 ├─ FitMate-mcpServer/   # MCP 工具服务
-├─ FitMate-domain/      # 领域实体、枚举与值对象
-└─ FitMate-common/      # 统一响应、异常、错误码与通用工具
+└─ FitMate-common/      # 统一响应、异常、错误码、枚举、常量与通用工具
 ```
 
 模块职责：
@@ -23,9 +22,8 @@ FitMate-backend/
 | 模块 | 职责 |
 | --- | --- |
 | `FitMate-api` | 面向前端暴露 REST/SSE API，承载认证、聊天、记忆、Agent、RAG、搜索、训练、身体指标等业务流程。 |
-| `FitMate-mcpServer` | 暴露 MCP 工具能力，承载时间、邮件、训练日志、身体指标、RAG 管理等工具实现。 |
-| `FitMate-domain` | 放置跨模块稳定复用的领域实体、枚举和值对象。 |
-| `FitMate-common` | 放置统一响应、异常、错误码、基础工具方法等横切通用能力。 |
+| `FitMate-mcpServer` | 暴露 MCP 工具能力，承载邮件、RAG 管理等工具实现。 |
+| `FitMate-common` | 放置统一响应、异常、错误码、枚举、常量、基础工具方法等横切通用能力。 |
 
 `common` 不承载具体业务模块核心逻辑；业务流程应放在 `FitMate-api` 或 `FitMate-mcpServer` 对应功能包内。
 
@@ -44,7 +42,6 @@ com.itgeo.fitmate
 ```text
 com.itgeo.fitmate.api
 com.itgeo.fitmate.mcp
-com.itgeo.fitmate.domain
 com.itgeo.fitmate.common
 ```
 
