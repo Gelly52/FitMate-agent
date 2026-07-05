@@ -87,6 +87,9 @@ export default {
       isUserScrolledUp: false,
       // 程序滚动标志：避免程序触发的 scroll 事件被误判为用户主动滚动
       isProgrammaticScroll: false,
+      // scrollToBottom 节流：rAF 调度标志 + 缓存的 DOM 引用，避免每帧 getElementById
+      scrollRAFScheduled: false,
+      cachedChatMessagesEl: null as HTMLElement | null,
       selectedUploadName: "",
       sseState: "idle",
       guidanceMessage: "选择任务模式后，输入指令开始执行。",
@@ -3673,40 +3676,52 @@ export default {
       }
       return result;
     },
-    // 临时 stub：Task 6 将替换为 rAF 节流版本
+    // rAF 节流：每帧最多一次 scrollToBottom，所有 run 共享
     scrollToBottomThrottled() {
-      this.scrollToBottom();
+      if (this.scrollRAFScheduled) return;
+      this.scrollRAFScheduled = true;
+      var me = this;
+      requestAnimationFrame(function () {
+        me.scrollRAFScheduled = false;
+        me.doScrollToBottom(false);
+      });
     },
     scrollToBottom(force) {
+      if (force === true) {
+        // 强制滚动：等 Vue 刷新 DOM 后立即执行，重置用户标志
+        var me = this;
+        this.$nextTick(function () {
+          me.doScrollToBottom(true);
+        });
+        return;
+      }
+      this.scrollToBottomThrottled();
+    },
+    doScrollToBottom(force) {
+      if (!this.cachedChatMessagesEl) {
+        this.cachedChatMessagesEl = document.getElementById("chat-messages");
+      }
+      if (!this.cachedChatMessagesEl) return;
       var me = this;
-      this.$nextTick(function () {
-        var chatMessages = document.getElementById("chat-messages");
-        if (!chatMessages) {
-          return;
+      // 流式输出（非 force）：只要用户没主动向上滚就跟随
+      // 强制滚动（force=true）：发送消息/回到底部按钮，重置用户标志
+      var shouldScroll = force === true || !me.isUserScrolledUp;
+      if (shouldScroll) {
+        // 标记程序滚动，避免触发的 scroll 事件被 handleChatScroll 误判为用户操作
+        me.isProgrammaticScroll = true;
+        me.cachedChatMessagesEl.scrollTop = me.cachedChatMessagesEl.scrollHeight;
+        if (force === true) {
+          me.isUserScrolledUp = false;
+          me.showBackToBottom = false;
         }
-
-        // 流式输出（无 force）：只要用户没主动向上滚就跟随
-        // 强制滚动（force=true）：发送消息/回到底部按钮，重置用户标志
-        var shouldScroll = force === true || !me.isUserScrolledUp;
-
-        if (shouldScroll) {
-          // 标记程序滚动，避免触发的 scroll 事件被 handleChatScroll 误判为用户操作
-          me.isProgrammaticScroll = true;
-          chatMessages.scrollTop = chatMessages.scrollHeight;
-          if (force === true) {
-            me.isUserScrolledUp = false;
-            me.showBackToBottom = false;
-          }
-          // 用 rAF 保持程序滚动标志到下一帧绘制后，避免布局抖动期被误判
+        // 用双 rAF 保持程序滚动标志到下一帧绘制后，避免布局抖动期被误判
+        requestAnimationFrame(function () {
           requestAnimationFrame(function () {
-            requestAnimationFrame(function () {
-              me.isProgrammaticScroll = false;
-            });
+            me.isProgrammaticScroll = false;
           });
-        }
-
-        me.handleChatScroll();
-      });
+        });
+      }
+      me.handleChatScroll();
     },
     doInternetSearch(internetSearchSelected) {
       this.internetSearchSelected = !internetSearchSelected;
