@@ -2553,6 +2553,33 @@ export default {
       this.isSending = false;
       this.isStreaming = false;
       this.isThinking = false;
+      // 写入思考内容缓存：终态后 run.thinkingSegments 与 run.steps 已最终化
+      if (run && botMsgId) {
+        var finishUserKey = this.resolveStableUserKey();
+        var finishSessionId =
+          (run.chatSessionId != null ? run.chatSessionId : this.activeChatSessionId);
+        if (finishUserKey && finishSessionId != null) {
+          // 终态且非中断时才缓存；interrupted/cancelled 不写入，避免缓存半截内容
+          var finishStatus = this.normalizeAgentRunStatus(run.status);
+          if (finishStatus === "success") {
+            setThinkingCache(
+              String(finishUserKey),
+              String(finishSessionId),
+              String(botMsgId),
+              {
+                // thinkingContent 在流式路径下没有显式累积，这里用 segments.content 拼接做兜底
+                thinkingContent: (run.thinkingSegments || [])
+                  .map(function (s) {
+                    return (s && s.content) || "";
+                  })
+                  .join("\n"),
+                thinkingSegments: run.thinkingSegments || [],
+                agentSteps: run.steps || [],
+              }
+            );
+          }
+        }
+      }
       this.scrollToBottom();
     },
     handleLogout() {
