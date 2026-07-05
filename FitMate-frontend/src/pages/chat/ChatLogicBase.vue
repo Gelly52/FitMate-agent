@@ -1290,47 +1290,34 @@ export default {
         // 忽略重复路由/导航取消等错误
       });
     },
-    applyAgentRunDetail(detail) {
+    applyAgentRunDetail(detail, run) {
       if (!detail || typeof detail !== "object") {
         return;
       }
-      var runId = detail.runId != null ? detail.runId : null;
+      if (!run) {
+        run = this.resolveRunForEvent(
+          { runId: detail.runId },
+          { createIfMissing: true }
+        );
+      }
+      if (!run) return;
       var normalizedStatus = this.normalizeAgentRunStatus(detail.status);
-      if (!this.activeAgentRun) {
-        this.activeAgentRun = {
-          runId: runId,
-          chatSessionId: null,
-          sessionCode: null,
-          botMsgId: null,
-          status: normalizedStatus,
-          requestText: "",
-          sceneType: "agent",
-          sourceType: "chat",
-          steps: [],
-          finishReceived: false,
-        };
+      // 用 detail 补全 run 字段
+      if (detail.runId != null) {
+        run.runId = String(detail.runId);
       }
-      if (runId != null) {
-        this.activeAgentRun.runId = runId;
+      if (run.chatSessionId == null && detail.chatSessionId != null) {
+        run.chatSessionId = detail.chatSessionId;
       }
-      if (detail.chatSessionId != null) {
-        this.activeAgentRun.chatSessionId = detail.chatSessionId;
-      }
-      if (detail.sessionCode) {
-        this.activeAgentRun.sessionCode = String(detail.sessionCode);
-      }
-      if (detail.botMsgId) {
-        this.activeAgentRun.botMsgId = String(detail.botMsgId);
-      }
-      if (detail.requestText) {
-        this.activeAgentRun.requestText = detail.requestText;
-      }
-      this.activeAgentRun.status = normalizedStatus;
-      this.activeAgentRun.sceneType = "agent";
+      run.sessionCode = detail.sessionCode
+        ? String(detail.sessionCode)
+        : run.sessionCode;
+      run.botMsgId = detail.botMsgId ? String(detail.botMsgId) : run.botMsgId;
+      run.requestText = detail.requestText || run.requestText;
+      run.status = normalizedStatus;
+      run.sceneType = "agent";
       if (detail.sourceType) {
-        this.activeAgentRun.sourceType = String(
-          detail.sourceType
-        ).toLowerCase();
+        run.sourceType = String(detail.sourceType).toLowerCase();
       }
 
       var traceItems = collectAgentTraceItems(detail);
@@ -1350,26 +1337,22 @@ export default {
         }
       }
       if (steps.length > 0) {
-        this.agentSteps = steps;
+        run.steps = steps;
         this.agentStepEventReceived = true;
-        this.activeAgentRun.steps = steps;
+        // 双写全局 agentSteps（Task 5 删除）
+        this.agentSteps = steps;
       } else if (hasServerTrace) {
+        run.steps = [];
+        // 双写全局字段（Task 5 删除）
         this.agentSteps = [];
         this.thinkingSegments = [];
         this.agentStepEventReceived = false;
-        this.activeAgentRun.steps = [];
       }
 
       this.applyServerSessionMeta(detail, "agent");
-      if (this.activeAgentRun.chatSessionId != null) {
-        this.activeChatSessionId = this.activeAgentRun.chatSessionId;
-      }
-      if (this.activeAgentRun.sessionCode) {
-        this.currentSessionCode = this.activeAgentRun.sessionCode;
-      }
-      if (this.activeAgentRun.botMsgId) {
-        this.botMsgId = this.activeAgentRun.botMsgId;
-      }
+      // 双写全局字段（Task 5 删除）
+      this.botMsgId = run.botMsgId;
+      this.currentSessionCode = run.sessionCode;
       this.currentSessionSceneType = "agent";
       this.snapshotActiveAgentRun();
       if (this.isTerminalAgentRunStatus(normalizedStatus)) {
@@ -1378,6 +1361,8 @@ export default {
             ? "本轮任务已完成，可继续发起新任务。"
             : "任务执行失败，请调整后重试。";
       }
+      // 临时桥接，Task 5 删除
+      this.activeAgentRun = run;
     },
     silentFetchAgentRunDetail(runId) {
       if (runId == null) {
@@ -1403,39 +1388,48 @@ export default {
       payload,
       requestPayload,
       expectedSceneType,
-      sourceType
+      sourceType,
+      run
     ) {
       if (!payload || payload.runId == null) {
         return false;
       }
-      this.activeAgentRun = {
-        runId: payload.runId,
-        chatSessionId:
-          payload.chatSessionId != null ? payload.chatSessionId : null,
-        sessionCode: payload.sessionCode ? String(payload.sessionCode) : null,
-        botMsgId: payload.botMsgId
-          ? String(payload.botMsgId)
-          : requestPayload && requestPayload.botMsgId
-          ? String(requestPayload.botMsgId)
-          : null,
-        status: this.normalizeAgentRunStatus(payload.status),
-        requestText:
-          requestPayload && requestPayload.message
-            ? requestPayload.message
-            : "",
-        sceneType: expectedSceneType || "agent",
-        sourceType: sourceType || "chat",
-        steps: [],
-        finishReceived: false,
-      };
+      if (!run) {
+        run = this.resolveRunForEvent(payload, { createIfMissing: true });
+      }
+      if (!run) return false;
+      // 用 ack 字段补全 run entry（chatSessionId 若 run 已有则不覆盖）
+      if (run.chatSessionId == null && payload.chatSessionId != null) {
+        run.chatSessionId = payload.chatSessionId;
+        // 若与当前 activeChatSessionId 不一致，以 ack 为准
+        if (this.activeChatSessionId !== run.chatSessionId) {
+          this.activeChatSessionId = run.chatSessionId;
+        }
+      }
+      run.sessionCode = payload.sessionCode
+        ? String(payload.sessionCode)
+        : run.sessionCode;
+      run.botMsgId = payload.botMsgId
+        ? String(payload.botMsgId)
+        : requestPayload && requestPayload.botMsgId
+        ? String(requestPayload.botMsgId)
+        : run.botMsgId;
+      run.status = "running";
+      run.sceneType = expectedSceneType || "agent";
+      run.sourceType = sourceType || "chat";
+      run.requestText =
+        requestPayload && requestPayload.message
+          ? requestPayload.message
+          : run.requestText;
       this.agentStepEventReceived = false;
       this.applyServerSessionMeta(payload, expectedSceneType || "agent");
+      // 双写全局字段（Task 5 删除）
       this.currentSessionSceneType = expectedSceneType || "agent";
-      if (this.activeAgentRun.botMsgId) {
-        this.botMsgId = this.activeAgentRun.botMsgId;
-      }
+      this.botMsgId = run.botMsgId;
       this.snapshotActiveAgentRun();
       this.silentFetchAgentRunDetail(payload.runId);
+      // 临时桥接，Task 5 删除
+      this.activeAgentRun = run;
       return true;
     },
     normalizeAddPayload(rawValue) {
@@ -2089,14 +2083,27 @@ export default {
       this.activeAgentRun = run;
       this.applyAgentStepEvent(normalizedStep, event);
     },
-    applyAgentStepEvent(stepEvent, eventPayload) {
+    applyAgentStepEvent(stepEvent, eventPayload, run) {
       if (!stepEvent) {
         return;
       }
+      if (!run) {
+        run = this.resolveRunForEvent(eventPayload || {}, {
+          createIfMissing: true,
+        });
+      }
+      if (!run) return;
       this.agentStepEventReceived = true;
+      // 补全 run 字段（不覆盖已有值）
+      if (run.botMsgId == null && eventPayload && eventPayload.botMsgId) {
+        run.botMsgId = String(eventPayload.botMsgId);
+      }
+      if (run.sessionCode == null && eventPayload && eventPayload.sessionCode) {
+        run.sessionCode = String(eventPayload.sessionCode);
+      }
       var matchedIndex = -1;
-      for (var i = 0; i < this.agentSteps.length; i++) {
-        var currentStep = this.agentSteps[i];
+      for (var i = 0; i < run.steps.length; i++) {
+        var currentStep = run.steps[i];
         var currentId =
           currentStep && currentStep.id ? String(currentStep.id) : null;
         var nextId = stepEvent && stepEvent.id ? String(stepEvent.id) : null;
@@ -2114,15 +2121,15 @@ export default {
         }
       }
       if (matchedIndex >= 0) {
-        this.agentSteps[matchedIndex] = Object.assign(
+        run.steps[matchedIndex] = Object.assign(
           {},
-          this.agentSteps[matchedIndex],
+          run.steps[matchedIndex],
           stepEvent
         );
       } else {
-        this.agentSteps.push(stepEvent);
+        run.steps.push(stepEvent);
       }
-      this.agentSteps = this.agentSteps
+      run.steps = run.steps
         .slice()
         .sort(function (a, b) {
           var aSeq = a && a.sequence != null ? Number(a.sequence) : NaN;
@@ -2147,42 +2154,12 @@ export default {
         .filter(function (item) {
           return !!item;
         });
+      // 双写全局 agentSteps（Task 5 删除）
+      this.agentSteps = run.steps.slice();
 
-      if (!this.activeAgentRun) {
-        this.activeAgentRun = {
-          runId:
-            eventPayload && eventPayload.runId != null
-              ? eventPayload.runId
-              : null,
-          chatSessionId: null,
-          sessionCode: this.currentSessionCode || null,
-          botMsgId: this.botMsgId || null,
-          status: "running",
-          requestText: "",
-          sceneType: "agent",
-          sourceType: "chat",
-          steps: [],
-          finishReceived: false,
-        };
-      }
-      if (eventPayload) {
-        if (eventPayload.runId != null) {
-          this.activeAgentRun.runId = eventPayload.runId;
-        }
-        if (eventPayload.chatSessionId != null) {
-          this.activeAgentRun.chatSessionId = eventPayload.chatSessionId;
-        }
-        if (eventPayload.sessionCode) {
-          this.activeAgentRun.sessionCode = String(eventPayload.sessionCode);
-        }
-        if (eventPayload.botMsgId) {
-          this.activeAgentRun.botMsgId = String(eventPayload.botMsgId);
-        }
-      }
-      this.activeAgentRun.steps = this.agentSteps.slice();
       var agentBotMsgId =
         (eventPayload && eventPayload.botMsgId) ||
-        (this.activeAgentRun && this.activeAgentRun.botMsgId) ||
+        (run && run.botMsgId) ||
         this.botMsgId;
       // 预解析 eventType / iterationNo：用于驱动 thinking segment 生命周期
       var preNormalizedEvent = normalizeAgentTraceEvent(eventPayload || stepEvent);
@@ -2210,9 +2187,11 @@ export default {
           eventPayload
         );
         if (targetMsg) {
-          targetMsg.agentSteps = this.agentSteps.slice();
+          targetMsg.agentSteps = run.steps.slice();
           // 同步 thinkingSegments 到 bot 消息对象（直接引用最新值，保持响应式）
-          targetMsg.thinkingSegments = this.cloneThinkingSegments(this.thinkingSegments);
+          targetMsg.thinkingSegments = this.cloneThinkingSegments(
+            run.thinkingSegments || this.thinkingSegments
+          );
         }
       }
       var normalizedEvent = preNormalizedEvent;
@@ -2226,7 +2205,7 @@ export default {
         runStatus === "failed" ||
         (!eventType && stepEvent.status === "failed")
       ) {
-        this.activeAgentRun.status = "failed";
+        run.status = "failed";
         this.guidanceMessage =
           stepEvent.errorMessage ||
           stepEvent.message ||
@@ -2240,20 +2219,22 @@ export default {
         runStatus === "success" ||
         isTerminalAgentEvent(normalizedEvent)
       ) {
-        this.activeAgentRun.status = "success";
+        run.status = "success";
         this.guidanceMessage = "本轮任务已完成，可继续发起新任务。";
         this.isSending = false;
         this.isStreaming = false;
         this.isThinking = false;
         this.botMsgId = null;
-      } else if (!this.isTerminalAgentRunStatus(this.activeAgentRun.status)) {
-        this.activeAgentRun.status = "running";
+      } else if (!this.isTerminalAgentRunStatus(run.status)) {
+        run.status = "running";
       }
       this.snapshotActiveAgentRun();
       // 决策轨迹新增/更新时也触发自动滚动，与思考内容流式输出一致
       this.scrollToBottom();
+      // 临时桥接，Task 5 删除
+      this.activeAgentRun = run;
     },
-    applyFinishPayload(chatResponse) {
+    applyFinishPayload(chatResponse, run) {
       var payload =
         chatResponse && typeof chatResponse === "object"
           ? chatResponse
@@ -2266,14 +2247,24 @@ export default {
         this._stopTimeout = null;
       }
       var message = payload.message == null ? "" : String(payload.message);
+      // run 解析（run 可能为 null：finish 来自非追踪 run）
+      if (!run) {
+        run = this.resolveRunForEvent(payload);
+      }
+      var runId = run
+        ? run.runId
+        : payload.runId != null
+        ? String(payload.runId)
+        : null;
       var botMsgId =
         payload.botMsgId ||
-        (this.activeAgentRun && this.activeAgentRun.botMsgId) ||
+        (run && run.botMsgId) ||
         this.botMsgId;
       var normalizedSources = this.extractSourcesFromResponse(payload);
 
       // 解析 token 用量快照（Agent FINISH 载荷携带）
       if (payload.usage && typeof payload.usage === "object") {
+        // 双写全局 tokenUsage（Task 5 删除）
         this.tokenUsage = payload.usage;
       }
 
@@ -2318,28 +2309,42 @@ export default {
           ? normalizedSources
           : [];
 
-      if (this.activeAgentRun) {
-        if (payload.chatSessionId != null) {
-          this.activeAgentRun.chatSessionId = payload.chatSessionId;
+      // 补全 run 字段并设置终态（仅 run 非空时）
+      if (run) {
+        if (run.botMsgId == null && payload.botMsgId) {
+          run.botMsgId = String(payload.botMsgId);
         }
-        if (payload.sessionCode) {
-          this.activeAgentRun.sessionCode = String(payload.sessionCode);
+        if (run.sessionCode == null && payload.sessionCode) {
+          run.sessionCode = String(payload.sessionCode);
         }
-        if (botMsgId) {
-          this.activeAgentRun.botMsgId = String(botMsgId);
+        if (payload.chatSessionId != null && run.chatSessionId == null) {
+          run.chatSessionId = payload.chatSessionId;
         }
-        this.activeAgentRun.finishReceived = true;
-        if (this.normalizeAgentRunStatus(payload.status) === "failed") {
-          this.activeAgentRun.status = "failed";
+        // 修复 interrupted/cancelled 状态识别（原逻辑仅判 failed 否则一律 success）
+        var normalized = this.normalizeAgentRunStatus(payload.status);
+        if (normalized === "failed") {
+          run.status = "failed";
           this.guidanceMessage = "任务执行失败，请稍后重试。";
+        } else if (normalized === "interrupted" || normalized === "cancelled") {
+          run.status = normalized;
+          this.guidanceMessage = "任务已中断，可继续发起新任务。";
         } else {
-          this.activeAgentRun.status = "success";
+          run.status = "success";
           this.guidanceMessage = "本轮任务已完成，可继续发起新任务。";
         }
+        run.finishReceived = true;
+        if (payload.usage) {
+          run.tokenUsage = payload.usage;
+        }
+        // snapshot 须在 removeRunEntry 之前调用（仍读 this.activeAgentRun）
         this.snapshotActiveAgentRun();
         this.silentFetchAgentRunDetail(
-          payload.runId != null ? payload.runId : this.activeAgentRun.runId
+          payload.runId != null ? payload.runId : run.runId
         );
+        // 终态后移除 entry
+        if (runId && this.isTerminalAgentRunStatus(run.status)) {
+          this.removeRunEntry(runId);
+        }
       } else {
         this.guidanceMessage = "本轮任务已完成，可继续发起新任务。";
       }
@@ -2356,6 +2361,8 @@ export default {
       this.isStreaming = false;
       this.isThinking = false;
       this.scrollToBottom();
+      // 临时桥接，Task 5 删除（注意 run 可能已移除，桥接置 null）
+      this.activeAgentRun = run;
     },
     handleLogout() {
       if (this.isLoggingOut) {
