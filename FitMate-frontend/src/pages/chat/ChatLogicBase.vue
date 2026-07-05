@@ -428,7 +428,6 @@ export default {
     handleSelectChatSession(sessionId) {
       // 不再阻止：任务运行时也可切换会话，旧 run 在 Map 中继续追踪
       // flush 当前 run 的 buffer（避免丢失累积的 thinking/content delta），再清理所有 buffer
-      this.flushAllThinkingPending();
       var currentRun = this.currentAgentRun;
       if (currentRun && currentRun.runId) {
         this.flushRunBuffer(currentRun.runId);
@@ -599,7 +598,6 @@ export default {
     handleCreateChat() {
       // 不再阻止：任务运行时也可新建聊天，旧 run 在 Map 中继续追踪
       // flush 当前 run 的 buffer（避免丢失累积的 thinking/content delta），再清理所有 buffer
-      this.flushAllThinkingPending();
       var currentRun = this.currentAgentRun;
       if (currentRun && currentRun.runId) {
         this.flushRunBuffer(currentRun.runId);
@@ -1150,10 +1148,9 @@ export default {
       if (!this.runBuffers[runId]) {
         this.runBuffers[runId] = {
           runId: runId,
-          thinkingPending: "",
+          thinkingDelta: "",
           contentDelta: "",
           pendingFlush: false,
-          thinkingFlushScheduled: false,
           lastSnapshotTime: 0,
         };
       }
@@ -1168,78 +1165,34 @@ export default {
         me.flushRunBuffer(runId);
       });
     },
-    /**
-     * 思考内容逐字动画：每帧从 thinkingPending 队列取 N 个字符追加到 segment.content。
-     * 解决 LLM 返回的 reasoning_content chunk 较大（几十~几百字符）导致"一块一块"出现的问题。
-     * - 基础速度：2 字符/帧（~120 字/秒），模拟打字机效果
-     * - 积压超过 50 字符时加速：每帧取 ceil(pending/30) 字符，避免延迟过大
-     */
-    scheduleThinkingFlush(runId: string) {
-      var buffer = this.getOrCreateBuffer(runId);
-      if (!buffer || buffer.thinkingFlushScheduled) return;
-      buffer.thinkingFlushScheduled = true;
-      var me = this;
-      requestAnimationFrame(function () {
-        me.flushThinkingPending(runId);
-      });
-    },
-    flushThinkingPending(runId: string) {
-      var buffer = this.runBuffers[runId];
-      if (!buffer) return;
-      var pending = buffer.thinkingPending;
-      if (!pending) {
-        buffer.thinkingFlushScheduled = false;
-        return;
-      }
-      // 动态计算每帧取的字符数
-      var charsPerFrame = 2;
-      if (pending.length > 50) {
-        charsPerFrame = Math.ceil(pending.length / 30);
-      }
-      var chunk = pending.substring(0, charsPerFrame);
-      buffer.thinkingPending = pending.substring(charsPerFrame);
-
-      var run = this.activeAgentRuns[runId];
-      if (run) {
-        run.thinkingContent = (run.thinkingContent || "") + chunk;
-        run.thinkingSegments = this.appendThinkingChunkToSegments(
-          (run.thinkingSegments || []).slice(),
-          chunk
-        );
-      }
-      var botMsgId = run ? run.botMsgId : null;
-      var targetMsg = this.findBotMessage(botMsgId);
-      if (targetMsg) {
-        targetMsg.thinkingContent =
-          (targetMsg.thinkingContent || "") + chunk;
-        targetMsg.thinkingSegments = this.cloneThinkingSegments(
-          run ? run.thinkingSegments : []
-        );
-        targetMsg.isThinking = true;
-      }
-
-      this.scrollToBottomThrottled();
-
-      // 还有 pending → 继续调度下一帧；否则停止 + snapshot 节流
-      if (buffer.thinkingPending) {
-        var me = this;
-        requestAnimationFrame(function () {
-          me.flushThinkingPending(runId);
-        });
-      } else {
-        buffer.thinkingFlushScheduled = false;
-        if (run && Date.now() - buffer.lastSnapshotTime > 500) {
-          this.snapshotRunState(runId);
-          buffer.lastSnapshotTime = Date.now();
-        }
-      }
-    },
     flushRunBuffer(runId: string) {
       var buffer = this.runBuffers[runId];
       if (!buffer) return;
       var run = this.activeAgentRuns[runId];
 
-      // content 更新（thinking 由 flushThinkingPending 独立处理）
+      // 1. 更新 thinking（如果有增量）
+      if (buffer.thinkingDelta) {
+        if (run) {
+          run.thinkingContent = (run.thinkingContent || "") + buffer.thinkingDelta;
+          run.thinkingSegments = this.appendThinkingChunkToSegments(
+            (run.thinkingSegments || []).slice(),
+            buffer.thinkingDelta
+          );
+        }
+        var botMsgId = run ? run.botMsgId : null;
+        var targetMsg = this.findBotMessage(botMsgId);
+        if (targetMsg) {
+          targetMsg.thinkingContent =
+            (targetMsg.thinkingContent || "") + buffer.thinkingDelta;
+          targetMsg.thinkingSegments = this.cloneThinkingSegments(
+            run ? run.thinkingSegments : []
+          );
+          targetMsg.isThinking = true;
+        }
+        buffer.thinkingDelta = "";
+      }
+
+      // 2. 更新 content（如果有增量）
       if (buffer.contentDelta) {
         var contentBotMsgId = run ? run.botMsgId : null;
         var contentTarget = this.findBotMessage(contentBotMsgId);
@@ -1251,8 +1204,10 @@ export default {
         buffer.contentDelta = "";
       }
 
+      // 3. scrollToBottom（每帧最多一次，所有 run 共享）
       this.scrollToBottomThrottled();
 
+      // 4. snapshotRunState 节流（500ms 一次）
       if (run && Date.now() - buffer.lastSnapshotTime > 500) {
         this.snapshotRunState(runId);
         buffer.lastSnapshotTime = Date.now();
@@ -1275,36 +1230,6 @@ export default {
     },
     clearRunBuffers() {
       this.runBuffers = {};
-    },
-    /**
-     * 一次性 flush 所有 run 的 thinkingPending（跳过逐字动画）。
-     * 用于 finish/中断/会话切换，确保所有思考内容立即显示完整。
-     */
-    flushAllThinkingPending() {
-      for (var runId in this.runBuffers) {
-        var buffer = this.runBuffers[runId];
-        if (!buffer || !buffer.thinkingPending) continue;
-        var pending = buffer.thinkingPending;
-        buffer.thinkingPending = "";
-        buffer.thinkingFlushScheduled = false;
-        var run = this.activeAgentRuns[runId];
-        if (run) {
-          run.thinkingContent = (run.thinkingContent || "") + pending;
-          run.thinkingSegments = this.appendThinkingChunkToSegments(
-            (run.thinkingSegments || []).slice(),
-            pending
-          );
-        }
-        var botMsgId = run ? run.botMsgId : null;
-        var targetMsg = this.findBotMessage(botMsgId);
-        if (targetMsg) {
-          targetMsg.thinkingContent =
-            (targetMsg.thinkingContent || "") + pending;
-          targetMsg.thinkingSegments = this.cloneThinkingSegments(
-            run ? run.thinkingSegments : []
-          );
-        }
-      }
     },
     /**
      * 收尾流式中的 bot 消息：flush buffer + 保存 rawContent + 渲染 markdown。
@@ -1903,8 +1828,8 @@ export default {
 
       var buffer = this.getOrCreateBuffer(run.runId);
       if (!buffer) return;
-      buffer.thinkingPending += thinkingText;
-      this.scheduleThinkingFlush(run.runId);
+      buffer.thinkingDelta += thinkingText;
+      this.scheduleFlush(run.runId);
     },
     clearThinkingState() {
       this.isThinking = false;
@@ -2561,6 +2486,15 @@ export default {
           : preNormalizedEvent && preNormalizedEvent.iterationNo != null
           ? preNormalizedEvent.iterationNo
           : null;
+      // llm_started/llm_finished 会切换 thinking segment，必须先 flush buffer
+      // 确保累积的 thinking delta 追加到当前 active segment（正确 iteration 的段）
+      // 否则 delta 会被追加到下一轮的新段，导致轮次分隔失效
+      if (
+        preEventType === "llm_started" ||
+        preEventType === "llm_finished"
+      ) {
+        this.flushRunBuffer(run.runId);
+      }
       // llm_started → 开启新 thinking segment（这一轮的思考内容将追加到此段）
       if (preEventType === "llm_started") {
         this.startThinkingSegment(preIteration, run);
@@ -2725,8 +2659,6 @@ export default {
 
       var matched = false;
       // finish 前 flush 残留 buffer，确保流式期间累积的 content 已写入 chatItem
-      // finish 前 flush 所有 pending thinking（跳过逐字动画）+ 残留 content buffer
-      this.flushAllThinkingPending();
       if (runId) this.flushRunBuffer(runId);
       for (var i = 0; i < this.chatList.length; i++) {
         var chatItem = this.chatList[i];
@@ -3033,7 +2965,6 @@ export default {
                     !me.isTerminalAgentRunStatus(failingRun.status)
                   ) {
                     // flush 残留 buffer + 收尾流式消息（渲染 markdown）
-                    me.flushAllThinkingPending();
                     if (failingRun.runId) me.flushRunBuffer(failingRun.runId);
                     if (failingRun.botMsgId) {
                       me.finalizeStreamingChatItem(failingRun.botMsgId, true);
@@ -3523,7 +3454,6 @@ export default {
         if (me.isStreaming || me.isSending) {
           console.warn("停止超时，强制重置状态");
           // flush 残留 buffer + 收尾流式消息（渲染 markdown）
-          me.flushAllThinkingPending();
           if (runId) me.flushRunBuffer(runId);
           if (currentStopRun && currentStopRun.botMsgId) {
             me.finalizeStreamingChatItem(currentStopRun.botMsgId, true);
