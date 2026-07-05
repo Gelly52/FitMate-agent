@@ -66,6 +66,8 @@ export default {
       sseState: "idle",
       guidanceMessage: "选择任务模式后，输入指令开始执行。",
       activeAgentRun: null,
+      // 多 run 追踪表：按 runId 索引，每个 entry 自带完整 per-run 状态
+      activeAgentRuns: {} as Record<string, any>,
       agentStepEventReceived: false,
       // Console-specific state
       mobileLeftOpen: false,
@@ -110,6 +112,38 @@ export default {
     };
   },
   computed: {
+    // 当前会话对应的 run；切换会话时自动重指向
+    currentAgentRun(): any | null {
+      if (this.activeChatSessionId == null) return null;
+      const runs = this.activeAgentRuns || {};
+      return Object.values(runs).find(
+        (r: any) => r && r.chatSessionId === this.activeChatSessionId
+      ) || null;
+    },
+    // 当前会话是否有运行中 run
+    hasPendingRunInCurrentSession(): boolean {
+      const run = this.currentAgentRun;
+      return run != null && !this.isTerminalAgentRunStatus(run.status);
+    },
+    // 任意会话是否有运行中 run（用于全局提示，不再阻止操作）
+    hasAnyPendingRun(): boolean {
+      const runs = this.activeAgentRuns || {};
+      return Object.values(runs).some(
+        (r: any) => r && !this.isTerminalAgentRunStatus(r.status)
+      );
+    },
+    // 子组件 prop 视图：聚合当前 run + UI 状态
+    currentRunView(): any | null {
+      const run = this.currentAgentRun;
+      if (!run) return null;
+      return {
+        ...run,
+        isSending: this.isSending,
+        isStreaming: this.isStreaming,
+        isThinking: this.isThinking,
+        thinkingExpanded: this.thinkingExpanded,
+      };
+    },
     canCompressContext() {
       // 有活动会话且消息数 >= 8 时才允许主动压缩
       return (
