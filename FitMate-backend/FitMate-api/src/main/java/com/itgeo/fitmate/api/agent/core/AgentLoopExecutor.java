@@ -9,11 +9,14 @@ import com.itgeo.fitmate.api.agent.dto.AgentExecuteContext;
 import com.itgeo.fitmate.api.agent.dto.AgentFinishResponse;
 import com.itgeo.fitmate.api.agent.infrastructure.entity.AgentStep;
 import com.itgeo.fitmate.api.agent.llm.LlmGateway;
+import com.itgeo.fitmate.api.agent.llm.LlmJsonSanitizer;
 import com.itgeo.fitmate.api.agent.memory.AgentMemoryService;
 import com.itgeo.fitmate.api.agent.memory.ContextCompressService;
 import com.itgeo.fitmate.api.agent.memory.dto.MemoryLoadResult;
+import com.itgeo.fitmate.api.agent.memory.longterm.application.MemoryExtractCounter;
 import com.itgeo.fitmate.api.agent.memory.longterm.application.MemoryReader;
 import com.itgeo.fitmate.api.agent.memory.longterm.application.extractor.SessionMemoryExtractor;
+import com.itgeo.fitmate.api.agent.memory.longterm.config.MemoryProperties;
 import com.itgeo.fitmate.api.agent.prompt.AgentPromptBuilder;
 import com.itgeo.fitmate.api.agent.tool.KbSearchContextHolder;
 import com.itgeo.fitmate.api.agent.tool.ToolCall;
@@ -78,6 +81,9 @@ public class AgentLoopExecutor {
     private ToolRouter toolRouter;
 
     @Resource
+    private com.itgeo.fitmate.api.agent.mcp.McpToolRegistry mcpToolRegistry;
+
+    @Resource
     private AgentTraceService agentTraceService;
 
     @Resource
@@ -106,6 +112,12 @@ public class AgentLoopExecutor {
 
     @Resource
     private SessionMemoryExtractor sessionMemoryExtractor;
+
+    @Resource
+    private MemoryExtractCounter memoryExtractCounter;
+
+    @Resource
+    private MemoryProperties memoryProperties;
 
     public void run(AgentExecuteContext context) {
         cancellationRegistry.register(context.getRunId());
@@ -139,6 +151,9 @@ public class AgentLoopExecutor {
         int maxToolCalls = normalizePositive(agentProperties.getMaxToolCalls(), 100);
         int maxDurationSeconds = normalizePositive(agentProperties.getMaxRunDurationSeconds(), 1800);
         int toolCallCount = 0;
+        // 用户画像在本轮 Agent 执行期间不会变化（记忆写入在 run 结束后异步发生），
+        // 在循环外计算一次即可，同时作为记忆提取 prompt 的前缀组成部分，保证与 Agent 决策 prompt 完全一致以命中 KV cache。
+        String userProfileSection = memoryReader.loadProfileSection(context.getAuthenticatedUser().getUserId());
 
         for (int iteration = 1; iteration <= maxIterations; iteration++) {
             if (Duration.between(runStarted, Instant.now()).toSeconds() > maxDurationSeconds) {
@@ -148,8 +163,6 @@ public class AgentLoopExecutor {
                 throw new AgentCancelledException(extractPartialContent(context));
             }
 
-            // 加载用户画像区块（用于注入 Agent prompt）
-            String userProfileSection = memoryReader.loadProfileSection(context.getAuthenticatedUser().getUserId());
             String prompt = agentPromptBuilder.buildDecisionPrompt(context, memory, observations, allowedTools, wikiContext, summarySection, userProfileSection);
             AgentStep llmStep = agentTraceService.startEvent(
                     context,
@@ -164,6 +177,7 @@ public class AgentLoopExecutor {
 
             Instant llmStarted = Instant.now();
             String decisionText;
+            FinalAnswerStreamState streamState = new FinalAnswerStreamState();
             try {
                 StringBuilder reasoningContent = new StringBuilder();
                 StringBuilder decisionContent = new StringBuilder();
@@ -184,15 +198,21 @@ public class AgentLoopExecutor {
                     String contentDelta = StrUtil.blankToDefault(chunk.getContent(), "");
                     if (StrUtil.isNotBlank(reasoningDelta)) {
                         reasoningContent.append(reasoningDelta);
+                        context.getAccumulatedThinking().append(reasoningDelta);
                         sendThinkingChunk(context, reasoningDelta);
                     }
                     if (StrUtil.isNotBlank(contentDelta)) {
                         decisionContent.append(contentDelta);
+                        // 状态机驱动 final_answer 流式推送
+                        String answerDelta = streamState.onNext(contentDelta, decisionContent.toString());
+                        if (StrUtil.isNotBlank(answerDelta)) {
+                            sendContentChunk(context, answerDelta);
+                        }
                     }
                 });
                 decisionText = decisionContent.toString();
                 Map<String, Object> llmOutput = new LinkedHashMap<>();
-                llmOutput.put("decision", sanitizeDecision(decisionText));
+                llmOutput.put("decision", LlmJsonSanitizer.sanitize(decisionText));
                 if (StrUtil.isNotBlank(reasoningContent)) {
                     llmOutput.put("reasoningContent", reasoningContent.toString());
                 }
@@ -213,12 +233,16 @@ public class AgentLoopExecutor {
             String action = decision.getStr("action");
             if ("final".equalsIgnoreCase(action)) {
                 String finalAnswer = StrUtil.blankToDefault(decision.getStr("final_answer"), "已完成处理。请查看上方执行轨迹。");
-                finishWithAnswer(context, finalAnswer, observations);
+                // 如果状态机已流式推送，跳过整段推送；否则走原逻辑
+                if (!streamState.hasStreamed()) {
+                    sendContentChunk(context, finalAnswer);
+                }
+                finishWithAnswer(context, finalAnswer, observations, memory, allowedTools, summarySection, userProfileSection);
                 return;
             }
 
             if (!"tool_call".equalsIgnoreCase(action)) {
-                finishWithAnswer(context, sanitizeDecision(decisionText), observations);
+                finishWithAnswer(context, LlmJsonSanitizer.sanitize(decisionText), observations, memory, allowedTools, summarySection, userProfileSection);
                 return;
             }
 
@@ -286,10 +310,20 @@ public class AgentLoopExecutor {
             }
         }
 
-        throw new IllegalStateException("Agent达到最大循环次数仍未生成最终答案");
+        // 达到最大循环次数仍未生成最终答案：不抛异常，改为构造兜底答案走正常完成流程，
+        // 避免前端因收到 failed 状态 FINISH 事件而崩溃，同时把本轮已收集的工具调用结果作为部分信息反馈给用户。
+        log.warn("Agent达到最大循环次数仍未生成最终答案, runId={}, maxIterations={}", context.getRunId(), maxIterations);
+        String fallbackAnswer = buildMaxIterationsFallback(observations);
+        finishWithAnswer(context, fallbackAnswer, observations, memory, allowedTools, summarySection, userProfileSection);
     }
 
-    private void finishWithAnswer(AgentExecuteContext context, String finalAnswer, List<Map<String, Object>> observations) {
+    private void finishWithAnswer(AgentExecuteContext context,
+                                 String finalAnswer,
+                                 List<Map<String, Object>> observations,
+                                 List<Map<String, String>> memory,
+                                 List<ToolDescriptor> allowedTools,
+                                 String summarySection,
+                                 String userProfileSection) {
         AgentStep finalStep = agentTraceService.startEvent(
                 context,
                 "final_answer",
@@ -315,6 +349,17 @@ public class AgentLoopExecutor {
                 usageJson
         );
 
+        // 持久化累积的思考内容（Agent 多轮决策循环合并）
+        String thinkingContent = context.getAccumulatedThinking().toString();
+        if (StrUtil.isNotBlank(thinkingContent)) {
+            try {
+                chatSessionService.saveThinking(context.getAssistantMessageId(), thinkingContent);
+            } catch (Exception e) {
+                log.warn("保存思考内容失败，messageId={}, runId={}, error={}",
+                        context.getAssistantMessageId(), context.getRunId(), e.getMessage());
+            }
+        }
+
         AgentFinishResponse finish = new AgentFinishResponse(
                 finalAnswer,
                 context.getChatEntity().getBotMsgId(),
@@ -336,19 +381,26 @@ public class AgentLoopExecutor {
         agentRunService.markRunSuccess(context.getRunId(), JSONUtil.toJsonStr(finish));
         SSEServer.sendMsg(context.getAuthenticatedUser().getSseClientId(), JSONUtil.toJsonStr(finish), SSEMsgType.FINISH);
 
-        // 触发会话记忆提取（异步）
+        // 触发会话记忆提取（异步）：每 N 轮用户消息触发一次，复用 Agent 决策 prompt 前缀以命中 KV cache
         try {
             Long userId = context.getAuthenticatedUser().getUserId();
             Long sessionId = context.getChatSessionId();
-            if (userId != null && sessionId != null) {
-                List<ChatMessage> messages = chatSessionService.listMessagesBySessionIdOnly(sessionId);
-                List<Map<String, String>> conversation = messages.stream()
-                        .map(m -> Map.of(
-                                "role", m.getRole() != null ? m.getRole() : "",
-                                "content", m.getContent() != null ? m.getContent() : ""))
-                        .collect(Collectors.toList());
-                sessionMemoryExtractor.extract(userId, sessionId, conversation);
+            if (userId == null || sessionId == null) {
+                return;
             }
+            List<ChatMessage> messages = chatSessionService.listMessagesBySessionIdOnly(sessionId);
+            long currentUserMsgCount = messages == null ? 0
+                    : messages.stream().filter(m -> "user".equalsIgnoreCase(m.getRole())).count();
+            long lastExtracted = memoryExtractCounter.getLastExtractedUserMsgCount(sessionId);
+            int triggerRounds = normalizePositive(memoryProperties.getExtract().getTriggerRounds(), 5);
+            if (currentUserMsgCount - lastExtracted < triggerRounds) {
+                log.debug("记忆提取未到触发轮次（current={} last={} trigger={}），跳过 sessionId={}",
+                        currentUserMsgCount, lastExtracted, triggerRounds, sessionId);
+                return;
+            }
+            // 复用 Agent 决策 prompt 的 memory 段（已加载的最近对话），保持前缀一致以命中 KV cache
+            // 同时把 authenticatedUser 透传到 memoryTaskExecutor 线程，确保下游 LLM 调用与 Agent 决策同源
+            sessionMemoryExtractor.extract(userId, sessionId, memory, allowedTools, summarySection, userProfileSection, currentUserMsgCount, context.getAuthenticatedUser());
         } catch (Exception e) {
             log.warn("触发会话记忆提取失败", e);
         }
@@ -362,7 +414,7 @@ public class AgentLoopExecutor {
                 && Boolean.TRUE.equals(context.getChatEntity().getRagEnabled());
         boolean internetEnabled = context.getChatEntity() != null
                 && Boolean.TRUE.equals(context.getChatEntity().getInternetEnabled());
-        return toolRegistry.allowedDescriptors().stream()
+        List<ToolDescriptor> tools = toolRegistry.allowedDescriptors().stream()
                 .filter(tool -> {
                     if ("kb.search".equals(tool.getName())) {
                         return knowledgeBaseEnabled;
@@ -376,6 +428,16 @@ public class AgentLoopExecutor {
                     return true;
                 })
                 .collect(Collectors.toList());
+        // 追加用户的 MCP 工具（按 userId 隔离，不受 enabled-tools 白名单管控）
+        Long userId = context.getAuthenticatedUser() != null ? context.getAuthenticatedUser().getUserId() : null;
+        if (userId != null) {
+            mcpToolRegistry.ensureLoaded(userId);
+            List<ToolDescriptor> mcpTools = mcpToolRegistry.getDescriptors(userId);
+            if (mcpTools != null && !mcpTools.isEmpty()) {
+                tools.addAll(mcpTools);
+            }
+        }
+        return tools;
     }
 
     /**
@@ -454,19 +516,11 @@ public class AgentLoopExecutor {
     }
 
     private JSONObject parseDecision(String raw) {
-        String json = sanitizeDecision(raw);
+        String json = LlmJsonSanitizer.sanitize(raw);
         if (!JSONUtil.isTypeJSON(json)) {
             throw new IllegalStateException("模型未返回合法 JSON 决策: " + abbreviate(json));
         }
         return JSONUtil.parseObj(json);
-    }
-
-    private String sanitizeDecision(String raw) {
-        String text = StrUtil.blankToDefault(raw, "").trim();
-        if (text.startsWith("```")) {
-            text = text.replaceFirst("^```[a-zA-Z]*", "").replaceFirst("```$", "").trim();
-        }
-        return text;
     }
 
     private void sendContentChunk(AgentExecuteContext context, String content) {
@@ -521,6 +575,35 @@ public class AgentLoopExecutor {
             return text;
         }
         return text.substring(0, 200) + "...";
+    }
+
+    /**
+     * 达到最大循环次数时的兜底答案：汇总本轮已收集的工具调用结果，避免直接抛异常导致前端崩溃。
+     */
+    private String buildMaxIterationsFallback(List<Map<String, Object>> observations) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("> ⚠️ **已达到 Agent 最大循环次数**，未能给出完整最终答案。以下是本轮已收集到的工具调用结果：\n\n");
+        if (observations == null || observations.isEmpty()) {
+            sb.append("本轮未收集到任何工具调用结果，建议改写问题或缩小范围后重试。");
+            return sb.toString();
+        }
+        for (int i = 0; i < observations.size(); i++) {
+            Map<String, Object> obs = observations.get(i);
+            Object toolName = obs.getOrDefault("toolName", "unknown");
+            Object success = obs.getOrDefault("success", Boolean.FALSE);
+            Object content = obs.get("content");
+            sb.append("### ").append(i + 1).append(". 工具: ").append(toolName)
+                    .append("（").append(Boolean.TRUE.equals(success) ? "成功" : "失败").append("）\n");
+            if (content != null) {
+                String text = content.toString();
+                if (text.length() > 800) {
+                    text = text.substring(0, 800) + "...(已截断)";
+                }
+                sb.append(text).append("\n\n");
+            }
+        }
+        sb.append("---\n\n你可以基于以上已收集到的信息重新提问，或调整问题范围以获得更精准的回答。");
+        return sb.toString();
     }
 
     /**
