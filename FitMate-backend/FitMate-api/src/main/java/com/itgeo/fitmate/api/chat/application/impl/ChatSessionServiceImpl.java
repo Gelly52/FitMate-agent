@@ -4,6 +4,7 @@ import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.itgeo.fitmate.api.chat.application.ChatSessionService;
 import com.itgeo.fitmate.api.chat.dto.ChatRecordItem;
 import com.itgeo.fitmate.api.chat.dto.ChatRecordsResponse;
@@ -11,9 +12,11 @@ import com.itgeo.fitmate.api.chat.dto.ChatSessionRecordItem;
 import com.itgeo.fitmate.api.chat.infrastructure.entity.ChatMessage;
 import com.itgeo.fitmate.api.chat.infrastructure.entity.ChatSession;
 import com.itgeo.fitmate.api.chat.infrastructure.entity.ContextSummary;
+import com.itgeo.fitmate.api.chat.infrastructure.entity.ChatThinking;
 import com.itgeo.fitmate.api.chat.infrastructure.mapper.ChatMessageMapper;
 import com.itgeo.fitmate.api.chat.infrastructure.mapper.ChatSessionMapper;
 import com.itgeo.fitmate.api.chat.infrastructure.mapper.ContextSummaryMapper;
+import com.itgeo.fitmate.api.chat.infrastructure.mapper.ChatThinkingMapper;
 import jakarta.annotation.Resource;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -61,6 +64,9 @@ public class ChatSessionServiceImpl implements ChatSessionService {
 
     @Resource
     private ContextSummaryMapper contextSummaryMapper;
+
+    @Resource
+    private ChatThinkingMapper chatThinkingMapper;
 
     /**
      * 创建默认 agent 场景会话。
@@ -490,10 +496,12 @@ public class ChatSessionServiceImpl implements ChatSessionService {
                         .last("limit 1")
         );
         String newLastBotMsgId = lastAssistant != null ? lastAssistant.getBotMsgId() : null;
-        ChatSession sessionUpdate = new ChatSession();
-        sessionUpdate.setId(sessionId);
-        sessionUpdate.setLastBotMsgId(newLastBotMsgId);
-        chatSessionMapper.updateById(sessionUpdate);
+        // 用 LambdaUpdateWrapper 显式 set，避免 newLastBotMsgId 为 null 时
+        // updateById 不生成 SET 子句导致 SQL 语法错误
+        chatSessionMapper.update(null,
+                new LambdaUpdateWrapper<ChatSession>()
+                        .eq(ChatSession::getId, sessionId)
+                        .set(ChatSession::getLastBotMsgId, newLastBotMsgId));
 
         return deletedMessages;
     }
@@ -672,5 +680,54 @@ public class ChatSessionServiceImpl implements ChatSessionService {
             return "agent".equals(existing);
         }
         return "chat".equals(existing);
+    }
+
+    @Override
+    public void saveThinking(Long messageId, String content) {
+        // 1. messageId 不能为空
+        if (messageId == null) {
+            throw new IllegalArgumentException("messageId不能为空");
+        }
+        // 2. content 为空时跳过，不保存空 thinking
+        if (StrUtil.isBlank(content)) {
+            return;
+        }
+
+        // 3. 查询是否已存在（按 messageId 唯一）
+        ChatThinking existing = chatThinkingMapper.selectOne(
+                new LambdaQueryWrapper<ChatThinking>()
+                        .eq(ChatThinking::getMessageId, messageId)
+                        .last("limit 1")
+        );
+
+        if (existing != null) {
+            // 3.1 已存在则更新 content
+            ChatThinking update = new ChatThinking();
+            update.setId(existing.getId());
+            update.setContent(content);
+            chatThinkingMapper.updateById(update);
+        } else {
+            // 3.2 不存在则插入新记录
+            ChatThinking thinking = new ChatThinking();
+            thinking.setMessageId(messageId);
+            thinking.setContent(content);
+            chatThinkingMapper.insert(thinking);
+        }
+    }
+
+    @Override
+    public String getThinkingByMessageId(Long messageId) {
+        // 1. messageId 不能为空
+        if (messageId == null) {
+            return null;
+        }
+        // 2. 按 messageId 查询
+        ChatThinking thinking = chatThinkingMapper.selectOne(
+                new LambdaQueryWrapper<ChatThinking>()
+                        .eq(ChatThinking::getMessageId, messageId)
+                        .last("limit 1")
+        );
+        // 3. 返回 content，不存在返回 null
+        return thinking == null ? null : thinking.getContent();
     }
 }
