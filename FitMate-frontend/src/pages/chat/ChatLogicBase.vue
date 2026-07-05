@@ -507,6 +507,11 @@ export default {
         this.showUiMessage("error", "删除会话失败，请稍后重试");
         return;
       }
+      // 失效该会话下的思考内容缓存（无论是否为当前活动会话）
+      var delUserKey = this.resolveStableUserKey();
+      if (delUserKey) {
+        invalidateThinkingCacheBySession(String(delUserKey), String(sessionId));
+      }
       // 从列表中移除
       this.chatSessionList = this.chatSessionList.filter(function (s) {
         return s && s.sessionId !== sessionId;
@@ -2613,6 +2618,11 @@ export default {
         .finally(
           function () {
             this.teardownSSE({ clearPending: true });
+            // 失效当前用户的所有思考内容缓存，避免账号间泄露
+            var logoutUserKey = this.resolveStableUserKey();
+            if (logoutUserKey) {
+              invalidateThinkingCacheByUser(String(logoutUserKey));
+            }
             this.clearActiveAgentRun();
             clearUserSession();
             this.currentUserInfo = null;
