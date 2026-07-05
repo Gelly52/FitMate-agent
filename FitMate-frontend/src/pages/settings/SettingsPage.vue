@@ -10,7 +10,7 @@
 
     <SettingsSectionNav :active="activeSection" @navigate="selectSection" />
 
-    <div class="settings-content max-w-3xl">
+    <div class="settings-content">
       <ProfileSection v-if="activeSection === 'profile'" :profile="profile" @updated="onProfileUpdated" />
       <AppearanceSection v-else-if="activeSection === 'appearance'" />
       <LlmConfigSection v-else-if="activeSection === 'llm'" />
@@ -73,5 +73,16 @@ export default {
 <style scoped>
 .settings-page {
   height: 100%;
+}
+
+.settings-content {
+  display: flex;
+  justify-content: center;
+  margin-top: 32px;
+}
+
+.settings-content > :deep(*) {
+  width: 100%;
+  max-width: 640px;
 }
 </style>
