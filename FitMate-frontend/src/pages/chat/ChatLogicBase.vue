@@ -1502,14 +1502,8 @@ export default {
       if (!payload) {
         return;
       }
-      if (
-        payload.runId != null &&
-        this.activeAgentRun &&
-        this.activeAgentRun.runId != null &&
-        String(payload.runId) !== String(this.activeAgentRun.runId)
-      ) {
-        return;
-      }
+      const run = this.resolveRunForEvent(payload);
+      if (!run) return;
       if (
         payload.chunkType &&
         payload.chunkType !== "thinking" &&
@@ -1523,9 +1517,14 @@ export default {
         return;
       }
       this.thinkingContent = (this.thinkingContent || "") + thinkingText;
+      run.thinkingContent = (run.thinkingContent || "") + thinkingText;
       // 同步追加到 thinkingSegments：找到当前 active 段追加；若无 active 段则兜底新建
       this.thinkingSegments = this.appendThinkingChunkToSegments(
         this.thinkingSegments.slice(),
+        thinkingText
+      );
+      run.thinkingSegments = this.appendThinkingChunkToSegments(
+        (run.thinkingSegments || []).slice(),
         thinkingText
       );
       this.isThinking = true;
@@ -1571,21 +1570,9 @@ export default {
           this.currentSessionSceneType ||
           this.resolveExpectedSessionSceneType()
       );
-      if (this.activeAgentRun) {
-        if (payload.runId != null) {
-          this.activeAgentRun.runId = payload.runId;
-        }
-        if (payload.chatSessionId != null) {
-          this.activeAgentRun.chatSessionId = payload.chatSessionId;
-        }
-        if (payload.sessionCode) {
-          this.activeAgentRun.sessionCode = payload.sessionCode;
-        }
-        if (payload.botMsgId) {
-          this.activeAgentRun.botMsgId = payload.botMsgId;
-        }
-        this.snapshotActiveAgentRun();
-      }
+      // 临时桥接，Task 5 删除
+      this.activeAgentRun = run;
+      this.snapshotActiveAgentRun();
       this.scrollToBottom();
     },
     clearThinkingState() {
@@ -1914,14 +1901,8 @@ export default {
       if (payload.chunkType && payload.chunkType !== "content") {
         return;
       }
-      if (
-        payload.runId != null &&
-        this.activeAgentRun &&
-        this.activeAgentRun.runId != null &&
-        String(payload.runId) !== String(this.activeAgentRun.runId)
-      ) {
-        return;
-      }
+      const run = this.resolveRunForEvent(payload);
+      if (!run) return;
       var receiveMsg =
         payload.chunkText == null ? "" : String(payload.chunkText);
       if (!receiveMsg) {
@@ -1960,22 +1941,19 @@ export default {
       };
       this.applyServerSessionMeta(sessionMeta, sessionMeta.sceneType);
 
-      if (this.activeAgentRun) {
-        this.activeAgentRun.botMsgId = botMsgId;
-        if (payload.chatSessionId != null) {
-          this.activeAgentRun.chatSessionId = payload.chatSessionId;
-        }
-        if (payload.sessionCode) {
-          this.activeAgentRun.sessionCode = payload.sessionCode;
-        }
-        if (payload.runId != null) {
-          this.activeAgentRun.runId = payload.runId;
-        }
-        if (!this.isTerminalAgentRunStatus(this.activeAgentRun.status)) {
-          this.activeAgentRun.status = "running";
-        }
-        this.snapshotActiveAgentRun();
+      run.botMsgId = botMsgId;
+      if (payload.sessionCode) {
+        run.sessionCode = payload.sessionCode;
       }
+      if (payload.runId != null) {
+        run.runId = payload.runId;
+      }
+      if (!this.isTerminalAgentRunStatus(run.status)) {
+        run.status = "running";
+      }
+      // 临时桥接，Task 5 删除
+      this.activeAgentRun = run;
+      this.snapshotActiveAgentRun();
 
       var targetChatItem = null;
       for (var i = 0; i < this.chatList.length; i++) {
@@ -2098,14 +2076,8 @@ export default {
       if (!event) {
         return;
       }
-      if (
-        event.runId != null &&
-        this.activeAgentRun &&
-        this.activeAgentRun.runId != null &&
-        String(event.runId) !== String(this.activeAgentRun.runId)
-      ) {
-        return;
-      }
+      const run = this.resolveRunForEvent(event);
+      if (!run) return;
       var normalizedStep = this.normalizeAgentStepItem(
         event,
         this.agentSteps.length
@@ -2113,6 +2085,8 @@ export default {
       if (!normalizedStep) {
         return;
       }
+      // 临时桥接，Task 5 删除
+      this.activeAgentRun = run;
       this.applyAgentStepEvent(normalizedStep, event);
     },
     applyAgentStepEvent(stepEvent, eventPayload) {
