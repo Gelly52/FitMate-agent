@@ -11,6 +11,12 @@
  */
 import { marked } from "marked";
 import doctorApi from "../../services/doctorApi";
+import {
+  getThinking as getThinkingCache,
+  setThinking as setThinkingCache,
+  invalidateSession as invalidateThinkingCacheBySession,
+  invalidateUser as invalidateThinkingCacheByUser,
+} from "../../services/thinkingCache";
 import { clearUserSession, getUserInfo } from "../../services/http";
 import { connectSse, closeSse } from "../../services/sseService";
 import {
@@ -63,6 +69,17 @@ export default {
         text: "",
         confirmText: "确认",
         cancelText: "取消",
+        resolve: null,
+      },
+      // 居中模态确认弹窗（用于删除会话等需要强提示的二次确认，
+      // 与显示在消息列表与输入框之间的 confirmBar 区分）
+      confirmDialog: {
+        visible: false,
+        title: "",
+        text: "",
+        confirmText: "确认",
+        cancelText: "取消",
+        danger: false,
         resolve: null,
       },
       showBackToBottom: false,
@@ -468,9 +485,14 @@ export default {
         this.showUiMessage("error", "当前有运行中的任务，请稍后再删除会话。");
         return;
       }
-      var confirmed = await this.showConfirmBar(
+      var confirmed = await this.showConfirmDialog(
         "确定要删除该会话吗？该会话及其全部消息将永久删除，不可恢复。",
-        { confirmText: "删除", cancelText: "取消" }
+        {
+          title: "删除会话",
+          confirmText: "删除",
+          cancelText: "取消",
+          danger: true,
+        }
       );
       if (!confirmed) {
         return;
@@ -973,6 +995,44 @@ export default {
       this.confirmBar.visible = false;
       this.confirmBar.resolve = null;
       this.confirmBar.text = "";
+      if (typeof resolve === "function") {
+        resolve(false);
+      }
+    },
+    /**
+     * 弹出屏幕居中的模态确认弹窗，返回 Promise<boolean>（true=确认，false=取消）。
+     * 用于删除会话等需要强提示的二次确认场景，避免复用 confirmBar（条状）。
+     */
+    showConfirmDialog(text, options) {
+      var me = this;
+      return new Promise(function (resolve) {
+        me.confirmDialog.text = text || "确认操作？";
+        me.confirmDialog.title = (options && options.title) || "确认";
+        me.confirmDialog.confirmText = (options && options.confirmText) || "确认";
+        me.confirmDialog.cancelText = (options && options.cancelText) || "取消";
+        me.confirmDialog.danger = !!(options && options.danger);
+        me.confirmDialog.resolve = resolve;
+        me.confirmDialog.visible = true;
+      });
+    },
+    confirmDialogAccept() {
+      var resolve = this.confirmDialog.resolve;
+      this.confirmDialog.visible = false;
+      this.confirmDialog.resolve = null;
+      this.confirmDialog.text = "";
+      this.confirmDialog.title = "";
+      this.confirmDialog.danger = false;
+      if (typeof resolve === "function") {
+        resolve(true);
+      }
+    },
+    confirmDialogCancel() {
+      var resolve = this.confirmDialog.resolve;
+      this.confirmDialog.visible = false;
+      this.confirmDialog.resolve = null;
+      this.confirmDialog.text = "";
+      this.confirmDialog.title = "";
+      this.confirmDialog.danger = false;
       if (typeof resolve === "function") {
         resolve(false);
       }
@@ -1828,6 +1888,31 @@ export default {
         return;
       }
 
+      // 展开：先查 sessionStorage 缓存，命中则直接填充并展开，跳过接口
+      if (
+        !message.thinkingLoaded &&
+        !message.thinkingLoading &&
+        message.botMsgId
+      ) {
+        var userKey = this.resolveStableUserKey();
+        var sessionId = this.activeChatSessionId;
+        if (userKey && sessionId != null) {
+          var cached = getThinkingCache(
+            String(userKey),
+            String(sessionId),
+            String(message.botMsgId)
+          );
+          if (cached) {
+            message.thinkingContent = cached.thinkingContent;
+            message.thinkingSegments = cached.thinkingSegments;
+            message.agentSteps = cached.agentSteps;
+            message.thinkingLoaded = true;
+            message.thinkingExpanded = true;
+            return;
+          }
+        }
+      }
+
       // 展开：历史消息且 thinking 未加载过，先调接口加载
       if (
         !message.thinkingLoaded &&
@@ -1887,6 +1972,21 @@ export default {
             message.thinkingSegments = this.splitThinkingIntoSegments(
               String(thinkingText),
               normalizedSteps
+            );
+          }
+          // 写入 sessionStorage 缓存，便于下次会话加载时默认展开
+          var writeUserKey = this.resolveStableUserKey();
+          var writeSessionId = this.activeChatSessionId;
+          if (writeUserKey && writeSessionId != null && message.botMsgId) {
+            setThinkingCache(
+              String(writeUserKey),
+              String(writeSessionId),
+              String(message.botMsgId),
+              {
+                thinkingContent: String(thinkingText),
+                thinkingSegments: message.thinkingSegments,
+                agentSteps: message.agentSteps,
+              }
             );
           }
           message.thinkingLoaded = true;
