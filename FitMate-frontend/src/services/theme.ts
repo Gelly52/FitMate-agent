@@ -37,6 +37,38 @@ function applyToDom(mode: ThemeMode, accent: AccentColor): void {
   const resolved = resolveMode(mode);
   document.documentElement.dataset.theme = resolved;
   document.documentElement.dataset.accent = accent;
+  updateFavicon(resolved, accent);
+}
+
+/** accent + theme → favicon 背景色映射（取 --color-primary 值） */
+const FAVICON_COLORS: Record<string, string> = {
+  "dark:blue": "#adc6ff",
+  "light:blue": "#005bc1",
+  "dark:green": "#7ee787",
+  "light:green": "#006e1c",
+  "dark:orange": "#ffb595",
+  "light:orange": "#8d4e00",
+  "dark:purple": "#c4a7e7",
+  "light:purple": "#6b3fa0",
+  "dark:light": "#c1c6d7",
+  "light:light": "#5b5e6c",
+  "dark:dark": "#8e9099",
+  "light:dark": "#3a3b42",
+};
+
+/** 根据当前主题+强调色动态更新 favicon */
+function updateFavicon(theme: "light" | "dark", accent: AccentColor): void {
+  const color = FAVICON_COLORS[`${theme}:${accent}`] || FAVICON_COLORS["dark:blue"];
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="${color}"/><path d="M22 16h22v8H30v8h12v8H30v16h-8z" fill="#fff"/></svg>`;
+  const href = "data:image/svg+xml," + encodeURIComponent(svg);
+  let link = document.querySelector("link[rel='icon']") as HTMLLinkElement | null;
+  if (!link) {
+    link = document.createElement("link");
+    link.rel = "icon";
+    document.head.appendChild(link);
+  }
+  link.href = href;
+  link.type = "image/svg+xml";
 }
 
 /** 监听系统主题变化（仅 mode=auto 时生效） */
@@ -51,7 +83,9 @@ function bindMediaListener(mode: ThemeMode): void {
   }
   mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
   mediaListener = (e: MediaQueryListEvent) => {
-    document.documentElement.dataset.theme = e.matches ? "dark" : "light";
+    const resolved = e.matches ? "dark" : "light";
+    document.documentElement.dataset.theme = resolved;
+    updateFavicon(resolved, getStoredAccent());
   };
   mediaQuery.addEventListener("change", mediaListener);
 }

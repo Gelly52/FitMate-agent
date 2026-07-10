@@ -8,13 +8,7 @@
       <span class="topbar-title-page">{{ title }}</span>
     </div>
     <div class="flex items-center gap-margin">
-      <button
-        type="button"
-        class="text-on-surface-variant hover:text-primary transition-colors"
-        title="Notifications"
-      >
-        <span class="material-symbols-outlined">notifications</span>
-      </button>
+      <AgentRunsPanel />
       <UserMenu @logout="$emit('logout')" />
     </div>
   </header>
@@ -22,10 +16,11 @@
 
 <script lang="ts">
 import UserMenu from "./UserMenu.vue";
+import AgentRunsPanel from "./AgentRunsPanel.vue";
 
 export default {
   name: "TopBar",
-  components: { UserMenu },
+  components: { UserMenu, AgentRunsPanel },
   props: {
     title: {
       type: String,
@@ -37,10 +32,6 @@ export default {
 </script>
 
 <style scoped>
-.material-symbols-outlined {
-  font-size: 22px;
-}
-
 .topbar-title {
   display: flex;
   align-items: baseline;
