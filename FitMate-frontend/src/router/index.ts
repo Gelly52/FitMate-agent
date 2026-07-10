@@ -17,7 +17,7 @@ const routes = [
         redirect: "/chat",
       },
       {
-        path: "chat",
+        path: "chat/:sessionId?",
         name: "chat",
         component: () => import("../pages/chat/ChatPage.vue"),
         meta: { title: "Agent Chat" },
@@ -33,6 +33,12 @@ const routes = [
         name: "body-metrics",
         component: () => import("../pages/metrics/MetricsPage.vue"),
         meta: { title: "Body Metrics", forceView: "body-metrics" },
+      },
+      {
+        path: "wiki",
+        name: "wiki",
+        component: () => import("../pages/wiki/WikiPage.vue"),
+        meta: { title: "Wiki" },
       },
       {
         path: "upload",

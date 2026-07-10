@@ -9,6 +9,7 @@ import com.itgeo.fitmate.api.agent.core.AgentCancelledException;
 import com.itgeo.fitmate.api.agent.core.AgentLoopExecutor;
 import com.itgeo.fitmate.api.agent.dto.AgentExecuteContext;
 import com.itgeo.fitmate.api.agent.dto.AgentFinishResponse;
+import com.itgeo.fitmate.api.auth.application.UserContextHolder;
 import com.itgeo.fitmate.api.chat.application.ChatSessionService;
 import com.itgeo.fitmate.api.sse.domain.SSEMsgType;
 import com.itgeo.fitmate.api.sse.infrastructure.SSEServer;
@@ -96,13 +97,20 @@ public class AgentAsyncServiceImpl implements AgentAsyncService {
         }
 
         try {
+            // 把受理阶段捕获的登录上下文绑定到当前异步线程，供下游 ReasoningChatClient / ContextCompressService
+            // 通过 UserContextHolder 读取到用户态，从而命中用户自定义 LLM 配置和 KV cache。
+            UserContextHolder.set(context.getAuthenticatedUser());
             agentRunService.markRunRunning(context.getRunId());
             agentLoopExecutor.run(context);
         } catch (AgentCancelledException e) {
             log.info("Agent执行被用户取消, runId={}", context.getRunId());
+            // FINISH 之前 flush 残留 chunk，避免最后一批 thinking/content 丢失
+            agentLoopExecutor.flushSseBuffers(context);
             handleCancellation(context, e.getPartialContent());
         } catch (Exception e) {
             log.error("Agent异步执行失败, runId={}", context.getRunId(), e);
+            // FINISH 之前 flush 残留 chunk，避免最后一批 thinking/content 丢失
+            agentLoopExecutor.flushSseBuffers(context);
             String failedMessage = "任务执行失败：" + (e.getMessage() == null ? "未知错误" : e.getMessage());
             agentRunService.markRunFailed(context.getRunId(), failedMessage);
             sendFailureFinish(context, failedMessage);
@@ -110,6 +118,7 @@ public class AgentAsyncServiceImpl implements AgentAsyncService {
             stopRenewTask(renewFuture, renewExecutor);
             releaseLock(context.getLockKey(), context.getLockOwner());
             cancellationRegistry.unregister(context.getRunId());
+            UserContextHolder.clear();
         }
     }
 

@@ -1,7 +1,9 @@
 <template>
   <div class="token-usage-indicator">
     <span class="token-label">
-      <span v-if="cacheHitPercentLabel" class="token-cache">缓存率 {{ cacheHitPercentLabel }} · </span>{{ usedTokensLabel }} / {{ windowLabel }}
+      <span v-if="cacheHitPercentLabel" class="token-cache"
+        >缓存率 {{ cacheHitPercentLabel }} · </span
+      >{{ usedTokensLabel }} / {{ windowLabel }}
     </span>
 
     <div class="token-ring-wrap">
@@ -34,31 +36,60 @@
       <div v-if="tokenUsage" class="token-tooltip">
         <div class="token-tooltip-row">
           <span class="token-tooltip-key">上下文占用</span>
-          <span class="token-tooltip-val">{{ usedTokens }} / {{ contextWindow }}</span>
+          <span class="token-tooltip-val"
+            >{{ usedTokens }} / {{ contextWindow }}</span
+          >
         </div>
         <div class="token-tooltip-row">
           <span class="token-tooltip-key">Prompt</span>
-          <span class="token-tooltip-val">{{ tokenUsage.promptTokens || 0 }}</span>
+          <span class="token-tooltip-val">{{
+            tokenUsage.promptTokens || 0
+          }}</span>
         </div>
         <div class="token-tooltip-row">
           <span class="token-tooltip-key">Completion</span>
-          <span class="token-tooltip-val">{{ tokenUsage.completionTokens || 0 }}</span>
+          <span class="token-tooltip-val">{{
+            tokenUsage.completionTokens || 0
+          }}</span>
         </div>
         <div v-if="tokenUsage.reasoningTokens" class="token-tooltip-row">
           <span class="token-tooltip-key">Thinking</span>
-          <span class="token-tooltip-val">{{ tokenUsage.reasoningTokens }}</span>
+          <span class="token-tooltip-val">{{
+            tokenUsage.reasoningTokens
+          }}</span>
         </div>
-        <div v-if="tokenUsage.cacheHitTokens != null && tokenUsage.cacheHitTokens !== 0" class="token-tooltip-row">
+        <div
+          v-if="
+            tokenUsage.cacheHitTokens != null && tokenUsage.cacheHitTokens !== 0
+          "
+          class="token-tooltip-row"
+        >
           <span class="token-tooltip-key">缓存命中</span>
-          <span class="token-tooltip-val">{{ tokenUsage.cacheHitTokens }} / {{ tokenUsage.promptTokens || 0 }}</span>
+          <span class="token-tooltip-val"
+            >{{ tokenUsage.cacheHitTokens }} /
+            {{ tokenUsage.promptTokens || 0 }}</span
+          >
         </div>
-        <div v-if="tokenUsage.cacheMissTokens != null && tokenUsage.cacheMissTokens !== 0" class="token-tooltip-row">
+        <div
+          v-if="
+            tokenUsage.cacheMissTokens != null &&
+            tokenUsage.cacheMissTokens !== 0
+          "
+          class="token-tooltip-row"
+        >
           <span class="token-tooltip-key">缓存未命中</span>
-          <span class="token-tooltip-val">{{ tokenUsage.cacheMissTokens }}</span>
+          <span class="token-tooltip-val">{{
+            tokenUsage.cacheMissTokens
+          }}</span>
         </div>
-        <div v-if="tokenUsage.cumulativeTotalTokens != null" class="token-tooltip-row">
+        <div
+          v-if="tokenUsage.cumulativeTotalTokens != null"
+          class="token-tooltip-row"
+        >
           <span class="token-tooltip-key">本轮累计</span>
-          <span class="token-tooltip-val">{{ tokenUsage.cumulativeTotalTokens }}</span>
+          <span class="token-tooltip-val">{{
+            tokenUsage.cumulativeTotalTokens
+          }}</span>
         </div>
       </div>
     </div>
@@ -66,6 +97,8 @@
 </template>
 
 <script lang="ts">
+import { DEFAULT_LLM_MAX_INPUT_CONTEXT_TOKENS } from "../../../types/settings";
+
 export default {
   name: "TokenUsageIndicator",
   props: {
@@ -87,7 +120,7 @@ export default {
     contextWindow() {
       var u = this.tokenUsage;
       if (!u || !u.contextWindow) {
-        return 65536;
+        return DEFAULT_LLM_MAX_INPUT_CONTEXT_TOKENS;
       }
       return u.contextWindow;
     },
@@ -172,7 +205,10 @@ export default {
   transform: translateX(-50%);
   min-width: 180px;
   padding: 8px 10px;
-  background: var(--color-surface-3, var(--color-surface-container-high, #2b2b2b));
+  background: var(
+    --color-surface-3,
+    var(--color-surface-container-high, #2b2b2b)
+  );
   border: 1px solid var(--color-outline-variant);
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);

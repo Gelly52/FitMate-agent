@@ -30,10 +30,13 @@ public class AuthWebMvcConfig implements WebMvcConfigurer {
                         "/sse/**",
                         "/training/**",
                         "/body-metrics/**",
-                        "/agent/**")
+                        "/agent/**",
+                        "/memory/**",
+                        "/wiki/**")
                 .excludePathPatterns(
                         "/user/code",
                         "/user/login",
+                        "/user/check-email",
                         "/hello/**",
                         "/sse/connect", // 建连入口不走统一 token 鉴权
                         "/error");

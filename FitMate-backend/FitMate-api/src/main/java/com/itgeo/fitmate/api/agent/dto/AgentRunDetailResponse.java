@@ -2,7 +2,6 @@ package com.itgeo.fitmate.api.agent.dto;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
@@ -12,11 +11,12 @@ import lombok.ToString;
  */
 @Data
 @ToString
-@AllArgsConstructor
 @NoArgsConstructor
 public class AgentRunDetailResponse {
     /** run 主记录ID。 */
     private Long runId;
+    /** 父 run ID。仅 Sub-Agent run 有值，主 Agent run 为 null。 */
+    private Long parentRunId;
     /** 关联的聊天会话ID。 */
     private Long chatSessionId;
     /** 关联的会话编码。 */
@@ -39,4 +39,6 @@ public class AgentRunDetailResponse {
     private LocalDateTime finishedAt;
     /** 该 run 下的步骤明细。 */
     private List<AgentRunStepResponse> steps;
+    /** 派生的 Sub-Agent run 详情列表。仅主 Agent run 有值，Sub-Agent run 为 null（避免无限递归）。 */
+    private List<AgentRunDetailResponse> subRuns;
 }

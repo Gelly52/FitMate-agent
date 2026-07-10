@@ -3,7 +3,6 @@ package com.itgeo.fitmate.api.agent.tool;
 import cn.hutool.core.util.StrUtil;
 import com.itgeo.fitmate.api.auth.application.AuthenticatedUserContext;
 import com.itgeo.fitmate.api.rag.application.DocumentService;
-import com.itgeo.fitmate.api.wiki.application.QueryRewriteService;
 import com.itgeo.fitmate.api.wiki.application.WikiSearchService;
 import com.itgeo.fitmate.api.wiki.config.WikiProperties;
 import com.itgeo.fitmate.api.wiki.dto.KbSearchObservation;
@@ -23,7 +22,7 @@ import org.springframework.stereotype.Component;
  *
  * 串行两阶段：
  *   1. Wiki 检索（默认）
- *   2. if (ragEnabled): rewrite query -> RAG 检索
+ *   2. if (ragEnabled): RAG 检索（query 已由 LLM 在调用前改写，后端不再二次改写）
  *
  * 对 Agent 透明：LLM 只看到 kb.search 一个工具，内部按开关跑不同子流程。
  *
@@ -37,14 +36,13 @@ public class KbSearchToolExecutor implements ToolExecutor {
 
     private final WikiSearchService wikiSearchService;
     private final DocumentService documentService;
-    private final QueryRewriteService queryRewriteService;
     private final WikiProperties wikiProperties;
 
     @Override
     public ToolDescriptor descriptor() {
         return new ToolDescriptor(
                 "kb.search",
-                "检索用户知识库（Wiki 页面，包含已上传文档的编译后知识）。当用户询问文档内容、Wiki、知识库、已上传资料相关问题时必须调用此工具；若已启用 RAG，会基于 Wiki 结果改写 query 后检索原始文档。参数: {\"query\": \"问题\", \"topK\": 1-10}",
+                "检索 Wiki 已编译的知识页面（结构化、已去重、已交叉引用）。若已启用 RAG，会同时检索原始文档片段。当用户询问文档内容、Wiki、知识库、已上传资料相关问题时调用。参数: {\"query\": \"改写后的检索query\", \"topK\": 1-10}",
                 "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\"},\"topK\":{\"type\":\"integer\"}},\"required\":[\"query\"]}",
                 true
         );
@@ -75,15 +73,11 @@ public class KbSearchToolExecutor implements ToolExecutor {
         KbSearchObservation observation = new KbSearchObservation();
         observation.setWiki(wikiItems);
 
-        // 2. if ragEnabled: rewrite + RAG 检索
+        // 2. if ragEnabled: RAG 检索（query 已由 LLM 在调用前改写，后端不再二次改写）
         if (Boolean.TRUE.equals(ragEnabled)) {
-            String wikiContent = wikiItems.stream()
-                    .map(WikiPageItem::getContent)
-                    .collect(Collectors.joining("\n\n"));
-            String rewrittenQuery = queryRewriteService.rewrite(query, wikiContent);
-            observation.setRewrittenQuery(rewrittenQuery);
+            observation.setRewrittenQuery(query);
 
-            List<Document> ragDocs = documentService.doSearch(rewrittenQuery, userId, topK);
+            List<Document> ragDocs = documentService.doSearch(query, userId, topK);
             List<RawChunkItem> ragItems = new ArrayList<>();
             if (ragDocs != null) {
                 ragItems = ragDocs.stream().map(this::toRagItem).collect(Collectors.toList());

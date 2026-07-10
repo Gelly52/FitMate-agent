@@ -25,6 +25,8 @@ import com.itgeo.fitmate.api.auth.infrastructure.mapper.UserPreferenceMapper;
 import jakarta.annotation.Resource;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
@@ -169,8 +171,8 @@ public class UserServiceImpl implements UserService {
      * 邮箱验证码 + 密码登录。
      * 处理流程：
      * 1. 校验邮箱与密码参数；
-     * 2. 校验并消费邮箱验证码；
-     * 3. 查询或创建用户并校验账号状态与密码；
+     * 2. 查询用户：账号存在、未禁用、已设置密码时跳过验证码；否则校验并消费邮箱验证码；
+     * 3. 创建或更新用户并校验账号状态与密码；
      * 4. 更新登录时间并创建登录会话；
      * 5. 组装并返回登录结果。
      */
@@ -180,9 +182,6 @@ public class UserServiceImpl implements UserService {
         // 校验邮箱和密码参数。
         validateEmail(email);
         validatePassword(password);
-
-        // 校验并消费缓存验证码。
-        emailCodeService.verifyAndConsume(email, code);
 
         // 查询或创建用户，并校验账号状态与密码。
         User user = queryUserByEmail(email);
@@ -195,6 +194,17 @@ public class UserServiceImpl implements UserService {
                 user = legacyUser;
             }
         }
+
+        // 验证码校验策略：
+        // - 账号存在、未禁用、已设置密码 → 允许跳过验证码，仅用密码登录；
+        // - 其他情况（新用户注册、旧账号补绑密码、被禁用账号）→ 必须校验验证码。
+        boolean canSkipCode = user != null
+                && (user.getStatus() == null || user.getStatus() != 0)
+                && StrUtil.isNotBlank(user.getPasswordHash());
+        if (!canSkipCode) {
+            emailCodeService.verifyAndConsume(email, code);
+        }
+
         boolean isNewUser = false;
         if (user == null) {
             user = createUserWithEmail(email, password);
@@ -229,6 +239,28 @@ public class UserServiceImpl implements UserService {
         userLoginSessionMapper.insert(session);
 
         return buildLoginResponse(user, token, expiredAt, isNewUser);
+    }
+
+    /**
+     * 检查邮箱注册状态，用于登录页判断是否需要验证码。
+     * 返回字段：
+     * - exists：邮箱是否已注册；
+     * - passwordSet：是否已设置密码（仅当 exists 为 true 时有意义）。
+     */
+    @Override
+    public Map<String, Boolean> checkEmailRegistered(String email) {
+        validateEmail(email);
+        User user = queryUserByEmail(email);
+        if (user == null) {
+            // 兼容历史数据：username=email 但 email 字段为空。
+            user = queryUserByUsername(email);
+        }
+        Map<String, Boolean> result = new HashMap<>();
+        boolean exists = user != null;
+        boolean passwordSet = exists && StrUtil.isNotBlank(user.getPasswordHash());
+        result.put("exists", exists);
+        result.put("passwordSet", passwordSet);
+        return result;
     }
 
     /**
@@ -507,6 +539,7 @@ public class UserServiceImpl implements UserService {
                 if (parsed != null) {
                     if (parsed.getThemeMode() != null) item.setThemeMode(parsed.getThemeMode());
                     if (parsed.getAccentColor() != null) item.setAccentColor(parsed.getAccentColor());
+                    if (parsed.getHeightCm() != null) item.setHeightCm(parsed.getHeightCm());
                 }
             } catch (Exception e) {
                 log.warn("解析用户偏好 JSON 失败，回退默认值: userId={}, json={}", userId, pref.getPreferencesJson(), e);

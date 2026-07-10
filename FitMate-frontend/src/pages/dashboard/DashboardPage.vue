@@ -195,6 +195,19 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  position: relative;
+  padding-left: 12px;
+}
+.dash-metric::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 14px;
+  width: 2px;
+  background: linear-gradient(180deg, var(--color-primary), transparent);
+  border-radius: 2px;
+  box-shadow: 0 0 6px color-mix(in srgb, var(--color-primary) 70%, transparent);
 }
 
 .dash-metric-label {
@@ -211,6 +224,8 @@ export default {
   letter-spacing: -0.02em;
   color: var(--color-on-surface);
   font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 12px color-mix(in srgb, var(--color-primary) 30%, transparent);
+  font-family: ui-monospace, "Manrope", sans-serif;
 }
 
 .dash-metric-accent {
@@ -247,6 +262,23 @@ export default {
   letter-spacing: -0.01em;
   color: var(--color-on-surface);
   margin: 0;
+  position: relative;
+  padding-left: 14px;
+  font-family: ui-monospace, "Inter", sans-serif;
+  letter-spacing: 0.02em;
+}
+.dash-col-title::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  background: linear-gradient(180deg, #ff0080, var(--color-primary), #00d4ff);
+  border-radius: 3px;
+  box-shadow:
+    0 0 8px color-mix(in srgb, var(--color-primary) 70%, transparent),
+    0 0 14px rgba(255, 0, 128, 0.3);
 }
 
 .dash-col-action {
@@ -271,8 +303,30 @@ export default {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  padding: 12px 0;
+  padding: 12px 0 12px 10px;
   border-bottom: 1px solid var(--color-surface-container);
+  position: relative;
+  transition: background 0.2s ease;
+  border-radius: 4px;
+}
+.dash-training-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 3px;
+  height: 0;
+  background: var(--color-primary);
+  border-radius: 2px;
+  box-shadow: 0 0 6px color-mix(in srgb, var(--color-primary) 70%, transparent);
+  transition: height 0.2s ease, top 0.2s ease;
+}
+.dash-training-item:hover::before {
+  height: 60%;
+  top: 20%;
+}
+.dash-training-item:hover {
+  background: color-mix(in srgb, var(--color-primary) 3%, transparent);
 }
 
 .dash-training-icon {
@@ -374,16 +428,34 @@ export default {
   gap: 8px;
   padding: 20px;
   border: 1px solid var(--color-surface-container);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--color-surface-container-low);
   cursor: pointer;
   text-align: left;
-  transition: border-color 0.2s ease, transform 0.2s ease;
+  transition: border-color 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
+  position: relative;
+  overflow: hidden;
 }
-
+.dash-action-card::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--color-primary), transparent);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
 .dash-action-card:hover {
-  border-color: var(--color-outline-variant);
+  border-color: color-mix(in srgb, var(--color-primary) 40%, var(--color-outline-variant));
   transform: translateY(-2px);
+  box-shadow:
+    0 8px 24px color-mix(in srgb, var(--color-primary) 12%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.dash-action-card:hover::after {
+  opacity: 1;
 }
 
 .dash-action-icon {

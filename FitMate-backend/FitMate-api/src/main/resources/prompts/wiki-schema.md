@@ -30,6 +30,13 @@
 4. 更新 `INDEX` 页
 5. 追加 `LOG` 条目
 
+## create vs update 规则（强制）
+
+- `create`：用于 slug **不存在**的新页面，必须返回 `page_type` / `title` / `slug` / `content_md`
+- `update`：仅用于 slug **已存在**的页面，`title` / `page_type` 可省略
+- **禁止**用 `update` 创建新页面。若不确定 slug 是否存在，按 `create` 处理并补全必填字段
+- 判断依据：`当前 INDEX 页` 中列出的 slug 即为已存在
+
 ## 输出格式（强制 JSON）
 
 LLM 编译时必须输出如下 JSON：
@@ -40,20 +47,14 @@ LLM 编译时必须输出如下 JSON：
     {"action": "create", "page_type": "SOURCE_SUMMARY", "title": "...", "slug": "...", "content_md": "...", "links": ["slug1", "slug2"]},
     {"action": "update", "slug": "existing-slug", "content_md": "..."},
     {"action": "update_index", "content_md": "..."},
-    {"action": "append_log", "entry": "## [YYYY-MM-DD] ingest | 文档标题"}
-  ],
-  "memory_extraction": [
-    {"type": "FACT", "content": "用户目标减脂到15%体脂", "metadata": {"category": "goal", "tags": ["减脂"]}}
+    {"action": "append_log", "entry": "## YYYY-MM-DD\n- 新增SOURCE_SUMMARY：[[文档标题-摘要]]\n- 新增CONCEPT：[[概念标题]]"}
   ]
 }
 ```
 
-## 记忆提取（可选）
+## append_log 格式规范
 
-如果原始资料中明确包含用户本人的训练目标、身体条件、饮食偏好、伤病史、训练历史、
-或用户明显关注的训练领域，请在 `memory_extraction` 字段中提取为 FACT 类型。
-
-高阈值：仅在明确涉及用户个人化信息时提取，通用健身知识不要提取。
-无个人化信息时返回空数组 `[]`。
-
-每条记忆的 metadata 可包含 category（goal/body_condition/diet/injury/training_history/interest）和 tags。
+- entry 以 `## YYYY-MM-DD` 日期标题开头（当天日期，不要用方括号）
+- 日期标题下用 `- ` 列表项描述本次变更
+- 涉及的页面必须用 `[[页面标题]]` 包裹，便于跳转
+- 禁止使用 `## [YYYY-MM-DD] type | title` 这种单行格式

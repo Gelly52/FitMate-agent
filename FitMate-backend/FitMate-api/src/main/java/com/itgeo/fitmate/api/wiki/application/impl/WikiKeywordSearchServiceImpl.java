@@ -66,6 +66,16 @@ public class WikiKeywordSearchServiceImpl implements WikiKeywordSearchService {
         jedisPooled.hset(key, fields);
     }
 
+    @Override
+    public void deleteByPage(Long pageId) {
+        if (pageId == null) {
+            return;
+        }
+        String keyPrefix = wikiProperties.getKeyword().getKeyPrefix();
+        jedisPooled.del(keyPrefix + pageId);
+        log.info("Wiki 关键词索引已清理 pageId={}", pageId);
+    }
+
     private String escapeQuery(String query) {
         if (query == null) return "";
         return query.trim().replaceAll("[\"\\\\]", " ");

@@ -45,4 +45,21 @@ public interface WikiCompileService {
      * @return space 主键
      */
     Long getOrCreateUserSpace(Long userId);
+
+    /**
+     * 删除指定 Wiki 页面及其向量/关键词索引。
+     * <p>
+     * 删除前校验页面所属空间的 ownerUserId 与传入 userId 匹配，防止越权删除。
+     *
+     * @param userId 当前用户主键（用于归属校验）
+     * @param pageId 待删除 Wiki 页面主键
+     */
+    void deletePage(Long userId, Long pageId);
+
+    /**
+     * 清理超过保留期限的 Wiki 页面（系统定时任务调用）。
+     *
+     * @return 实际清理的页面数量
+     */
+    int cleanupExpiredPages();
 }

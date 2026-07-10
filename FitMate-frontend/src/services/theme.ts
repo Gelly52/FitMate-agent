@@ -20,7 +20,7 @@ export function getStoredMode(): ThemeMode {
 /** 读取 localStorage 的 accent color，缺省 blue */
 export function getStoredAccent(): AccentColor {
   const v = localStorage.getItem(STORAGE_KEY_ACCENT);
-  if (v === "blue" || v === "green" || v === "orange" || v === "purple") return v;
+  if (v === "blue" || v === "green" || v === "orange" || v === "purple" || v === "light" || v === "dark") return v;
   return DEFAULT_USER_SETTINGS.accentColor;
 }
 

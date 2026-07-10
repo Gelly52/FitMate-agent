@@ -182,4 +182,48 @@ public interface ChatSessionService {
      * @return 实际删除的消息条数
      */
     int deleteMessagesFromBotMsgId(Long userId, Long sessionId, String botMsgId);
+
+    /**
+     * 保存思考内容。已存在则覆盖更新。
+     *
+     * @param messageId 关联的 assistant 消息ID
+     * @param content 思考内容全文
+     */
+    void saveThinking(Long messageId, String content);
+
+    /**
+     * 按消息ID查询思考内容，并校验消息归属当前用户。
+     * <p>
+     * 校验链：messageId → ChatMessage.sessionId → ChatSession.userId == 当前 userId。
+     * 若消息不存在、会话不存在或会话不属于当前用户，均返回 null，避免 IDOR 越权读取。
+     *
+     * @param userId 当前登录用户ID（归属校验）
+     * @param messageId 消息ID
+     * @return 思考内容；不存在或无权访问时返回 null
+     */
+    String getThinkingByMessageId(Long userId, Long messageId);
+
+    /**
+     * 删除指定会话及其全部关联数据（消息、思考内容、上下文压缩摘要）。
+     * <p>
+     * 调用方必须传当前登录用户ID做归属校验，会话不属于该用户时抛 IllegalArgumentException。
+     *
+     * @param userId 用户ID（权限校验）
+     * @param sessionId 会话ID
+     * @return 实际删除的消息条数（不含摘要与思考记录）
+     */
+    int deleteSession(Long userId, Long sessionId);
+
+    /**
+     * 重命名指定会话标题。
+     * <p>
+     * 调用方必须传当前登录用户ID做归属校验，会话不属于该用户时抛 IllegalArgumentException。
+     * 标题会被 trim 并截断到 50 字符以内。
+     *
+     * @param userId 用户ID（权限校验）
+     * @param sessionId 会话ID
+     * @param newTitle 新标题
+     * @return 更新后的会话对象
+     */
+    ChatSession renameSession(Long userId, Long sessionId, String newTitle);
 }

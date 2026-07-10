@@ -16,7 +16,9 @@ import jakarta.annotation.Resource;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -105,16 +107,6 @@ public class RagController {
             return LeeResult.errorException("RAG文档上传失败");
         }
     }
-//    @PostMapping("/uploadRagDoc")
-//    public LeeResult uploadRagDoc(@RequestParam("file") MultipartFile file) {
-//        Long userId = UserContextHolder.getRequired().getUserId();
-//        List<Document> documentList = documentService.loadText(
-//                file.getResource(),
-//                file.getOriginalFilename(),
-//                userId
-//        );
-//        return LeeResult.ok(documentList);
-//    }
 
     /**
      * 手动检索当前用户的 RAG 文档片段。
@@ -130,11 +122,25 @@ public class RagController {
      */
     @GetMapping("/docs")
     public LeeResult getUploadedDocs() {
-        // 1. 获取当前登录用户
         Long userId = UserContextHolder.getRequired().getUserId();
-
-        // 2. 返回当前用户已上传文档列表
         return LeeResult.ok(documentService.listUserDocuments(userId));
+    }
+
+    /**
+     * 删除当前用户指定的 RAG 文档（同步清理向量/关键词索引）。
+     */
+    @DeleteMapping("/docs/{docId}")
+    public LeeResult deleteRagDoc(@PathVariable Long docId) {
+        try {
+            Long userId = UserContextHolder.getRequired().getUserId();
+            documentService.deleteDocument(userId, docId);
+            return LeeResult.ok();
+        } catch (IllegalArgumentException e) {
+            return LeeResult.errorMsg(e.getMessage());
+        } catch (Exception e) {
+            log.error("RAG文档删除失败 docId={}", docId, e);
+            return LeeResult.errorException("RAG文档删除失败");
+        }
     }
 
     /**

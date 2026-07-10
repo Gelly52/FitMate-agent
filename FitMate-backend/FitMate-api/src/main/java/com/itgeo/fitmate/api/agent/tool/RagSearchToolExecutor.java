@@ -22,7 +22,7 @@ public class RagSearchToolExecutor implements ToolExecutor {
     public ToolDescriptor descriptor() {
         return new ToolDescriptor(
                 "rag.search",
-                "检索当前用户知识库，参数: {\"query\": \"问题\", \"topK\": 1-10}",
+                "检索用户上传的原始文档片段（未加工、保留原文上下文）。适合需要精确引用原文或查阅 Wiki 未编译的资料时调用。参数: {\"query\": \"改写后的检索query\", \"topK\": 1-10}",
                 "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\"},\"topK\":{\"type\":\"integer\"}},\"required\":[\"query\"]}",
                 true
         );

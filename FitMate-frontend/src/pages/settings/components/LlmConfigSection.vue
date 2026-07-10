@@ -1,13 +1,6 @@
 <!-- FitMate-frontend/src/pages/settings/components/LlmConfigSection.vue -->
 <template>
   <section class="llm-config-section">
-    <header class="mb-lg">
-      <h2 class="font-headline-sm text-headline-sm text-on-surface">配置</h2>
-      <p class="font-inter text-label-xs text-on-surface-variant uppercase tracking-widest opacity-70 mt-xs">
-        Manage DeepSeek API connection &amp; model parameters
-      </p>
-    </header>
-
     <div class="llm-config-card">
       <!-- API 地址 -->
       <div class="llm-field">

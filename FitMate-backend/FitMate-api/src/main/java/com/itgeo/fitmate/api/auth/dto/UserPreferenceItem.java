@@ -11,4 +11,6 @@ public class UserPreferenceItem {
     private String themeMode;
     /** 强调色：blue / green / orange / purple */
     private String accentColor;
+    /** 身高（cm），用于BMI计算 */
+    private Integer heightCm;
 }

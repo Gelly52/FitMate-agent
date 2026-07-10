@@ -161,3 +161,41 @@
   --color-surface-tint: #6b3fa0;
   --color-inverse-primary: #c4a7e7;
 }
+
+/* light accent（中性浅灰系） */
+[data-theme="dark"][data-accent="light"] {
+  --color-primary: #c1c6d7;
+  --color-on-primary: #25262a;
+  --color-primary-container: #45464f;
+  --color-on-primary-container: #dfe2f5;
+  --color-surface-tint: #c1c6d7;
+  --color-inverse-primary: #45464f;
+}
+
+[data-theme="light"][data-accent="light"] {
+  --color-primary: #5b5e6c;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #e1e2f0;
+  --color-on-primary-container: #181a22;
+  --color-surface-tint: #5b5e6c;
+  --color-inverse-primary: #c1c6d7;
+}
+
+/* dark accent（中性深灰系） */
+[data-theme="dark"][data-accent="dark"] {
+  --color-primary: #8e9099;
+  --color-on-primary: #1a1a1f;
+  --color-primary-container: #3a3b42;
+  --color-on-primary-container: #dfe2f5;
+  --color-surface-tint: #8e9099;
+  --color-inverse-primary: #3a3b42;
+}
+
+[data-theme="light"][data-accent="dark"] {
+  --color-primary: #3a3b42;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #5b5e6c;
+  --color-on-primary-container: #f0f0f7;
+  --color-surface-tint: #3a3b42;
+  --color-inverse-primary: #8e9099;
+}

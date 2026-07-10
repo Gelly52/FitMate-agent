@@ -448,6 +448,17 @@ export default {
   gap: 8px;
   border-bottom: 1px solid var(--color-surface-container);
   padding-bottom: 24px;
+  position: relative;
+}
+.form-header::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 60px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--color-primary), transparent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--color-primary) 70%, transparent);
 }
 
 .form-section {
@@ -462,6 +473,24 @@ export default {
   display: flex;
   align-items: center;
   gap: 8px;
+  position: relative;
+  padding-left: 10px;
+}
+.form-section-head::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 2px;
+  bottom: 2px;
+  width: 2px;
+  background: var(--color-primary);
+  border-radius: 2px;
+  box-shadow: 0 0 6px color-mix(in srgb, var(--color-primary) 70%, transparent);
+}
+.form-section-head h2 {
+  font-family: ui-monospace, "Inter", sans-serif !important;
+  letter-spacing: 0.14em !important;
+  text-shadow: 0 0 8px color-mix(in srgb, var(--color-primary) 25%, transparent);
 }
 
 .protocol-table {
@@ -605,20 +634,35 @@ export default {
 .form-submit-btn {
   padding: 10px 28px;
   background: var(--color-primary);
-  color: var(--color-on-surface);
+  color: var(--color-on-primary);
   border: none;
-  border-radius: 0.5rem;
+  border-radius: 4px;
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  font-family: "Inter", sans-serif;
+  font-family: ui-monospace, "Inter", sans-serif;
   cursor: pointer;
-  transition: background 0.2s ease, opacity 0.2s ease;
+  transition: background 0.2s ease, opacity 0.2s ease, box-shadow 0.2s ease;
+  position: relative;
+  overflow: hidden;
 }
-
+.form-submit-btn::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+  transition: left 0.4s ease;
+}
 .form-submit-btn:hover:not(:disabled) {
-  background: var(--color-primary-container);
+  background: var(--color-primary-fixed-dim);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--color-primary) 50%, transparent);
+}
+.form-submit-btn:hover:not(:disabled)::before {
+  left: 100%;
 }
 
 .form-submit-btn:disabled {
@@ -634,6 +678,17 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  position: relative;
+}
+.form-aside::before {
+  content: "";
+  position: absolute;
+  left: -1px;
+  top: 32px;
+  width: 2px;
+  height: 40px;
+  background: linear-gradient(180deg, var(--color-primary), transparent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--color-primary) 70%, transparent);
 }
 
 .aside-title {
@@ -660,6 +715,8 @@ export default {
   font-size: 15px;
   color: var(--color-on-surface);
   font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, "Inter", sans-serif;
+  text-shadow: 0 0 8px color-mix(in srgb, var(--color-primary) 20%, transparent);
 }
 
 .aside-stat-value small {
@@ -700,6 +757,7 @@ export default {
 .tab-btn-active {
   background: var(--color-primary);
   color: var(--color-on-primary);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--color-primary) 40%, transparent);
 }
 
 .cardio-section,
@@ -817,9 +875,15 @@ export default {
 }
 
 .summary-card {
-  background: var(--color-surface-container);
+  background: var(--color-surface-container-low);
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: 6px;
+  border: 1px solid var(--color-surface-container-high);
+  border-left: 2px solid var(--color-primary);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.summary-card:hover {
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--color-primary) 10%, transparent);
 }
 
 .summary-label {
@@ -835,6 +899,8 @@ export default {
   font-weight: 600;
   color: var(--color-on-surface);
   font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, "Inter", sans-serif;
+  text-shadow: 0 0 8px color-mix(in srgb, var(--color-primary) 25%, transparent);
 }
 
 @media (max-width: 900px) {

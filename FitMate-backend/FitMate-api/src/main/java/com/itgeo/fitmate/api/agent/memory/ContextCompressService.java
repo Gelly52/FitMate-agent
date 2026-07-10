@@ -18,6 +18,7 @@ import com.itgeo.fitmate.api.chat.infrastructure.ReasoningChatClient;
 import com.itgeo.fitmate.api.chat.infrastructure.entity.ChatMessage;
 import com.itgeo.fitmate.api.chat.infrastructure.entity.ContextSummary;
 import com.itgeo.fitmate.api.chat.infrastructure.mapper.ContextSummaryMapper;
+import com.itgeo.fitmate.api.config.LlmConfigProperties;
 import com.itgeo.fitmate.api.sse.domain.SSEMsgType;
 import com.itgeo.fitmate.api.sse.infrastructure.SSEServer;
 import jakarta.annotation.Resource;
@@ -57,7 +58,14 @@ public class ContextCompressService {
     @Resource
     private LlmConfigResolver llmConfigResolver;
 
+    @Resource
+    private LlmConfigProperties llmConfigProperties;
+
+    @Resource
+    private com.itgeo.fitmate.api.prompt.PromptTemplateManager promptTemplateManager;
+
     /** 主动压缩用的单线程异步执行器，避免阻塞 HTTP 请求。 */
+
     private final Executor manualCompressExecutor = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "context-compress-manual");
         t.setDaemon(true);
@@ -281,31 +289,24 @@ public class ContextCompressService {
     }
 
     private Integer resolveContextWindow() {
+        Integer defaultWindow = llmConfigProperties.getDefaultConfig().getMaxInputContextTokens();
         try {
             ResolvedLlmConfig config = llmConfigResolver.resolveForCurrentUser();
             Integer window = config.getMaxInputContextTokens();
-            return window != null && window > 0 ? window : 204800;
+            return window != null && window > 0 ? window : defaultWindow;
         } catch (Exception e) {
-            return 204800;
+            return defaultWindow;
         }
     }
 
     private String generateSummary(ContextSummary lastSummary, List<ChatMessage> toCompress, ContextCompressProperties props) {
-        StringBuilder prompt = new StringBuilder();
-        prompt.append("你是对话压缩助手。请将以下历史对话压缩为一段简洁摘要，保留：\n");
-        prompt.append("1. 用户的核心意图与关键需求\n");
-        prompt.append("2. 已确定的事实、决策、结论\n");
-        prompt.append("3. 工具调用获得的关键信息\n");
-        prompt.append("4. 未解决的问题或待办\n\n");
-        prompt.append("要求：用中文输出，不要分段不要标题，直接输出摘要正文。\n\n");
-        if (lastSummary != null && StrUtil.isNotBlank(lastSummary.getSummaryContent())) {
-            prompt.append("## 既有摘要\n").append(lastSummary.getSummaryContent()).append("\n\n");
-        }
         List<Map<String, String>> dialog = toCompress.stream()
                 .map(this::toRoleContentMap)
                 .collect(Collectors.toList());
-        prompt.append("## 待压缩的对话\n").append(JSONUtil.toJsonStr(dialog));
-        String fullPrompt = prompt.toString();
+        String fullPrompt = promptTemplateManager.buildContextCompressPrompt(
+                lastSummary != null ? lastSummary.getSummaryContent() : null,
+                JSONUtil.toJsonStr(dialog)
+        );
 
         // 显式传入 max_tokens（DeepSeek V4 输出上限 384K，摘要场景用 summary-max-tokens 硬约束）
         Integer maxTokens = props.getSummaryMaxTokens() != null && props.getSummaryMaxTokens() > 0

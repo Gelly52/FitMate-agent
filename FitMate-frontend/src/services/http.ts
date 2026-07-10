@@ -117,6 +117,19 @@ export function updateUserState(partial: Record<string, unknown>) {
 export function clearUserSession() {
   removeCookieValue(TOKEN_COOKIE_KEY);
   removeCookieValue(USER_INFO_COOKIE_KEY);
+  // 清理前端残留的用户级缓存，防止同浏览器切换用户时新用户看到旧用户数据
+  // - fitmate_llm_config: localStorage 中的 LLM 配置（含脱敏 apiKey、baseUrl、model）
+  // - fitmate:pending-draft: sessionStorage 中的待发送草稿（可能含个人健康数据）
+  try {
+    localStorage.removeItem("fitmate_llm_config");
+  } catch (e) {
+    /* ignore */
+  }
+  try {
+    sessionStorage.removeItem("fitmate:pending-draft");
+  } catch (e) {
+    /* ignore */
+  }
   notifyUserInfoChanged();
 }
 
@@ -124,7 +137,9 @@ export function createHttpInstance() {
   const httpInstance = axios.create({
     baseURL: API_BASE,
     withCredentials: true,
-    timeout: 60000,
+    // MCP 测试连接可能耗时较长（HTTP 预探测 + MCP initialize + listTools），
+    // 给足 120s 避免被 axios 主动取消导致 status=canceled。
+    timeout: 120000,
   });
 
   httpInstance.interceptors.request.use(

@@ -4,6 +4,7 @@ import cn.hutool.core.util.StrUtil;
 import com.itgeo.fitmate.api.agent.application.AgentAsyncService;
 import com.itgeo.fitmate.api.agent.application.AgentExecuteService;
 import com.itgeo.fitmate.api.agent.application.AgentRunService;
+import com.itgeo.fitmate.api.agent.core.SseChunkBuffer;
 import com.itgeo.fitmate.api.agent.dto.AgentExecuteAckResponse;
 import com.itgeo.fitmate.api.agent.dto.AgentExecuteContext;
 import com.itgeo.fitmate.api.agent.infrastructure.entity.AgentRun;
@@ -17,6 +18,7 @@ import com.itgeo.fitmate.common.constant.RedisKeyConstants;
 import jakarta.annotation.Resource;
 import java.util.Collections;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
@@ -179,7 +181,10 @@ public class AgentExecuteServiceImpl implements AgentExecuteService {
                     chatEntity,
                     new TokenUsage(),
                     false,
-                    new StringBuilder()
+                    new StringBuilder(),
+                    new SseChunkBuffer(),
+                    new SseChunkBuffer(),
+                    new AtomicInteger(0)
             );
 
             final Long dispatchedRunId = runId;

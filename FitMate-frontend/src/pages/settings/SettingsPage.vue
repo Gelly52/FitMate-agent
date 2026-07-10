@@ -1,7 +1,7 @@
 <!-- FitMate-frontend/src/pages/settings/SettingsPage.vue -->
 <template>
-  <div class="settings-page px-lg py-lg overflow-y-auto">
-    <header class="mb-xl">
+  <div class="settings-page px-lg pb-lg overflow-y-auto">
+    <header class="mb-xl mt-lg">
       <h1 class="font-headline-md text-headline-md text-on-surface tracking-tight">设置</h1>
       <p class="font-inter text-label-xs text-on-surface-variant uppercase tracking-widest opacity-70 mt-xs">
         Manage your account &amp; appearance
@@ -14,6 +14,8 @@
       <ProfileSection v-if="activeSection === 'profile'" :profile="profile" @updated="onProfileUpdated" />
       <AppearanceSection v-else-if="activeSection === 'appearance'" />
       <LlmConfigSection v-else-if="activeSection === 'llm'" />
+      <McpConfigSection v-else-if="activeSection === 'mcp'" />
+      <SkillsSection v-else-if="activeSection === 'skills'" />
       <MemorySection v-else-if="activeSection === 'memory'" />
       <AboutSection v-else-if="activeSection === 'about'" />
     </div>
@@ -27,12 +29,14 @@ import ProfileSection from "./components/ProfileSection.vue";
 import AppearanceSection from "./components/AppearanceSection.vue";
 import AboutSection from "./components/AboutSection.vue";
 import LlmConfigSection from "./components/LlmConfigSection.vue";
+import McpConfigSection from "./components/McpConfigSection.vue";
+import SkillsSection from "./components/SkillsSection.vue";
 import MemorySection from "./components/MemorySection.vue";
 import type { UserProfile } from "../../types/settings";
 
 export default {
   name: "SettingsPage",
-  components: { SettingsSectionNav, ProfileSection, AppearanceSection, AboutSection, LlmConfigSection, MemorySection },
+  components: { SettingsSectionNav, ProfileSection, AppearanceSection, AboutSection, LlmConfigSection, McpConfigSection, SkillsSection, MemorySection },
   data() {
     return {
       activeSection: "profile",
@@ -56,7 +60,7 @@ export default {
     },
     applyHash() {
       const hash = (this.$route && this.$route.hash || "").replace("#", "");
-      if (hash && ["profile", "appearance", "llm", "memory", "about"].includes(hash)) {
+      if (hash && ["profile", "appearance", "llm", "mcp", "skills", "memory", "about"].includes(hash)) {
         this.activeSection = hash;
       }
     },

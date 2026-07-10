@@ -143,6 +143,7 @@ export function normalizeAgentTraceEvent(payload: unknown): AgentTraceEvent | nu
     runStatus: readString(parsed.runStatus),
     toolName: readString(parsed.toolName),
     toolCallId: readString(parsed.toolCallId),
+    subagentRunId: (parsed.subagentRunId as number | string | undefined) ?? undefined,
     iterationNo: readNumber(parsed.iterationNo ?? parsed.iteration),
     durationMs: readNumber(parsed.durationMs),
     message: readString(parsed.message ?? parsed.description),
@@ -173,6 +174,12 @@ function resolveTraceLabel(event: AgentTraceEvent, fallbackIndex: number): strin
   }
   if (eventType === "llm_finished") {
     return "LLM 分析完成";
+  }
+  if (eventType === "subagent_started") {
+    return "派生 Sub-Agent";
+  }
+  if (eventType === "subagent_finished") {
+    return "Sub-Agent 已完成";
   }
   if (eventType === "final_answer" || eventType === "run_finished") {
     return "最终答案已生成";

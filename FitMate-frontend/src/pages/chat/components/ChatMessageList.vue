@@ -23,6 +23,7 @@
         :thinking-expanded="thinkingExpanded"
         :is-sending="isSending"
         :is-streaming="isStreaming"
+        :active-agent-runs="activeAgentRuns"
         @toggle-thinking="$emit('toggle-thinking')"
       />
 
@@ -89,12 +90,13 @@
               :thinking-loaded="!!item.thinkingLoaded"
               :thinking-loading="!!item.thinkingLoading"
               :message-id="item.messageId"
+              :active-agent-runs="activeAgentRuns"
               @toggle-thinking="$emit('toggle-thinking', item)"
             />
             <div
               v-if="item.isStreaming && !item.isFinished"
-              class="msg-text msg-text-streaming"
-            >{{ item.content }}</div>
+              class="msg-text msg-text-streaming markdown-body msg-text-plain"
+            >{{ item.content }}<span class="streaming-cursor">▍</span></div>
             <div
               v-else
               class="msg-text markdown-body"
@@ -179,6 +181,12 @@ export default {
       type: Object,
       default: function () {
         return null;
+      },
+    },
+    activeAgentRuns: {
+      type: Object,
+      default: function () {
+        return {};
       },
     },
     isThinking: {
@@ -454,6 +462,36 @@ export default {
 .msg-text-streaming {
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* 流式期间纯文本渲染：保留 markdown 缩进/换行视觉，但不做解析 */
+.msg-text-plain {
+  font-family: inherit;
+  line-height: 1.6;
+}
+
+/* 流式输出光标动画 */
+.streaming-cursor {
+  display: inline-block;
+  margin-left: 2px;
+  color: var(--accent-color, #19c37d);
+  animation: streaming-blink 1s steps(2, start) infinite;
+}
+
+@keyframes streaming-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .streaming-cursor {
+    animation: none;
+  }
 }
 
 .msg-meta {

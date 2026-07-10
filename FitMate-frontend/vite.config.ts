@@ -9,7 +9,7 @@ function resolveManualChunk(id: string): string | undefined {
     return undefined;
   }
 
-  if (normalizedId.includes("@vue") || normalizedId.includes("/vue/")) {
+  if (normalizedId.includes("@vue") || normalizedId.includes("/vue/") || normalizedId.includes("vue-router")) {
     return "vendor-vue";
   }
   if (normalizedId.includes("axios")) {
@@ -31,7 +31,8 @@ export default defineConfig({
     strictPort: true,
   },
   build: {
-    outDir: "dist",
+    outDir: "../FitMate-backend/FitMate-api/src/main/resources/static",
+    emptyOutDir: true,
     rollupOptions: {
       input: {
         fitMateVite: fileURLToPath(new URL("./fitmate-vite.html", import.meta.url)),

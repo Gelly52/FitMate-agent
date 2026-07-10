@@ -1178,6 +1178,7 @@ export default {
       var buffer = this.runBuffers[runId];
       if (!buffer) return;
       var run = this.activeAgentRuns[runId];
+      var isSubAgent = run && run.isSubAgent;
 
       // 1. 更新 thinking（如果有增量）
       if (buffer.thinkingDelta) {
@@ -1188,27 +1189,38 @@ export default {
             buffer.thinkingDelta
           );
         }
-        var botMsgId = run ? run.botMsgId : null;
-        var targetMsg = this.findBotMessage(botMsgId);
-        if (targetMsg) {
-          targetMsg.thinkingContent =
-            (targetMsg.thinkingContent || "") + buffer.thinkingDelta;
-          targetMsg.thinkingSegments = this.cloneThinkingSegments(
-            run ? run.thinkingSegments : []
-          );
-          targetMsg.isThinking = true;
+        // Sub-Agent 的 thinking 只写入子 run entry，不写入父 bot 消息
+        // （父 bot 消息的 thinking 是主 Agent 的，Sub-Agent 的 thinking 通过 SubAgentTraceBlock 独立渲染）
+        if (!isSubAgent) {
+          var botMsgId = run ? run.botMsgId : null;
+          var targetMsg = this.findBotMessage(botMsgId);
+          if (targetMsg) {
+            targetMsg.thinkingContent =
+              (targetMsg.thinkingContent || "") + buffer.thinkingDelta;
+            targetMsg.thinkingSegments = this.cloneThinkingSegments(
+              run ? run.thinkingSegments : []
+            );
+            targetMsg.isThinking = true;
+          }
         }
         buffer.thinkingDelta = "";
       }
 
       // 2. 更新 content（如果有增量）
+      // Sub-Agent 的 content 不写入父 bot 消息（父消息 content 是主 Agent 的最终答案），
+      // 只累积在子 run entry 中，由 SubAgentTraceBlock 独立渲染
       if (buffer.contentDelta) {
-        var contentBotMsgId = run ? run.botMsgId : null;
-        var contentTarget = this.findBotMessage(contentBotMsgId);
-        if (contentTarget) {
-          contentTarget.content =
-            (contentTarget.content || "") + buffer.contentDelta;
-          contentTarget.isStreaming = true;
+        if (!isSubAgent) {
+          var contentBotMsgId = run ? run.botMsgId : null;
+          var contentTarget = this.findBotMessage(contentBotMsgId);
+          if (contentTarget) {
+            contentTarget.content =
+              (contentTarget.content || "") + buffer.contentDelta;
+            contentTarget.isStreaming = true;
+          }
+        } else if (run) {
+          // Sub-Agent：content 累积到子 run entry 的 subAgentContent 字段
+          run.subAgentContent = (run.subAgentContent || "") + buffer.contentDelta;
         }
         buffer.contentDelta = "";
       }
@@ -1240,6 +1252,41 @@ export default {
     clearRunBuffers() {
       this.runBuffers = {};
     },
+    normalizeMarkdown(raw) {
+      if (raw == null) return "";
+      var text = String(raw);
+      // 中文语境 Markdown 修正规则表
+      // 每条规则处理"不符合标准 Markdown 语法但符合中文表达习惯"的用法
+      var charClass = "0-9\\u4e00-\\u9fa5a-zA-Z";
+      // 中文句末标点，用于判断段落边界
+      var cnSentEnd = "\\u3002\\uff01\\uff1f\\u2026\\uff1b\\uff1a\\u300d\\u300f\\u3011\\u3015";
+      var mdFixRules = [
+        // 统一换行符：\r\n 或 \r → \n（Windows/旧 Mac 换行兼容）
+        { re: /\r\n?/g, fix: "\n" },
+        // 中文段落分隔：句末标点后单个 \n 后跟中文/英文字母开头时，补为双换行（段落分隔）
+        // 排除 Markdown 块级语法（列表-*+数字、标题#、引用>、代码`、表格|、缩进空格）
+        { re: new RegExp("([" + cnSentEnd + "!?.;:])\\n(?=[\\u4e00-\\u9fa5a-zA-Z])", "g"), fix: "$1\n\n" },
+        // # 标题：# 后无空格不是标题，补空格
+        { re: /^(#{1,6})([^\s#])/gm, fix: "$1 $2" },
+        // - * + 列表：符号后无空格不是列表，补空格
+        { re: /^(\s*)([-*+])([^\s-*+])/gm, fix: "$1$2 $3" },
+        // ~ 范围号：数字/中文/英文之间的单个 ~ 是范围符号，转义
+        { re: new RegExp("([" + charClass + "])~(?=[" + charClass + "])", "g"), fix: "$1\\~" },
+        // * 乘法：数字之间的 * 是乘法运算，转义
+        { re: new RegExp("([" + charClass + "])\\*(?=[" + charClass + "])", "g"), fix: "$1\\*" },
+        // _ 连接符：字母/中文/数字之间的 _ 是变量名/下标连接，转义
+        { re: new RegExp("([" + charClass + "])_(?=[" + charClass + "])", "g"), fix: "$1\\_" },
+        // | 分隔符：数字/中文之间的 | 是"或"分隔，转义（避免误判为 GFM 表格）
+        { re: new RegExp("([" + charClass + "])\\|(?=[" + charClass + "])", "g"), fix: "$1\\|" },
+      ];
+      mdFixRules.forEach(function (rule) {
+        text = text.replace(rule.re, rule.fix);
+      });
+      return text;
+    },
+    renderMarkdown(raw) {
+      return marked.parse(this.normalizeMarkdown(raw));
+    },
     /**
      * 收尾流式中的 bot 消息：flush buffer + 保存 rawContent + 渲染 markdown。
      * 用于 SSE 断连、stopGeneration 超时等非正常 finish 路径，避免消息卡在纯文本状态。
@@ -1250,7 +1297,7 @@ export default {
       if (!target || !target.isStreaming) return;
       var rawContent = target.content || "";
       target.rawContent = rawContent;
-      target.content = marked.parse(rawContent);
+      target.content = this.renderMarkdown(rawContent);
       target.isStreaming = false;
       target.isFinished = true;
       if (interrupted) target.interrupted = true;
@@ -1261,12 +1308,10 @@ export default {
      * 避免任务 A 的实时内容串入任务 B 的窗口。
      */
     isBackgroundRun(run: any): boolean {
-      return (
-        !!run &&
-        run.chatSessionId != null &&
-        this.activeChatSessionId != null &&
-        run.chatSessionId !== this.activeChatSessionId
-      );
+      if (!run || run.chatSessionId == null || this.activeChatSessionId == null) {
+        return false;
+      }
+      return String(run.chatSessionId) !== String(this.activeChatSessionId);
     },
     /**
      * 按 runId 取 run entry；不存在时按需创建。
@@ -1292,6 +1337,7 @@ export default {
       const runId = String(init.runId);
       const run = {
         runId: runId,
+        parentRunId: init.parentRunId != null ? String(init.parentRunId) : null,
         chatSessionId: init.chatSessionId != null ? init.chatSessionId : this.activeChatSessionId,
         sessionCode: init.sessionCode != null ? String(init.sessionCode) : null,
         botMsgId: init.botMsgId != null ? String(init.botMsgId) : null,
@@ -1304,6 +1350,7 @@ export default {
         thinkingSegments: [],
         thinkingContent: "",
         tokenUsage: null,
+        isSubAgent: !!init.parentRunId,
       };
       this.activeAgentRuns[runId] = run;
       return run;
@@ -1607,7 +1654,10 @@ export default {
       run.botMsgId = detail.botMsgId ? String(detail.botMsgId) : run.botMsgId;
       run.requestText = detail.requestText || run.requestText;
       run.status = normalizedStatus;
-      run.sceneType = "agent";
+      // Sub-Agent run 保持 sceneType="subagent"，主 Agent run 设为 "agent"
+      if (!run.isSubAgent) {
+        run.sceneType = "agent";
+      }
       if (detail.sourceType) {
         run.sourceType = String(detail.sourceType).toLowerCase();
       }
@@ -1642,6 +1692,146 @@ export default {
           normalizedStatus === "success"
             ? "本轮任务已完成，可继续发起新任务。"
             : "任务执行失败，请调整后重试。";
+      }
+
+      // 历史加载：处理 Sub-Agent run 列表，注册到 activeAgentRuns 供嵌套渲染
+      this.applySubRunsFromDetail(detail, run);
+    },
+
+    /**
+     * 历史加载时把 detail.subRuns 注册为子 run entry，供 SubAgentTraceBlock 渲染。
+     * 仅在父 run 为主 Agent（parentRunId 为空）时处理。
+     */
+    applySubRunsFromDetail(detail, parentRun) {
+      console.log("[SUB-HIST-DEBUG] applySubRunsFromDetail 入口", {
+        hasDetail: !!detail,
+        hasSubRuns: !!(detail && Array.isArray(detail.subRuns)),
+        subRunsLength: detail && Array.isArray(detail.subRuns) ? detail.subRuns.length : 0,
+        hasParentRun: !!parentRun,
+        parentRunId: parentRun ? parentRun.runId : null,
+        parentRunParentRunId: parentRun ? parentRun.parentRunId : null,
+      });
+      if (!detail || !Array.isArray(detail.subRuns) || detail.subRuns.length === 0) {
+        return;
+      }
+      if (!parentRun || parentRun.parentRunId != null) {
+        // 父 run 本身就是 Sub-Agent，不再递归（后端已限制只返回一层）
+        return;
+      }
+      for (var i = 0; i < detail.subRuns.length; i++) {
+        var subDetail = detail.subRuns[i];
+        if (!subDetail || subDetail.runId == null) continue;
+        var subRunId = String(subDetail.runId);
+        var existing = (this.activeAgentRuns || {})[subRunId];
+        if (existing && this.isTerminalAgentRunStatus(existing.status) && existing.steps && existing.steps.length > 0) {
+          // 已结束且已有 steps 的子 run 不重复加载
+          continue;
+        }
+        // 创建或复用子 run entry
+        if (!existing) {
+          this.createRunEntry({
+            runId: subRunId,
+            parentRunId: parentRun.runId,
+            chatSessionId: parentRun.chatSessionId,
+            sessionCode: parentRun.sessionCode,
+            botMsgId: parentRun.botMsgId,
+            status: "running",
+            sceneType: "subagent",
+            sourceType: parentRun.sourceType,
+          });
+        }
+        var subRun = this.activeAgentRuns[subRunId];
+        // 递归复用 applyAgentRunDetail 填充子 run 字段（steps/status 等）
+        this.applyAgentRunDetail(subDetail, subRun);
+        // 从子 run 的 steps 中构建 thinkingSegments（applyAgentRunDetail 不做此操作，
+        // 因为实时路径通过 SSE chunk 累积；历史加载路径需从 steps 的 llm_finished outputJson 提取）
+        if (Array.isArray(subRun.steps) && subRun.steps.length > 0) {
+          var subSegments = this.buildThinkingSegmentsFromSteps(subRun.steps);
+          if (subSegments && subSegments.length > 0) {
+            subRun.thinkingSegments = subSegments;
+          }
+          // 从 final_answer step 提取 Sub-Agent 输出内容
+          for (var si = 0; si < subRun.steps.length; si++) {
+            var sstep = subRun.steps[si];
+            if (sstep && String(sstep.eventType || "").toLowerCase() === "final_answer") {
+              var outJson = sstep.outputJson;
+              if (outJson) {
+                try {
+                  var parsed = typeof outJson === "string" ? JSON.parse(outJson) : outJson;
+                  if (parsed) {
+                    var fa = parsed.finalAnswer || parsed.final_answer;
+                    if (fa) {
+                      subRun.subAgentContent = fa;
+                    }
+                  }
+                } catch (e) {
+                  // outputJson 解析失败则跳过
+                }
+              }
+              break;
+            }
+          }
+        }
+      }
+    },
+    /**
+     * 序列化父 run 的所有子 run 数据，用于写入 thinkingCache。
+     * 返回数组中每个元素是子 run 的关键字段快照。
+     */
+    collectSubRunsForCache(parentRunId) {
+      if (!parentRunId) return [];
+      var runs = this.activeAgentRuns || {};
+      var keys = Object.keys(runs);
+      var result = [];
+      var parentIdStr = String(parentRunId);
+      for (var i = 0; i < keys.length; i++) {
+        var sub = runs[keys[i]];
+        if (!sub || !sub.isSubAgent) continue;
+        if (String(sub.parentRunId) !== parentIdStr) continue;
+        result.push({
+          runId: String(sub.runId),
+          parentRunId: String(sub.parentRunId),
+          status: sub.status || "success",
+          sceneType: sub.sceneType || "subagent",
+          steps: Array.isArray(sub.steps) ? sub.steps : [],
+          thinkingSegments: Array.isArray(sub.thinkingSegments) ? sub.thinkingSegments : [],
+          thinkingContent: sub.thinkingContent || "",
+          subAgentContent: sub.subAgentContent || "",
+        });
+      }
+      return result;
+    },
+    /**
+     * 从缓存的 subRuns 数组重建子 run entry 到 activeAgentRuns。
+     */
+    hydrateSubRunsFromCache(parentRunId, parentBotMsgId, cachedSubRuns) {
+      if (!parentRunId || !Array.isArray(cachedSubRuns) || cachedSubRuns.length === 0) return;
+      var runs = this.activeAgentRuns || (this.activeAgentRuns = {});
+      var parentIdStr = String(parentRunId);
+      for (var i = 0; i < cachedSubRuns.length; i++) {
+        var cs = cachedSubRuns[i];
+        if (!cs || !cs.runId) continue;
+        var subId = String(cs.runId);
+        if (runs[subId] && this.isTerminalAgentRunStatus(runs[subId].status) && runs[subId].steps && runs[subId].steps.length > 0) {
+          continue;
+        }
+        if (!runs[subId]) {
+          this.createRunEntry({
+            runId: subId,
+            parentRunId: parentIdStr,
+            chatSessionId: this.activeChatSessionId,
+            botMsgId: parentBotMsgId,
+            status: cs.status || "success",
+            sceneType: cs.sceneType || "subagent",
+            sourceType: "chat",
+          });
+        }
+        var target = runs[subId];
+        target.status = cs.status || "success";
+        target.steps = Array.isArray(cs.steps) ? cs.steps : [];
+        target.thinkingSegments = Array.isArray(cs.thinkingSegments) ? cs.thinkingSegments : [];
+        target.thinkingContent = cs.thinkingContent || "";
+        target.subAgentContent = cs.subAgentContent || "";
       }
     },
     silentFetchAgentRunDetail(runId) {
@@ -1703,6 +1893,14 @@ export default {
         requestPayload && requestPayload.message
           ? requestPayload.message
           : run.requestText;
+      // Agent run：预初始化第1轮 thinking segment，
+      // 确保首个 thinking delta 到达时已有 active 段可追加，
+      // 避免因 llm_started 事件晚于 delta 到达导致内容落入兜底段
+      if ((expectedSceneType || "agent") === "agent") {
+        if (!Array.isArray(run.thinkingSegments) || run.thinkingSegments.length === 0) {
+          run.thinkingSegments = [{ iteration: 1, content: "", isStreaming: true }];
+        }
+      }
       // ack 路径：允许更新当前会话指针
       this.applyServerSessionMeta(payload, { updateGlobalSession: true });
       this.snapshotRunState(run.runId);
@@ -1791,6 +1989,16 @@ export default {
         run.botMsgId = payload.botMsgId;
       }
 
+      // Sub-Agent run：累积到子 run buffer（由 flushRunBuffer 写入 run.thinkingContent），
+      // 但不更新全局 UI 状态（isThinking/botMsgId）和父 bot 消息
+      if (run.isSubAgent) {
+        var subBuffer = this.getOrCreateBuffer(run.runId);
+        if (!subBuffer) return;
+        subBuffer.thinkingDelta += thinkingText;
+        this.scheduleFlush(run.runId);
+        return;
+      }
+
       // 后台 run：直接更新 run entry（不进 UI buffer），仅节流持久化
       if (this.isBackgroundRun(run)) {
         run.thinkingContent = (run.thinkingContent || "") + thinkingText;
@@ -1861,11 +2069,11 @@ export default {
     // 若没有 active 段（异常情况或历史消息恢复后），创建一个 iteration=0 的兜底段
     appendThinkingChunkToSegments(segments, text, iteration) {
       if (!Array.isArray(segments)) {
-        return [{ iteration: 0, content: text, isStreaming: true }];
+        var iter0 = iteration != null ? iteration : 1;
+        return [{ iteration: iter0, content: text, isStreaming: true }];
       }
       var activeIdx = this.findActiveThinkingSegment(segments);
       if (activeIdx >= 0) {
-        // 不可变更新：创建新 segment 对象，避免与其它引用共享对象时重复追加
         var oldSeg = segments[activeIdx];
         var newSeg = {
           iteration: oldSeg.iteration,
@@ -1876,13 +2084,20 @@ export default {
         newSegments[activeIdx] = newSeg;
         return newSegments;
       }
-      var newSegments2 = segments.slice();
-      newSegments2.push({
-        iteration: iteration != null ? iteration : 0,
-        content: text,
-        isStreaming: true,
-      });
-      return newSegments2;
+      if (segments.length > 0) {
+        var lastIdx = segments.length - 1;
+        var lastSeg = segments[lastIdx];
+        var mergedSeg = {
+          iteration: lastSeg.iteration,
+          content: (lastSeg.content || "") + text,
+          isStreaming: lastSeg.isStreaming,
+        };
+        var mergedSegments = segments.slice();
+        mergedSegments[lastIdx] = mergedSeg;
+        return mergedSegments;
+      }
+      var nextIter = iteration != null ? iteration : 1;
+      return [{ iteration: nextIter, content: text, isStreaming: true }];
     },
     // 深拷贝 thinkingSegments 数组（含 segment 对象），避免引用共享导致重复追加
     cloneThinkingSegments(segments) {
@@ -1905,9 +2120,7 @@ export default {
       if (!text) {
         return [];
       }
-      // 统计 steps 里 LLM 轮次锚点的数量
-      // 实时流式：llm_started
-      // 历史消息：DB 里 markStepSuccess 用 llm_finished 覆盖了 eventType
+      var uniqueIters = {};
       var llmAnchorCount = 0;
       if (Array.isArray(steps)) {
         for (var i = 0; i < steps.length; i++) {
@@ -1915,16 +2128,19 @@ export default {
           if (step && step.eventType) {
             var et = String(step.eventType).toLowerCase();
             if (et === "llm_started" || et === "llm_finished") {
-              llmAnchorCount++;
+              var sIter = step.iterationNo != null ? Number(step.iterationNo) : 0;
+              var key3 = sIter > 0 ? ("iter-" + sIter) : ("idx-" + llmAnchorCount);
+              if (!uniqueIters[key3]) {
+                uniqueIters[key3] = true;
+                llmAnchorCount++;
+              }
             }
           }
         }
       }
-      // 没有 LLM 锚点或只有 1 个，不切分
       if (llmAnchorCount <= 1) {
         return [{ iteration: 1, content: text, isStreaming: false }];
       }
-      // 按段数均匀切分（按字符数等分），iteration 从 1 开始（与实时流式一致）
       var segments = [];
       var totalLen = text.length;
       var segLen = Math.floor(totalLen / llmAnchorCount);
@@ -1947,24 +2163,29 @@ export default {
         return null;
       }
       var segments = [];
-      var anchorCount = 0;
+      var seenIters = {};
       for (var i = 0; i < steps.length; i++) {
         var step = steps[i];
         if (!isLlmAnchorStep(step)) {
           continue;
         }
-        anchorCount++;
+        var stepIter = step.iterationNo != null ? Number(step.iterationNo) : 0;
+        if (stepIter > 0) {
+          var dedupKey2 = "iter-" + stepIter;
+          if (seenIters[dedupKey2]) continue;
+          seenIters[dedupKey2] = true;
+        }
         var content = extractThinkingFromStepOutput(step);
+        var segIter = stepIter > 0 ? stepIter : (segments.length + 1);
         segments.push({
-          iteration: anchorCount,
+          iteration: segIter,
           content: content || "",
           isStreaming: false,
         });
       }
-      if (anchorCount === 0) {
+      if (segments.length === 0) {
         return null;
       }
-      // 所有锚点都提取不到 reasoningContent（旧数据/异常）→ 返回 null 让调用方降级
       var hasAnyContent = false;
       for (var j = 0; j < segments.length; j++) {
         if (segments[j].content) {
@@ -2021,6 +2242,28 @@ export default {
         return seg;
       });
     },
+    finalizeAllThinkingSegments(run) {
+      if (!run) return;
+      var segments = run.thinkingSegments || [];
+      var hasStreaming = false;
+      for (var i = 0; i < segments.length; i++) {
+        if (segments[i] && segments[i].isStreaming) {
+          hasStreaming = true;
+          break;
+        }
+      }
+      if (!hasStreaming) return;
+      run.thinkingSegments = segments.map(function (seg) {
+        if (seg && seg.isStreaming) {
+          return {
+            iteration: seg.iteration,
+            content: seg.content,
+            isStreaming: false,
+          };
+        }
+        return seg;
+      });
+    },
     async toggleThinkingExpanded(message) {
       // 全局思考卡片（无 message 对象）切换
       if (!message || typeof message !== "object" || !message.botMsgId) {
@@ -2049,12 +2292,42 @@ export default {
             String(message.botMsgId)
           );
           if (cached) {
-            message.thinkingContent = cached.thinkingContent;
-            message.thinkingSegments = cached.thinkingSegments;
-            message.agentSteps = cached.agentSteps;
-            message.thinkingLoaded = true;
-            message.thinkingExpanded = true;
-            return;
+            var toggleCachedSteps = cached.agentSteps;
+            var toggleHasSubAgentStep = false;
+            if (Array.isArray(toggleCachedSteps)) {
+              for (var tci = 0; tci < toggleCachedSteps.length; tci++) {
+                var tcet = toggleCachedSteps[tci] && toggleCachedSteps[tci].eventType;
+                if (tcet === "subagent_started" || tcet === "subagent_finished") {
+                  toggleHasSubAgentStep = true;
+                  break;
+                }
+              }
+            }
+            var toggleHasCachedSubRuns = Array.isArray(cached.subRuns) && cached.subRuns.length > 0;
+            // 有 subagent step 但缓存中没有 subRuns 数据（旧 v=1 缓存），跳过缓存走 API
+            if (toggleHasSubAgentStep && !toggleHasCachedSubRuns) {
+              // fall through to API path
+            } else {
+              message.thinkingContent = cached.thinkingContent;
+              message.thinkingSegments = cached.thinkingSegments;
+              message.agentSteps = cached.agentSteps;
+              // 水合子 run 数据到 activeAgentRuns
+              if (toggleHasCachedSubRuns) {
+                var toggleParentRunId = null;
+                for (var tsi = 0; tsi < cached.subRuns.length; tsi++) {
+                  if (cached.subRuns[tsi] && cached.subRuns[tsi].parentRunId) {
+                    toggleParentRunId = cached.subRuns[tsi].parentRunId;
+                    break;
+                  }
+                }
+                if (toggleParentRunId) {
+                  this.hydrateSubRunsFromCache(toggleParentRunId, message.botMsgId, cached.subRuns);
+                }
+              }
+              message.thinkingLoaded = true;
+              message.thinkingExpanded = true;
+              return;
+            }
           }
         }
       }
@@ -2087,6 +2360,37 @@ export default {
                   }
                 }
                 message.agentSteps = normalizedSteps;
+
+                // 历史加载：处理 Sub-Agent run 列表，注册到 activeAgentRuns 供嵌套渲染
+                // 需要先确保父 run entry 存在（SubAgentTraceBlock 通过 activeAgentRuns 查找子 run）
+                var histDetail = runRes.data;
+                var histRunId = histDetail.runId != null ? String(histDetail.runId) : null;
+                console.log("[SUB-HIST-DEBUG] 历史加载 runRes.data", {
+                  histRunId: histDetail.runId,
+                  histBotMsgId: histDetail.botMsgId,
+                  histStatus: histDetail.status,
+                  hasSubRuns: Array.isArray(histDetail.subRuns),
+                  subRunsLength: Array.isArray(histDetail.subRuns) ? histDetail.subRuns.length : 0,
+                  stepsLength: Array.isArray(histDetail.steps) ? histDetail.steps.length : 0,
+                  rawKeys: Object.keys(histDetail),
+                });
+                if (histRunId) {
+                  if (!this.activeAgentRuns[histRunId]) {
+                    this.createRunEntry({
+                      runId: histRunId,
+                      chatSessionId: histDetail.chatSessionId,
+                      sessionCode: histDetail.sessionCode,
+                      botMsgId: histDetail.botMsgId || message.botMsgId,
+                      status: histDetail.status || "success",
+                      sceneType: "agent",
+                      sourceType: "chat",
+                    });
+                  }
+                  var histParentRun = this.activeAgentRuns[histRunId];
+                  // 同步 steps 到父 run entry（applySubRunsFromDetail 需要父 run 的 botMsgId 等字段）
+                  histParentRun.steps = normalizedSteps;
+                  this.applySubRunsFromDetail(histDetail, histParentRun);
+                }
               }
             } catch (se) {
               console.warn("加载执行轨迹失败:", se);
@@ -2124,6 +2428,7 @@ export default {
           var writeUserKey = this.resolveStableUserKey();
           var writeSessionId = this.activeChatSessionId;
           if (writeUserKey && writeSessionId != null && message.botMsgId) {
+            var apiCachedSubRuns = histRunId ? this.collectSubRunsForCache(histRunId) : [];
             setThinkingCache(
               String(writeUserKey),
               String(writeSessionId),
@@ -2132,6 +2437,7 @@ export default {
                 thinkingContent: String(thinkingText),
                 thinkingSegments: message.thinkingSegments,
                 agentSteps: message.agentSteps,
+                subRuns: apiCachedSubRuns,
               }
             );
           }
@@ -2231,6 +2537,16 @@ export default {
       }
       if (!this.isTerminalAgentRunStatus(run.status)) {
         run.status = "running";
+      }
+
+      // Sub-Agent run：累积到子 run buffer（由 flushRunBuffer 写入 run.subAgentContent），
+      // 但不更新全局 UI 状态（isStreaming/guidanceMessage）和父 bot 消息
+      if (run.isSubAgent) {
+        var subBuffer = this.getOrCreateBuffer(run.runId);
+        if (!subBuffer) return;
+        subBuffer.contentDelta += receiveMsg;
+        this.scheduleFlush(run.runId);
+        return;
       }
 
       // 后台 run：仅节流持久化，跳过 UI 状态与 chatList 操作
@@ -2401,7 +2717,28 @@ export default {
       if (!event) {
         return;
       }
-      const run = this.resolveRunForEvent(event);
+      // subagent_started 事件：主 Agent runId + subagentRunId 同时出现
+      // 此时需要用 subagentRunId 创建子 run entry，继承父 run 的 chatSessionId 和 botMsgId
+      var eventType = (event.eventType || "").toLowerCase();
+      if (eventType === "subagent_started" && event.subagentRunId != null) {
+        var parentRun = this.resolveRunForEvent(event);
+        if (parentRun) {
+          var subRunId = String(event.subagentRunId);
+          if (!this.activeAgentRuns[subRunId]) {
+            this.createRunEntry({
+              runId: subRunId,
+              parentRunId: parentRun.runId,
+              chatSessionId: parentRun.chatSessionId,
+              sessionCode: parentRun.sessionCode,
+              botMsgId: parentRun.botMsgId,
+              status: "running",
+              sceneType: "subagent",
+              sourceType: parentRun.sourceType,
+            });
+          }
+        }
+      }
+      const run = this.resolveRunForEvent(event, { createIfMissing: true });
       if (!run) return;
       var normalizedStep = this.normalizeAgentStepItem(
         event,
@@ -2546,10 +2883,24 @@ export default {
       } else if (!this.isTerminalAgentRunStatus(run.status)) {
         run.status = "running";
       }
+      // 终态路径：确保所有 streaming thinking segments 被关闭
+      if (nextGuidance != null) {
+        this.finalizeAllThinkingSegments(run);
+        // flush buffer 确保残留 delta 写入
+        if (run.runId) this.flushRunBuffer(run.runId);
+      }
       this.snapshotRunState(run.runId);
 
       // 后台 run：跳过 UI 状态与 chatList 操作，避免串入当前窗口
       if (this.isBackgroundRun(run)) return;
+
+      // Sub-Agent run：数据只保留在子 run entry，通过 SubAgentTraceBlock 独立渲染，
+      // 不污染父 bot 消息的 agentSteps/thinkingSegments，也不重置全局 UI 状态
+      // （Sub-Agent 终态不应影响主 Agent 的 isSending/isStreaming/isThinking）
+      if (run && run.isSubAgent) {
+        this.scrollToBottom();
+        return;
+      }
 
       // 当前 run：更新 UI 状态与 chatList
       if (nextGuidance != null) {
@@ -2569,10 +2920,13 @@ export default {
         );
         if (targetMsg) {
           targetMsg.agentSteps = run.steps.slice();
-          // 同步 thinkingSegments 到 bot 消息对象（直接引用最新值，保持响应式）
           targetMsg.thinkingSegments = this.cloneThinkingSegments(
             run.thinkingSegments || this.thinkingSegments
           );
+          targetMsg.thinkingContent = (run.thinkingSegments || [])
+            .map(function (s) { return (s && s.content) || ""; })
+            .join("\n");
+          targetMsg.isThinking = !(nextGuidance != null);
         }
       }
       // 决策轨迹新增/更新时也触发自动滚动，与思考内容流式输出一致
@@ -2623,7 +2977,6 @@ export default {
         if (payload.chatSessionId != null && run.chatSessionId == null) {
           run.chatSessionId = payload.chatSessionId;
         }
-        // 修复 interrupted/cancelled 状态识别（原逻辑仅判 failed 否则一律 success）
         var normalized = this.normalizeAgentRunStatus(payload.status);
         if (normalized === "failed") {
           run.status = "failed";
@@ -2636,17 +2989,20 @@ export default {
           nextGuidance = "本轮任务已完成，可继续发起新任务。";
         }
         run.finishReceived = true;
-        // snapshot 须在 removeRunEntry 之前调用（仍读 this.activeAgentRuns[runId]）
+        // 关键顺序：先 flush buffer（run 仍在 Map 中，botMsgId 可获取），
+        // 再 finalize thinking segments，最后 snapshot + 后台详情拉取 + 移除 entry
+        if (runId) this.flushRunBuffer(runId);
+        this.finalizeAllThinkingSegments(run);
         this.snapshotRunState(run.runId);
         this.silentFetchAgentRunDetail(
           payload.runId != null ? payload.runId : run.runId
         );
-        // 终态后移除 entry
         if (runId && this.isTerminalAgentRunStatus(run.status)) {
           this.removeRunEntry(runId);
         }
       } else {
         nextGuidance = "本轮任务已完成，可继续发起新任务。";
+        if (runId) this.flushRunBuffer(runId);
       }
 
       // 后台 run：跳过 UI 状态与 chatList 操作，避免串入当前窗口
@@ -2654,34 +3010,43 @@ export default {
 
       // 当前 run：更新 chatList + UI 状态
       this.guidanceMessage = nextGuidance;
-      // tokenUsage 双写：run entry 已在守卫前更新，这里同步到会话级 data 字段
-      // （run 终态后 removeRunEntry 不会影响 this.tokenUsage，UI 持续显示用量）
       if (run && run.tokenUsage) {
         this.tokenUsage = run.tokenUsage;
       }
-      // botMsgId 双写：会话级，用于回滚重发
       if (botMsgId) {
         this.botMsgId = botMsgId;
       }
-      // finish 事件可能来自后台 run，不更新当前会话指针
       this.applyServerSessionMeta(payload);
 
       var matched = false;
-      // finish 前 flush 残留 buffer，确保流式期间累积的 content 已写入 chatItem
-      if (runId) this.flushRunBuffer(runId);
+      var finalThinkingSegments = run
+        ? this.cloneThinkingSegments(run.thinkingSegments || [])
+        : [];
       for (var i = 0; i < this.chatList.length; i++) {
         var chatItem = this.chatList[i];
         if (chatItem.botMsgId == botMsgId && chatItem.chatType !== "user") {
-          // 优先用 chatItem 已累积的 content（流式原文），否则用 finish payload 的 message
-          var rawContent = chatItem.isStreaming
-            ? (chatItem.content || message || "")
-            : (message || chatItem.content || "");
+          var streamedContent = chatItem.content || "";
+          var finalMessage = message || "";
+          var rawContent;
+          if (chatItem.isStreaming) {
+            rawContent = streamedContent.length >= finalMessage.length
+              ? streamedContent
+              : finalMessage;
+            if (!rawContent) rawContent = finalMessage || streamedContent;
+          } else {
+            rawContent = finalMessage || streamedContent;
+          }
           chatItem.rawContent = rawContent;
-          chatItem.content = marked.parse(rawContent);
+          chatItem.content = this.renderMarkdown(rawContent);
           chatItem.isStreaming = false;
           chatItem.isFinished = true;
+          chatItem.isThinking = false;
           chatItem.interrupted = isInterrupted;
           chatItem.sources = normalizedSources;
+          chatItem.thinkingSegments = finalThinkingSegments;
+          chatItem.thinkingContent = finalThinkingSegments
+            .map(function (s) { return (s && s.content) || ""; })
+            .join("\n");
           chatItem.sourceType =
             payload.sourceType || chatItem.sourceType || null;
           chatItem.sessionCode =
@@ -2694,7 +3059,7 @@ export default {
       if (!matched && botMsgId) {
         this.chatList.push({
           id: "temp-" + this.generateRandomId(8),
-          content: marked.parse(message || ""),
+          content: this.renderMarkdown(message || ""),
           rawContent: message || "",
           isStreaming: false,
           isFinished: true,
@@ -2733,6 +3098,7 @@ export default {
           // 终态且非中断时才缓存；interrupted/cancelled 不写入，避免缓存半截内容
           var finishStatus = this.normalizeAgentRunStatus(run.status);
           if (finishStatus === "success") {
+            var cachedSubRuns = this.collectSubRunsForCache(run.runId);
             setThinkingCache(
               String(finishUserKey),
               String(finishSessionId),
@@ -2746,6 +3112,7 @@ export default {
                   .join("\n"),
                 thinkingSegments: run.thinkingSegments || [],
                 agentSteps: run.steps || [],
+                subRuns: cachedSubRuns,
               }
             );
           }
@@ -2917,9 +3284,22 @@ export default {
               } catch (error) {
                 console.error("解析finish事件失败:", error);
                 me.guidanceMessage = "任务已结束，但结果解析失败，请稍后重试。";
-                // botMsgId 已是 computed（派生自 currentAgentRun），无需手动清空
                 me.isSending = false;
                 me.isStreaming = false;
+                me.isThinking = false;
+                var catchBotMsgId = me.botMsgId;
+                if (catchBotMsgId) {
+                  if (me.currentAgentRun && me.currentAgentRun.runId) {
+                    me.flushRunBuffer(me.currentAgentRun.runId);
+                  }
+                  me.finalizeStreamingChatItem(catchBotMsgId, true);
+                }
+                for (var cfi = 0; cfi < me.chatList.length; cfi++) {
+                  if (me.chatList[cfi].botMsgId == catchBotMsgId) {
+                    me.chatList[cfi].isThinking = false;
+                    break;
+                  }
+                }
               }
 
               me.isThinking = false;
@@ -3182,7 +3562,7 @@ export default {
             ? String(message.messageId)
             : "record-" + index + "-" + this.generateRandomId(6),
         messageId: message.messageId != null ? message.messageId : null,
-        content: role === "assistant" ? marked.parse(rawContent) : rawContent,
+        content: role === "assistant" ? this.renderMarkdown(rawContent) : rawContent,
         rawContent: rawContent,
         isStreaming: false,
         isFinished: true,
@@ -3228,9 +3608,38 @@ export default {
           String(item.botMsgId)
         );
         if (cached) {
+          var cachedSteps = cached.agentSteps;
+          var hasSubAgentStep = false;
+          if (Array.isArray(cachedSteps)) {
+            for (var ci = 0; ci < cachedSteps.length; ci++) {
+              var cet = cachedSteps[ci] && cachedSteps[ci].eventType;
+              if (cet === "subagent_started" || cet === "subagent_finished") {
+                hasSubAgentStep = true;
+                break;
+              }
+            }
+          }
+          var hasCachedSubRuns = Array.isArray(cached.subRuns) && cached.subRuns.length > 0;
+          // 有 subagent step 但缓存中没有 subRuns 数据（旧 v=1 缓存），跳过
+          if (hasSubAgentStep && !hasCachedSubRuns) {
+            continue;
+          }
           item.thinkingContent = cached.thinkingContent;
           item.thinkingSegments = cached.thinkingSegments;
           item.agentSteps = cached.agentSteps;
+          // 水合子 run 数据到 activeAgentRuns
+          if (hasCachedSubRuns) {
+            var listParentRunId = null;
+            for (var lsi = 0; lsi < cached.subRuns.length; lsi++) {
+              if (cached.subRuns[lsi] && cached.subRuns[lsi].parentRunId) {
+                listParentRunId = cached.subRuns[lsi].parentRunId;
+                break;
+              }
+            }
+            if (listParentRunId) {
+              this.hydrateSubRunsFromCache(listParentRunId, item.botMsgId, cached.subRuns);
+            }
+          }
           item.thinkingLoaded = true;
           item.thinkingExpanded = true;
         }
@@ -3282,9 +3691,11 @@ export default {
         return;
       }
 
+      // 流式输出期间 markdown 渲染会引发布局抖动，提高阈值避免误判为用户主动滚动
+      var threshold = this.isStreaming ? 600 : 200;
+
       // 用户主动滚动：远离底部时标记停止跟随，靠近底部时恢复跟随
-      // 阈值 200px，避免内容布局抖动导致的误判
-      if (distanceFromBottom > 200) {
+      if (distanceFromBottom > threshold) {
         this.isUserScrolledUp = true;
         this.showBackToBottom = true;
       } else {

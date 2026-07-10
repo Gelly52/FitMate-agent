@@ -17,6 +17,11 @@ public class WikiProperties {
     private Vectorstore vectorstore = new Vectorstore();
     private Keyword keyword = new Keyword();
 
+    /** 页面保留月数，compiled_at 早于该阈值的页面将被清理 */
+    private int retentionMonths = 3;
+    /** 每个 space 的页面上限，超过时按最旧优先删除 */
+    private int maxPagesPerSpace = 1000;
+
     @Data
     public static class Compile {
         private Integer asyncPoolSize = 3;

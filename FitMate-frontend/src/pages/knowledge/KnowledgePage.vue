@@ -51,13 +51,21 @@
           </div>
           <div v-if="uploadedDocs.length > 0" class="kb-file-list">
             <div
-              v-for="(doc, idx) in uploadedDocs"
-              :key="idx"
+              v-for="doc in uploadedDocs"
+              :key="doc.id"
               class="kb-file-item"
             >
               <span class="material-symbols-outlined kb-file-icon">description</span>
               <span class="kb-file-name">{{ doc.fileName || "未命名文档" }}</span>
               <span class="kb-file-meta">{{ formatChatSessionTime(doc.createdAt) || "--" }}</span>
+              <button
+                type="button"
+                class="kb-file-delete"
+                title="删除文档"
+                @click.stop="handleDeleteDoc(doc)"
+              >
+                <span class="material-symbols-outlined">delete</span>
+              </button>
             </div>
           </div>
           <div v-else class="kb-empty">暂无已上传文档</div>
@@ -162,6 +170,28 @@ export default {
           me.executionLog = [];
         });
     },
+    async handleDeleteDoc(doc) {
+      if (!doc || doc.id == null) {
+        return;
+      }
+      var confirmed = window.confirm(
+        '确定要删除文档"' + (doc.fileName || "未命名文档") +
+          '"吗？该文档的向量与关键词索引将一并清除，不可恢复。'
+      );
+      if (!confirmed) {
+        return;
+      }
+      var me = this;
+      try {
+        await doctorApi.deleteRagDoc(String(doc.id));
+      } catch (e) {
+        console.error("删除文档失败:", e);
+        this.showUiMessage("error", "删除文档失败，请稍后重试");
+        return;
+      }
+      this.showUiMessage("success", "文档已删除");
+      me.fetchUploadedDocs();
+    },
     mapAgentRunToLogItem(run) {
       var status = me_normalizeStatus(run && run.status);
       var rawTime = run && (run.finishedAt || run.startedAt || run.createdAt);
@@ -250,6 +280,17 @@ export default {
   gap: 8px;
   border-bottom: 1px solid var(--color-surface-container);
   padding-bottom: 24px;
+  position: relative;
+}
+.kb-header::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 60px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--color-primary), transparent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--color-primary) 70%, transparent);
 }
 
 .kb-stats {
@@ -268,6 +309,8 @@ export default {
   font-weight: 500;
   color: var(--color-on-surface);
   font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, "Inter", sans-serif;
+  text-shadow: 0 0 10px color-mix(in srgb, var(--color-primary) 30%, transparent);
 }
 
 .kb-stat-label {
@@ -284,17 +327,34 @@ export default {
   justify-content: center;
   gap: 8px;
   padding: 48px 32px;
-  border: 1px dashed var(--color-outline-variant);
-  border-radius: 8px;
+  border: 1px dashed color-mix(in srgb, var(--color-primary) 30%, var(--color-outline-variant));
+  border-radius: 10px;
   background: var(--color-surface-container-low);
   cursor: pointer;
-  transition: border-color 0.2s ease, background 0.2s ease;
+  transition: border-color 0.25s ease, background 0.25s ease, box-shadow 0.25s ease;
+  position: relative;
+  overflow: hidden;
 }
-
+.kb-dropzone::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--color-primary), transparent);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
 .kb-dropzone:hover,
 .kb-dropzone-active {
   border-color: var(--color-primary-fixed-dim);
-  background: color-mix(in srgb, var(--color-primary) 4%, transparent);
+  background: color-mix(in srgb, var(--color-primary) 5%, var(--color-surface-container-low));
+  box-shadow: 0 0 20px color-mix(in srgb, var(--color-primary) 10%, transparent), inset 0 0 20px color-mix(in srgb, var(--color-primary) 3%, transparent);
+}
+.kb-dropzone:hover::before,
+.kb-dropzone-active::before {
+  opacity: 1;
 }
 
 .kb-file-input {
@@ -330,6 +390,24 @@ export default {
 .kb-section-head {
   display: flex;
   align-items: center;
+  position: relative;
+  padding-left: 10px;
+}
+.kb-section-head::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 2px;
+  bottom: 2px;
+  width: 2px;
+  background: var(--color-primary);
+  border-radius: 2px;
+  box-shadow: 0 0 6px color-mix(in srgb, var(--color-primary) 70%, transparent);
+}
+.kb-section-head h2 {
+  font-family: ui-monospace, "Inter", sans-serif !important;
+  letter-spacing: 0.14em !important;
+  text-shadow: 0 0 8px color-mix(in srgb, var(--color-primary) 25%, transparent);
 }
 
 .kb-file-list {
@@ -341,8 +419,30 @@ export default {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 0;
+  padding: 12px 0 12px 10px;
   border-bottom: 1px solid var(--color-surface-container);
+  position: relative;
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+.kb-file-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 3px;
+  height: 0;
+  background: var(--color-primary);
+  border-radius: 2px;
+  box-shadow: 0 0 6px color-mix(in srgb, var(--color-primary) 70%, transparent);
+  transition: height 0.2s ease, top 0.2s ease;
+}
+.kb-file-item:hover::before {
+  height: 60%;
+  top: 20%;
+}
+.kb-file-item:hover {
+  background: color-mix(in srgb, var(--color-primary) 3%, transparent);
 }
 
 .kb-file-icon {
@@ -364,6 +464,32 @@ export default {
   letter-spacing: 0.08em;
   color: var(--color-on-surface-variant);
   flex-shrink: 0;
+}
+
+.kb-file-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-on-surface-variant);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s ease, color 0.2s ease, background 0.2s ease;
+  flex-shrink: 0;
+}
+.kb-file-delete .material-symbols-outlined {
+  font-size: 16px;
+}
+.kb-file-item:hover .kb-file-delete {
+  opacity: 1;
+}
+.kb-file-delete:hover {
+  color: var(--color-error);
+  background: color-mix(in srgb, var(--color-error) 10%, transparent);
 }
 
 .kb-empty {
@@ -395,6 +521,7 @@ export default {
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
   font-family: ui-monospace, monospace;
+  text-shadow: 0 0 6px color-mix(in srgb, var(--color-primary) 60%, transparent);
 }
 
 .kb-log-text {
@@ -432,8 +559,8 @@ export default {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #22c55e;
-  box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
+  background: #7ee787;
+  box-shadow: 0 0 8px #7ee787;
   animation: kb-pulse 1.6s ease-in-out infinite;
 }
 

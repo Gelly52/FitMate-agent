@@ -91,8 +91,8 @@ public class AgentController {
     }
 
 /**
-     * 查询当前登录用户指定的 Agent run 详情。
-     */
+ * 查询当前登录用户指定的 Agent run 详情。
+ */
     @GetMapping("/runs/{runId}")
     public LeeResult getRunDetail(@PathVariable Long runId) {
         try {
@@ -109,6 +109,32 @@ public class AgentController {
             return LeeResult.errorMsg(e.getMessage());
         } catch (Exception e) {
             log.error("查询Agent运行详情失败, runId={}", runId, e);
+            return LeeResult.errorException("查询Agent运行详情失败");
+        }
+    }
+
+    /**
+     * 按 botMsgId 查询当前登录用户的 Agent run 详情（含 step 列表）。
+     * <p>
+     * 用于历史会话消息二次加载执行轨迹：前端展开历史 bot 消息的思考过程时，
+     * 通过 botMsgId 反查关联的 AgentRun，并补齐 step 列表，以便还原本轮执行链路。
+     */
+    @GetMapping("/runs/by-bot-msg/{botMsgId}")
+    public LeeResult getRunDetailByBotMsgId(@PathVariable String botMsgId) {
+        try {
+            AuthenticatedUserContext authenticatedUser = UserContextHolder.getRequired();
+            AgentRunDetailResponse detail = agentRunService.getRunDetailByBotMsgId(
+                    authenticatedUser.getUserId(),
+                    botMsgId
+            );
+            if (detail == null) {
+                return LeeResult.errorMsg("Agent运行记录不存在");
+            }
+            return LeeResult.ok(detail);
+        } catch (IllegalArgumentException e) {
+            return LeeResult.errorMsg(e.getMessage());
+        } catch (Exception e) {
+            log.error("按botMsgId查询Agent运行详情失败, botMsgId={}", botMsgId, e);
             return LeeResult.errorException("查询Agent运行详情失败");
         }
     }

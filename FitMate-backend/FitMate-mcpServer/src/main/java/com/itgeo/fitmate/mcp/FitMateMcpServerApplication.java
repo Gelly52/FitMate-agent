@@ -1,10 +1,7 @@
 package com.itgeo.fitmate.mcp;
 
 import com.itgeo.fitmate.mcp.email.EmailTool;
-import com.itgeo.fitmate.mcp.fitness.metrics.BodyMetricsTool;
-import com.itgeo.fitmate.mcp.fitness.training.TrainingLogTool;
 import com.itgeo.fitmate.mcp.rag.RagManageTool;
-import com.itgeo.fitmate.mcp.time.DateTool;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.ai.tool.method.MethodToolCallbackProvider;
@@ -27,21 +24,13 @@ public class FitMateMcpServerApplication {
         SpringApplication.run(FitMateMcpServerApplication.class, args);
     }
 
-    // 注册MCP工具回调提供器
+    // 注册MCP工具回调提供器（阶段二清理：DateTool/TrainingLogTool/BodyMetricsTool 已迁本地 ToolExecutor，此处仅保留独有工具）
     @Bean
     public ToolCallbackProvider registMCPTools(
-            DateTool dateTool,
             EmailTool emailTool,
-            TrainingLogTool trainingLogTool,
-            BodyMetricsTool bodyMetricsTool,
             RagManageTool ragManageTool) {
         return MethodToolCallbackProvider.builder()
-                .toolObjects(
-                        dateTool,
-                        emailTool,
-                        trainingLogTool,
-                        bodyMetricsTool,
-                        ragManageTool)
+                .toolObjects(emailTool, ragManageTool)
                 .build();
 
     }

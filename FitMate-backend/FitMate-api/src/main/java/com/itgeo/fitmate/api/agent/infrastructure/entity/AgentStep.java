@@ -28,6 +28,8 @@ public class AgentStep {
     private String toolName;
     @TableField("tool_call_id")
     private String toolCallId;
+    @TableField("subagent_run_id")
+    private Long subagentRunId;
     @TableField("iteration_no")
     private Integer iterationNo;
     @TableField("duration_ms")

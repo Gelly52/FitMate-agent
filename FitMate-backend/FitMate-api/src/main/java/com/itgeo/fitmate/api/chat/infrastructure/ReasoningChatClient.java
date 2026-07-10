@@ -8,6 +8,7 @@ import com.itgeo.fitmate.api.chat.application.LlmConfigResolver;
 import com.itgeo.fitmate.api.chat.application.ResolvedLlmConfig;
 import com.itgeo.fitmate.api.chat.dto.ReasoningStreamChunk;
 import com.itgeo.fitmate.api.chat.dto.TokenUsage;
+import com.itgeo.fitmate.api.config.LlmConfigProperties;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -18,9 +19,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
+
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
+import reactor.core.scheduler.Schedulers;
 
 /**
  * OpenAI-compatible reasoning chat client that preserves reasoning_content.
@@ -34,9 +37,11 @@ public class ReasoningChatClient {
             .build();
 
     private final LlmConfigResolver llmConfigResolver;
+    private final LlmConfigProperties llmConfigProperties;
 
-    public ReasoningChatClient(LlmConfigResolver llmConfigResolver) {
+    public ReasoningChatClient(LlmConfigResolver llmConfigResolver, LlmConfigProperties llmConfigProperties) {
         this.llmConfigResolver = llmConfigResolver;
+        this.llmConfigProperties = llmConfigProperties;
     }
 
     public ReasoningStreamChunk call(String prompt) {
@@ -73,11 +78,13 @@ public class ReasoningChatClient {
      * @param maxTokens 覆盖 max_tokens；传 null 用 config 默认值
      */
     public Flux<ReasoningStreamChunk> stream(String prompt, Integer maxTokens) {
-        return Flux.create(sink -> {
-            try {
-                ResolvedLlmConfig config = llmConfigResolver.resolveForCurrentUser();
-                String requestBody = buildRequestBody(prompt, config, maxTokens);
+        ResolvedLlmConfig config = llmConfigResolver.resolveForCurrentUser();
+        log.info("LLM stream 调用: model={}, thinkingEnabled={}, reasoningEffort={}",
+                config.getModel(), config.getThinkingEnabled(), config.getReasoningEffort());
+        String requestBody = buildRequestBody(prompt, config, maxTokens);
 
+        return Flux.<ReasoningStreamChunk>create(sink -> {
+            try {
                 HttpRequest request = HttpRequest.newBuilder()
                         .uri(URI.create(buildChatCompletionsUrl(config.getBaseUrl())))
                         .timeout(Duration.ofMinutes(10))
@@ -86,24 +93,34 @@ public class ReasoningChatClient {
                         .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
                         .build();
 
+                long sendStart = System.currentTimeMillis();
                 HttpResponse<Stream<String>> response = httpClient.send(
                         request,
                         HttpResponse.BodyHandlers.ofLines()
                 );
+                long sendEnd = System.currentTimeMillis();
                 if (response.statusCode() < 200 || response.statusCode() >= 300) {
                     sink.error(new IllegalStateException("Reasoning chat request failed, status=" + response.statusCode()));
                     return;
                 }
 
+                long forEachStart = System.currentTimeMillis();
                 try (Stream<String> lines = response.body()) {
                     lines.forEach(line -> handleSseLine(line, sink, config));
                 }
+                long forEachEnd = System.currentTimeMillis();
+                log.info("[STREAM-DIAG] send()={}ms, forEach()={}ms (on {})",
+                        sendEnd - sendStart, forEachEnd - forEachStart,
+                        Thread.currentThread().getName());
                 sink.complete();
             } catch (Exception error) {
                 log.error("Reasoning chat stream failed", error);
                 sink.error(error);
             }
-        });
+            // subscribeOn(boundedElastic) 让本 lambda 在独立线程执行，
+            // 使下游 toStream().forEach 能并行消费 sink.next() 推送的 chunk，
+            // 避免 2785 个 chunk 堆积到整轮 LLM 响应结束后才被一次性消费。
+        }).subscribeOn(Schedulers.boundedElastic(), false);
     }
 
     private String buildRequestBody(String prompt, ResolvedLlmConfig config) {
@@ -163,6 +180,9 @@ public class ReasoningChatClient {
         if (delta != null) {
             String reasoning = delta.getStr("reasoning_content", "");
             String content = delta.getStr("content", "");
+            if (StrUtil.isNotBlank(reasoning)) {
+                log.warn("收到 reasoning_content 但 thinkingEnabled={}, 可能存在配置不一致", config.getThinkingEnabled());
+            }
             if (StrUtil.isNotBlank(reasoning) || StrUtil.isNotBlank(content)) {
                 sink.next(new ReasoningStreamChunk(reasoning, content));
             }
@@ -196,7 +216,9 @@ public class ReasoningChatClient {
         // DeepSeek KV Cache 字段（直接在 usage 顶层）
         Integer cacheHitTokens = usage.getInt("prompt_cache_hit_tokens");
         Integer cacheMissTokens = usage.getInt("prompt_cache_miss_tokens");
-        Integer windowSize = config.getMaxInputContextTokens() != null ? config.getMaxInputContextTokens() : 204800;
+        Integer configuredWindowSize = config.getMaxInputContextTokens();
+        Integer defaultWindowSize = llmConfigProperties.getDefaultConfig().getMaxInputContextTokens();
+        Integer windowSize = configuredWindowSize != null && configuredWindowSize > 0 ? configuredWindowSize : defaultWindowSize;
         return new TokenUsage(
                 promptTokens,
                 completionTokens,

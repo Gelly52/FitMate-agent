@@ -5,24 +5,18 @@
   >
     <!-- Brand -->
     <div
-      class="mb-xl flex w-full gap-sm px-4"
-      :class="expanded ? 'items-center justify-between' : 'flex-col items-center'"
+      class="side-nav-brand mb-xl flex w-full gap-sm px-4"
+      :class="expanded ? 'items-center' : 'flex-col items-center'"
     >
-      <div
-        class="w-10 h-10 rounded-full bg-surface-container-high border border-outline-variant flex items-center justify-center"
-      >
-        <span class="material-symbols-outlined text-on-surface" style="font-variation-settings: 'FILL' 1;">robot_2</span>
+      <div class="side-nav-brand-mark">
+        <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="4" y="4" width="10" height="10" rx="2.5" fill="currentColor" />
+          <rect x="18" y="4" width="10" height="10" rx="2.5" fill="currentColor" opacity="0.35" />
+          <rect x="4" y="18" width="10" height="10" rx="2.5" fill="currentColor" opacity="0.35" />
+          <rect x="18" y="18" width="10" height="10" rx="2.5" fill="currentColor" />
+        </svg>
       </div>
       <span v-if="expanded" class="side-nav-brand-text">FitMate</span>
-      <button
-        type="button"
-        class="side-nav-toggle"
-        :aria-label="expanded ? 'Collapse sidebar' : 'Expand sidebar'"
-        :title="expanded ? 'Collapse sidebar' : 'Expand sidebar'"
-        @click="$emit('toggle')"
-      >
-        <span class="material-symbols-outlined">{{ expanded ? "chevron_left" : "chevron_right" }}</span>
-      </button>
     </div>
 
     <!-- Nav links -->
@@ -50,8 +44,8 @@
       </router-link>
     </div>
 
-    <!-- Settings (bottom) -->
-    <div class="mt-auto w-full flex" :class="expanded ? 'px-3' : 'justify-center'">
+    <!-- Bottom: Settings + Collapse toggle -->
+    <div class="mt-auto w-full flex flex-col gap-md" :class="expanded ? 'px-3' : 'items-center'">
       <router-link
         to="/settings"
         class="side-nav-link group"
@@ -65,6 +59,17 @@
         <span v-if="expanded" class="side-nav-label">Settings</span>
         <span v-else class="side-nav-tooltip">Settings</span>
       </router-link>
+      <button
+        type="button"
+        class="side-nav-toggle"
+        :class="expanded ? 'side-nav-toggle-expanded' : 'side-nav-toggle-collapsed'"
+        :aria-label="expanded ? 'Collapse sidebar' : 'Expand sidebar'"
+        :title="expanded ? 'Collapse sidebar' : 'Expand sidebar'"
+        @click="$emit('toggle')"
+      >
+        <span class="material-symbols-outlined">{{ expanded ? "chevron_left" : "chevron_right" }}</span>
+        <span v-if="expanded" class="side-nav-toggle-label">Collapse</span>
+      </button>
     </div>
   </nav>
 </template>
@@ -86,6 +91,7 @@ export default {
         { to: "/chat", icon: "chat_bubble", label: "Agent Chat" },
         { to: "/training", icon: "fitness_center", label: "Training Log" },
         { to: "/body-metrics", icon: "monitor_weight", label: "Body Metrics" },
+        { to: "/wiki", icon: "menu_book", label: "Wiki" },
         { to: "/upload", icon: "folder_open", label: "Knowledge Base" },
       ],
       fillStyle: "font-variation-settings: 'FILL' 1;",
@@ -94,7 +100,12 @@ export default {
   },
   methods: {
     isActive(path) {
-      return this.$route?.path === path;
+      var current = (this.$route && this.$route.path) || "";
+      if (current === path) {
+        return true;
+      }
+      // 子路径匹配：/chat/123 也高亮 /chat 链接
+      return current.indexOf(path + "/") === 0;
     },
   },
 };
@@ -139,29 +150,65 @@ export default {
 .side-nav-brand-text {
   flex: 1;
   color: var(--color-on-surface);
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-family: "Manrope", system-ui, sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.side-nav-brand-mark {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  color: var(--color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.side-nav-brand-mark svg {
+  width: 100%;
+  height: 100%;
 }
 
 .side-nav-toggle {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
+  cursor: pointer;
   color: var(--color-on-surface-variant);
-  border: 1px solid var(--color-outline-variant);
-  border-radius: 999px;
-  background: var(--color-surface-container);
-  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+  background: transparent;
+  border: none;
+  border-right: 2px solid transparent;
+  padding: 8px 0;
+  transition: color 0.2s ease, border-color 0.2s ease;
+  font-family: inherit;
+}
+
+.side-nav-toggle-expanded {
+  flex-direction: row;
+  gap: 12px;
+  padding: 10px 14px;
+  width: 100%;
+}
+
+.side-nav-toggle-collapsed {
+  flex-direction: column;
+  justify-content: center;
+  width: 100%;
 }
 
 .side-nav-toggle:hover {
   color: var(--color-primary);
-  border-color: var(--color-primary);
-  background: var(--color-surface-container-low);
+}
+
+.side-nav-toggle-label {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.side-nav-toggle .material-symbols-outlined {
+  font-size: 24px;
 }
 
 .side-nav-label {

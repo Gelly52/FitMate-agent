@@ -27,11 +27,6 @@ spring:
           ssl:
             enable: true
 
-# Logging
-logging:
-  level:
-    root: info
-
 # MyBatis-Plus
 mybatis-plus:
   configuration:
@@ -41,3 +36,11 @@ mybatis-plus:
       id-type: assign_id
       update-strategy: not_empty
   mapper-locations: classpath*:/mappers/*.xml
+
+# Logging
+logging:
+  level:
+    root: info
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%X{traceId}] [%thread] [%-5level] [%logger{36} %method:%line] [%X{spanId}] %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%X{traceId}] [%thread] [%-5level] [%logger{36} %method:%line] [%X{spanId}] %msg%n"

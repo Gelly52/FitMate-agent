@@ -47,17 +47,34 @@
                 暂无会话记录
               </div>
               <template v-else>
-                <button
+                <div
                   v-for="session in recentChatSessions"
                   :key="session.sessionId"
-                  type="button"
                   class="chat-history-item"
                   :class="{ 'chat-history-item-active': session.sessionId === activeChatSessionId }"
                   @click="handleSelectChatSession(session.sessionId)"
                 >
                   <span class="chat-history-title">{{ resolveSessionTitle(session) }}</span>
                   <span class="chat-history-meta">{{ formatSessionMeta(session) }}</span>
-                </button>
+                  <span class="chat-history-actions" @click.stop>
+                    <button
+                      type="button"
+                      class="chat-history-action-btn"
+                      title="重命名"
+                      @click="handleRenameSession(session)"
+                    >
+                      <span class="material-symbols-outlined">edit</span>
+                    </button>
+                    <button
+                      type="button"
+                      class="chat-history-action-btn chat-history-action-danger"
+                      title="删除"
+                      @click="handleDeleteSession(session.sessionId)"
+                    >
+                      <span class="material-symbols-outlined">delete</span>
+                    </button>
+                  </span>
+                </div>
                 <button
                   v-if="chatSessionList.length > recentChatSessions.length"
                   type="button"
@@ -80,6 +97,7 @@
         :is-streaming="isStreaming"
         :show-back-to-bottom="showBackToBottom"
         :active-agent-run="currentRunView"
+        :active-agent-runs="activeAgentRuns"
         :is-thinking="isThinking"
         :thinking-expanded="thinkingExpanded"
         @toggle-thinking="toggleThinkingExpanded"
@@ -157,17 +175,71 @@
         暂无会话记录
       </div>
       <div v-else class="chat-history-page-list">
-        <button
+        <div
           v-for="session in chatSessionList"
           :key="session.sessionId"
-          type="button"
           class="chat-history-page-item"
           :class="{ 'chat-history-page-item-active': session.sessionId === activeChatSessionId }"
           @click="handleSelectChatSession(session.sessionId)"
         >
           <span class="chat-history-page-item-title">{{ resolveSessionTitle(session) }}</span>
           <span class="chat-history-page-item-meta">{{ formatSessionMeta(session) }}</span>
-        </button>
+          <span class="chat-history-actions" @click.stop>
+            <button
+              type="button"
+              class="chat-history-action-btn"
+              title="重命名"
+              @click="handleRenameSession(session)"
+            >
+              <span class="material-symbols-outlined">edit</span>
+            </button>
+            <button
+              type="button"
+              class="chat-history-action-btn chat-history-action-danger"
+              title="删除"
+              @click="handleDeleteSession(session.sessionId)"
+            >
+              <span class="material-symbols-outlined">delete</span>
+            </button>
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="confirmDialog.visible" class="chat-confirm-dialog-mask">
+      <div
+        class="chat-confirm-dialog"
+        :class="{ 'chat-confirm-dialog-danger': confirmDialog.danger }"
+        role="dialog"
+        aria-modal="true"
+      >
+        <div class="chat-confirm-dialog-header">
+          <span class="material-symbols-outlined chat-confirm-dialog-icon">
+            {{ confirmDialog.danger ? "warning" : "help" }}
+          </span>
+          <span class="chat-confirm-dialog-title">
+            {{ confirmDialog.title || "确认" }}
+          </span>
+        </div>
+        <div class="chat-confirm-dialog-body">
+          {{ confirmDialog.text }}
+        </div>
+        <div class="chat-confirm-dialog-actions">
+          <button
+            type="button"
+            class="chat-confirm-dialog-btn chat-confirm-dialog-cancel"
+            @click="confirmDialogCancel"
+          >
+            {{ confirmDialog.cancelText }}
+          </button>
+          <button
+            type="button"
+            class="chat-confirm-dialog-btn chat-confirm-dialog-accept"
+            @click="confirmDialogAccept"
+          >
+            {{ confirmDialog.confirmText }}
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -400,6 +472,52 @@ export default {
   font-size: 12px;
 }
 
+/* 会话记录行的重命名 / 删除操作按钮 */
+.chat-history-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+
+.chat-history-item:hover .chat-history-actions,
+.chat-history-page-item:hover .chat-history-actions {
+  opacity: 1;
+}
+
+.chat-history-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: color-mix(in srgb, var(--color-on-surface) 60%, transparent);
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+
+.chat-history-action-btn .material-symbols-outlined {
+  font-size: 16px;
+}
+
+.chat-history-action-btn:hover {
+  background: color-mix(in srgb, var(--color-on-surface) 10%, transparent);
+  color: var(--color-on-surface);
+  border-color: color-mix(in srgb, var(--color-on-surface) 12%, transparent);
+}
+
+.chat-history-action-danger:hover {
+  background: color-mix(in srgb, #e53935 16%, transparent);
+  color: #e53935;
+  border-color: color-mix(in srgb, #e53935 45%, transparent);
+}
+
 .chat-history-more {
   display: flex;
   align-items: center;
@@ -581,5 +699,128 @@ export default {
 .chat-confirm-accept:hover {
   background: color-mix(in srgb, var(--color-primary) 24%, transparent);
   border-color: var(--color-primary);
+}
+
+/* 居中模态确认弹窗（用于删除会话等需要强提示的二次确认） */
+.chat-confirm-dialog-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: color-mix(in srgb, rgba(0, 0, 0, 0.45) 100%, transparent);
+  animation: chat-confirm-dialog-fade 0.18s ease;
+}
+
+@keyframes chat-confirm-dialog-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.chat-confirm-dialog {
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px 22px 18px;
+  border: 1px solid color-mix(in srgb, var(--color-on-surface) 10%, transparent);
+  border-radius: 18px;
+  background: var(--color-surface-container-lowest, var(--color-background));
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
+  animation: chat-confirm-dialog-pop 0.2s ease;
+}
+
+@keyframes chat-confirm-dialog-pop {
+  from {
+    transform: translateY(8px) scale(0.98);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+.chat-confirm-dialog-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.chat-confirm-dialog-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+  color: color-mix(in srgb, var(--color-on-surface) 55%, transparent);
+}
+
+.chat-confirm-dialog-danger .chat-confirm-dialog-icon {
+  color: #e53935;
+}
+
+.chat-confirm-dialog-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-on-surface);
+}
+
+.chat-confirm-dialog-body {
+  font-size: 14px;
+  line-height: 1.55;
+  color: color-mix(in srgb, var(--color-on-surface) 78%, transparent);
+  word-break: break-word;
+}
+
+.chat-confirm-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.chat-confirm-dialog-btn {
+  min-width: 84px;
+  border: 1px solid color-mix(in srgb, var(--color-on-surface) 14%, transparent);
+  border-radius: 9999px;
+  padding: 8px 18px;
+  font-size: 13px;
+  cursor: pointer;
+  background: transparent;
+  color: color-mix(in srgb, var(--color-on-surface) 80%, transparent);
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+
+.chat-confirm-dialog-cancel:hover {
+  background: color-mix(in srgb, var(--color-on-surface) 8%, transparent);
+  color: var(--color-on-surface);
+}
+
+.chat-confirm-dialog-accept {
+  border-color: color-mix(in srgb, var(--color-primary) 55%, transparent);
+  background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.chat-confirm-dialog-accept:hover {
+  background: color-mix(in srgb, var(--color-primary) 28%, transparent);
+  border-color: var(--color-primary);
+}
+
+.chat-confirm-dialog-danger .chat-confirm-dialog-accept {
+  border-color: color-mix(in srgb, #e53935 55%, transparent);
+  background: color-mix(in srgb, #e53935 18%, transparent);
+  color: #e53935;
+}
+
+.chat-confirm-dialog-danger .chat-confirm-dialog-accept:hover {
+  background: color-mix(in srgb, #e53935 30%, transparent);
+  border-color: #e53935;
 }
 </style>

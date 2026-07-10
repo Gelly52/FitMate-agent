@@ -54,6 +54,7 @@ public class LlmConfigResolver {
     public ResolvedLlmConfig resolveByUserId(Long userId) {
         UserPreference pref = loadPreference(userId);
         if (pref == null || StrUtil.isBlank(pref.getLlmConfigJson())) {
+            log.info("用户无 DB 配置，回退 env 默认值: userId={}", userId);
             return resolveFromEnv();
         }
         try {
@@ -105,12 +106,21 @@ public class LlmConfigResolver {
             } catch (Exception ignored) {
             }
         }
-        // apiKey：请求非空则加密新值；为空则保留原密文（若有）
+        // apiKey：请求非空且非脱敏值则加密新值；为空或脱敏值则保留原密文（若有）
+        // 防御：前端可能误传脱敏值（如 sk-****e05f），若直接加密会污染密文导致后续 401
+        String requestApiKey = request.getApiKey();
+        boolean isMasked = StrUtil.isNotBlank(requestApiKey) && requestApiKey.contains("****");
         String encryptedKey;
-        if (StrUtil.isNotBlank(request.getApiKey())) {
-            encryptedKey = cipher.encrypt(request.getApiKey());
-        } else {
+        if (StrUtil.isNotBlank(requestApiKey) && !isMasked) {
+            encryptedKey = cipher.encrypt(requestApiKey);
+        } else if (StrUtil.isNotBlank(existingEncryptedKey)) {
             encryptedKey = existingEncryptedKey;
+        } else if (StrUtil.isNotBlank(envDefault().getApiKey())) {
+            // 新用户无 DB 记录且未提供 apiKey：回退 env 默认 key 加密落库，
+            // 使聊天页的思考强度/开关等局部配置变更能持久化（否则会抛异常导致静默失败）
+            encryptedKey = cipher.encrypt(envDefault().getApiKey());
+        } else {
+            encryptedKey = "";
         }
         if (StrUtil.isBlank(encryptedKey)) {
             throw new IllegalArgumentException("API Key 不能为空");
@@ -137,6 +147,8 @@ public class LlmConfigResolver {
                 existing.setLlmConfigJson(jsonStr);
                 userPreferenceMapper.updateById(existing);
             }
+            log.info("LLM 配置已保存: userId={}, model={}, thinkingEnabled={}, reasoningEffort={}",
+                    userId, json.getStr("model"), json.getBool("thinkingEnabled"), json.getStr("reasoningEffort"));
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             throw new IllegalStateException("序列化默认 preferencesJson 失败", e);
         }

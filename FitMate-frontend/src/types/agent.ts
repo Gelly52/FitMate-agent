@@ -28,6 +28,8 @@ export interface AgentTraceEvent {
   runStatus?: string;
   toolName?: string;
   toolCallId?: string;
+  /** 派生的 Sub-Agent run ID。仅 subagent_started / subagent_finished 事件有值。 */
+  subagentRunId?: number | string;
   iterationNo?: number;
   durationMs?: number;
   message?: string;

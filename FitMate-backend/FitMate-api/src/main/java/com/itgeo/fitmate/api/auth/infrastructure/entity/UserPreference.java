@@ -28,6 +28,9 @@ public class UserPreference {
     /** LLM 配置 JSON，原始字符串读写，由 service 层序列化/反序列化，apiKey 字段为 AES 加密密文。 */
     private String llmConfigJson;
 
+    /** MCP 自定义 server 配置 JSON，原始字符串读写，由 service 层序列化/反序列化。 */
+    private String mcpConfigJson;
+
     @TableField("created_at")
     private LocalDateTime createdAt;
 

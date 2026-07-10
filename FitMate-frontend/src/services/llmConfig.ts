@@ -80,7 +80,16 @@ function getModels(): LlmModelOption[] {
 /** 保存配置（PUT 后端，apiKey 为空表示不修改） */
 async function save(patch: Partial<LlmConfig>): Promise<void> {
   const merged = Object.assign({}, state.config, patch);
-  await doctorApi.saveLlmConfig(merged);
+  // 调用方未显式提供 apiKey 时，置空以触发后端"保留原密文"分支；
+  // 否则会把 state.config 里的脱敏值（如 sk-****e05f）当真实 key 加密落库，污染密文。
+  if (patch.apiKey === undefined) {
+    merged.apiKey = "";
+  }
+  const saveRes = await doctorApi.saveLlmConfig(merged);
+  // 后端异常时 HTTP 仍为 200，需检查 LeeResult.status（200=成功，500=业务错误）
+  if (saveRes && saveRes.status && saveRes.status !== 200) {
+    throw new Error(saveRes.msg || "保存 LLM 配置失败");
+  }
   // 保存成功后重新拉取脱敏配置
   try {
     const res = await doctorApi.getLlmConfig();

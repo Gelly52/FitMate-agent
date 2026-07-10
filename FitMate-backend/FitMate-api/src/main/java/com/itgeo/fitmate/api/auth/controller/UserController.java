@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -38,6 +39,15 @@ public class UserController {
 
     @Resource
     private com.itgeo.fitmate.api.chat.infrastructure.LlmProxyClient llmProxyClient;
+
+    @Resource
+    private com.itgeo.fitmate.api.chat.application.McpConfigResolver mcpConfigResolver;
+
+    @Resource
+    private com.itgeo.fitmate.api.agent.mcp.McpClientPool mcpClientPool;
+
+    @Resource
+    private com.itgeo.fitmate.api.agent.mcp.McpToolRegistry mcpToolRegistry;
 
     /**
      * 发送邮箱登录验证码。
@@ -80,6 +90,25 @@ public class UserController {
         } catch (Exception e) {
             log.error("邮箱登录失败", e);
             return LeeResult.errorException("登录失败");
+        }
+    }
+
+    /**
+     * 检查邮箱注册状态，用于登录页判断是否需要验证码。
+     * 当账号存在且已设置密码时，前端允许跳过验证码直接用密码登录。
+     *
+     * @param email 邮箱
+     * @return 通用响应结果，data 含 exists 与 passwordSet 字段
+     */
+    @GetMapping("/check-email")
+    public LeeResult checkEmail(@RequestParam("email") String email) {
+        try {
+            return LeeResult.ok(userService.checkEmailRegistered(email));
+        } catch (IllegalArgumentException e) {
+            return LeeResult.errorMsg(e.getMessage());
+        } catch (Exception e) {
+            log.error("检查邮箱注册状态失败", e);
+            return LeeResult.errorException("检查邮箱注册状态失败");
         }
     }
 
@@ -291,6 +320,63 @@ public class UserController {
             return LeeResult.ok(llmProxyClient.getBalance(baseUrl, apiKey));
         } catch (Exception e) {
             log.error("查询 DeepSeek 余额失败", e);
+            return LeeResult.errorMsg(e.getMessage());
+        }
+    }
+
+    /**
+     * 获取当前登录用户的 MCP 自定义 server 配置。
+     *
+     * @return 通用响应结果
+     */
+    @GetMapping("/mcp-config")
+    public LeeResult getMcpConfig() {
+        try {
+            Long userId = UserContextHolder.getRequired().getUserId();
+            return LeeResult.ok(mcpConfigResolver.getByUserId(userId));
+        } catch (IllegalArgumentException e) {
+            return LeeResult.errorMsg(e.getMessage());
+        } catch (Exception e) {
+            log.error("获取 MCP 配置失败", e);
+            return LeeResult.errorException("获取 MCP 配置失败");
+        }
+    }
+
+    /**
+     * 保存当前登录用户的 MCP 自定义 server 配置，保存后立即刷新 MCP 工具连接。
+     *
+     * @param request 保存请求体
+     * @return 通用响应结果
+     */
+    @PutMapping("/mcp-config")
+    public LeeResult saveMcpConfig(@RequestBody com.itgeo.fitmate.api.auth.dto.McpConfigSaveRequest request) {
+        try {
+            Long userId = UserContextHolder.getRequired().getUserId();
+            mcpConfigResolver.saveByUserId(userId, request);
+            // 保存后立即刷新该用户的 MCP 工具连接（热生效，不重启服务）
+            mcpToolRegistry.refresh(userId);
+            return LeeResult.ok(mcpConfigResolver.getByUserId(userId));
+        } catch (IllegalArgumentException e) {
+            return LeeResult.errorMsg(e.getMessage());
+        } catch (Exception e) {
+            log.error("保存 MCP 配置失败", e);
+            return LeeResult.errorException("保存 MCP 配置失败");
+        }
+    }
+
+    /**
+     * 测试单个 MCP server 连接：临时建立连接 → listTools → 关闭。
+     *
+     * @param request 单个 server 配置
+     * @return 通用响应结果，data 含 ok/latencyMs/error/tools
+     */
+    @PostMapping("/mcp/test")
+    public LeeResult testMcpConnection(@RequestBody com.itgeo.fitmate.api.auth.dto.McpServerConfig request) {
+        log.info("[MCP-TEST] 收到测试请求: {}", request == null ? "null" : request.getUrl());
+        try {
+            return LeeResult.ok(mcpClientPool.testConnection(request));
+        } catch (Exception e) {
+            log.error("MCP 连接测试失败", e);
             return LeeResult.errorMsg(e.getMessage());
         }
     }

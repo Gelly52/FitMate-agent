@@ -1,7 +1,6 @@
 package com.itgeo.fitmate.api.agent.dto;
 
 import java.time.LocalDateTime;
-import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
@@ -11,7 +10,6 @@ import lombok.ToString;
  */
 @Data
 @ToString
-@AllArgsConstructor
 @NoArgsConstructor
 public class AgentRunStepResponse {
 
@@ -29,6 +27,8 @@ public class AgentRunStepResponse {
     private String toolName;
     /** 工具调用ID。 */
     private String toolCallId;
+    /** 派生的 Sub-Agent run ID。仅 subagent_started / subagent_finished 事件有值。 */
+    private Long subagentRunId;
     /** Agent Loop 迭代轮次。 */
     private Integer iterationNo;
     /** 事件耗时毫秒数。 */

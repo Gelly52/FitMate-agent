@@ -34,6 +34,14 @@ export function userLogin(bo) {
   });
 }
 
+export function checkEmailRegistered(email) {
+  return instance({
+    url: "/user/check-email",
+    method: "get",
+    params: { email: email },
+  });
+}
+
 export function userLogout() {
   return instance({
     url: "/user/logout",
@@ -57,6 +65,13 @@ export function getRecords(who, sessionId, limit) {
       sessionId,
       limit,
     },
+  });
+}
+
+export function getThinkingByMessageId(messageId) {
+  return instance({
+    url: "/chat/thinking/" + messageId,
+    method: "get",
   });
 }
 
@@ -94,6 +109,18 @@ export function getAgentRunDetail(runId: number | string): Promise<AgentRunDetai
   });
 }
 
+/**
+ * 按 botMsgId 查询 Agent run 详情（含 step 列表）。
+ * 用于历史会话消息二次加载执行轨迹：展开历史 bot 消息思考过程时，
+ * 通过 botMsgId 反查关联的 AgentRun，补齐 step 列表以还原本轮执行链路。
+ */
+export function getAgentRunDetailByBotMsgId(botMsgId: string | number): Promise<AgentRunDetail | unknown> {
+  return instance({
+    url: "/agent/runs/by-bot-msg/" + encodeURIComponent(botMsgId),
+    method: "get",
+  });
+}
+
 export function compressContext(sessionId: number | string) {
   return instance({
     url: "/agent/sessions/" + encodeURIComponent(sessionId) + "/compress",
@@ -114,6 +141,28 @@ export function rollbackMessage(sessionId: number | string, botMsgId: string) {
     url: "/chat/rollback",
     method: "post",
     data: { sessionId, botMsgId },
+  });
+}
+
+/**
+ * 删除指定会话及其全部关联数据（消息、思考内容、上下文压缩摘要、AgentRun/Step）。
+ * 删除当前活动会话后，前端应清空聊天界面并回到"新建会话"状态。
+ */
+export function deleteChatSession(sessionId: number | string) {
+  return instance({
+    url: "/chat/sessions/" + encodeURIComponent(sessionId),
+    method: "delete",
+  });
+}
+
+/**
+ * 重命名指定会话标题。
+ */
+export function renameChatSession(sessionId: number | string, title: string) {
+  return instance({
+    url: "/chat/sessions/" + encodeURIComponent(sessionId) + "/title",
+    method: "put",
+    data: { title },
   });
 }
 
@@ -167,6 +216,13 @@ export function getUploadedDocs() {
   return instance({
     url: "/rag/docs",
     method: "get",
+  });
+}
+
+export function deleteRagDoc(docId: string) {
+  return instance({
+    url: "/rag/docs/" + encodeURIComponent(docId),
+    method: "delete",
   });
 }
 
@@ -239,6 +295,36 @@ export function getLlmBalance(bo) {
   });
 }
 
+export function getMcpConfig() {
+  return instance({
+    url: "/user/mcp-config",
+    method: "get",
+  });
+}
+
+export function saveMcpConfig(bo) {
+  return instance({
+    url: "/user/mcp-config",
+    method: "put",
+    data: bo,
+  });
+}
+
+export function testMcpConnection(bo) {
+  return instance({
+    url: "/user/mcp/test",
+    method: "post",
+    data: bo,
+  });
+}
+
+export function getSkillList() {
+  return instance({
+    url: "/skill/list",
+    method: "get",
+  });
+}
+
 // ========== 有氧训练 ==========
 export function logCardio(bo) {
   return instance({ url: "/cardio/log", method: "post", data: bo });
@@ -274,16 +360,21 @@ export function getBodyMetricsSummary() {
 const doctorApi = {
   sendUserCode,
   userLogin,
+  checkEmailRegistered,
   userLogout,
   createSseTicket,
   getRecords,
+  getThinkingByMessageId,
   uploadRagDoc,
   agentExecute,
   getAgentRuns,
   getAgentRunDetail,
+  getAgentRunDetailByBotMsgId,
   compressContext,
   cancelAgent,
   rollbackMessage,
+  deleteChatSession,
+  renameChatSession,
   ragConfig,
   benchmarkEvaluate,
   logTraining,
@@ -291,6 +382,7 @@ const doctorApi = {
   getRecentTraining,
   getRecentMetrics,
   getUploadedDocs,
+  deleteRagDoc,
   getUserProfile,
   updateUserProfile,
   getUserPreferences,
@@ -300,6 +392,10 @@ const doctorApi = {
   listLlmModels,
   testLlmConnection,
   getLlmBalance,
+  getMcpConfig,
+  saveMcpConfig,
+  testMcpConnection,
+  getSkillList,
   logCardio,
   getRecentCardio,
   logHeartRate,

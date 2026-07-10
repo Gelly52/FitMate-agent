@@ -68,6 +68,8 @@ export default {
         green: "#7ee787",
         orange: "#ffb595",
         purple: "#c4a7e7",
+        light: "#e6e1e5",
+        dark: "#3a3b42",
       };
       return map[accent];
     },

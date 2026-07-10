@@ -1,6 +1,6 @@
 package com.itgeo.fitmate.api.agent.dto;
 
-import lombok.AllArgsConstructor;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
@@ -10,8 +10,8 @@ import lombok.ToString;
  */
 @Data
 @ToString
-@AllArgsConstructor
 @NoArgsConstructor
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class AgentStepEvent {
     /** 动态 trace 主键。 */
     private Long stepId;
@@ -23,12 +23,14 @@ public class AgentStepEvent {
     private String stepName;
     /** 当前步骤状态。 */
     private String stepStatus;
-    /** 动态事件类型，如 llm_started / tool_call_finished。 */
+    /** 动态事件类型，如 llm_started / tool_call_finished / subagent_started / subagent_finished。 */
     private String eventType;
     /** 关联工具名称。 */
     private String toolName;
     /** 工具调用ID。 */
     private String toolCallId;
+    /** 派生的 Sub-Agent run ID。仅 subagent_started / subagent_finished 事件有值。 */
+    private Long subagentRunId;
     /** Agent Loop 迭代轮次。 */
     private Integer iterationNo;
     /** 事件耗时毫秒数。 */

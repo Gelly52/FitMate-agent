@@ -19,4 +19,11 @@ public interface WikiKeywordSearchService {
      * 将一个 wiki 页面索引到 Redis Hash（关键词索引）。
      */
     void indexPage(WikiPage page, String scope, Long ownerUserId);
+
+    /**
+     * 删除指定 Wiki 页面的关键词索引。
+     *
+     * @param pageId Wiki 页面主键
+     */
+    void deleteByPage(Long pageId);
 }

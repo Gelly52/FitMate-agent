@@ -4,7 +4,7 @@
 export type ThemeMode = "light" | "dark" | "auto";
 
 /** 强调色预设 */
-export type AccentColor = "blue" | "green" | "orange" | "purple";
+export type AccentColor = "blue" | "green" | "orange" | "purple" | "light" | "dark";
 
 /** 用户偏好设置（前后端共享结构） */
 export interface UserSettings {
@@ -40,14 +40,23 @@ export const ACCENT_COLOR_OPTIONS: { value: AccentColor; label: string }[] = [
   { value: "green", label: "绿" },
   { value: "orange", label: "橙" },
   { value: "purple", label: "紫" },
+  { value: "light", label: "亮色" },
+  { value: "dark", label: "暗色" },
 ];
 
 /** 主题模式选项（供 UI 渲染按钮组） */
-export const THEME_MODE_OPTIONS: { value: ThemeMode; label: string; icon: string }[] = [
+export const THEME_MODE_OPTIONS: {
+  value: ThemeMode;
+  label: string;
+  icon: string;
+}[] = [
   { value: "light", label: "亮色", icon: "light_mode" },
   { value: "dark", label: "暗色", icon: "dark_mode" },
   { value: "auto", label: "跟随系统", icon: "desktop_windows" },
 ];
+
+export const DEFAULT_LLM_MAX_INPUT_CONTEXT_TOKENS = 512000;
+export const DEFAULT_LLM_MAX_OUTPUT_CONTEXT_TOKENS = 384000;
 
 /** LLM 配置（前后端共享结构，GET 接口返回脱敏 apiKey） */
 export interface LlmConfig {
@@ -57,9 +66,9 @@ export interface LlmConfig {
   apiKey: string;
   /** 模型 ID，默认 deepseek-v4-flash */
   model: string;
-  /** 输入上下文最大值（token），默认 204800（200K）。用作截断阈值与窗口展示 */
+  /** 输入上下文最大值（token），默认 512000（500K）。用作截断阈值与窗口展示 */
   maxInputContextTokens: number;
-  /** 输出上下文最大值（token，对应 API max_tokens），默认 65536（64K） */
+  /** 输出上下文最大值（token，对应 API max_tokens），默认 384000（375K） */
   maxOutputContextTokens: number;
   /** 是否启用思考模式，默认 true */
   thinkingEnabled: boolean;
@@ -72,8 +81,8 @@ export const DEFAULT_LLM_CONFIG: LlmConfig = {
   baseUrl: "https://api.deepseek.com",
   apiKey: "",
   model: "deepseek-v4-flash",
-  maxInputContextTokens: 204800,
-  maxOutputContextTokens: 65536,
+  maxInputContextTokens: DEFAULT_LLM_MAX_INPUT_CONTEXT_TOKENS,
+  maxOutputContextTokens: DEFAULT_LLM_MAX_OUTPUT_CONTEXT_TOKENS,
   thinkingEnabled: true,
   reasoningEffort: "high",
 };
@@ -104,4 +113,32 @@ export interface LlmBalanceInfo {
 export interface LlmBalanceResult {
   isAvailable: boolean;
   balanceInfos: LlmBalanceInfo[];
+}
+
+/** 单个 MCP server 配置 */
+export interface McpServerConfig {
+  name: string;
+  url: string;
+  sseEndpoint: string;
+  enabled: boolean;
+}
+
+/** MCP 配置（GET/PUT /user/mcp-config 的整体结构） */
+export interface McpConfigItem {
+  servers: McpServerConfig[];
+}
+
+/** MCP 连接测试结果（POST /user/mcp/test 返回） */
+export interface McpTestResult {
+  ok: boolean;
+  latencyMs: number;
+  error: string;
+  tools: string[];
+}
+
+/** 技能元信息（GET /skill/list 返回项） */
+export interface SkillInfo {
+  name: string;
+  description: string;
+  trigger: string;
 }

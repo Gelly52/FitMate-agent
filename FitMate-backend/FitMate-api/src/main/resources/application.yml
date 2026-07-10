@@ -1,6 +1,10 @@
 # Server
 server:
   forward-headers-strategy: framework
+  compression:
+    enabled: true
+    mime-types: text/html,text/xml,text/plain,text/css,text/javascript,application/javascript,application/json,application/xml,image/svg+xml
+    min-response-size: 1024
 
 # Spring
 spring:
@@ -109,6 +113,7 @@ fitmate:
       - web.search
       - web.fetch
       - memory.search
+      - memory.record
       - training_log.record
       - cardio.record
       - cardio.query
@@ -117,6 +122,16 @@ fitmate:
       - heart_rate.query
       - diet.record
       - diet.query
+      # 阶段二新增：modify 工具对 Agent 开放（delete 工具保留代码但不暴露，需手动加白名单才能用）
+      - training_log.modify
+      - body_metrics.modify
+      # 技能渐进式加载工具
+      - skill.load
+    # Sub-Agent 子循环配置（主 Agent 派生的子 Agent，拥有独立预算；工具超时复用主 Agent 配置）
+    sub-agent:
+      max-iterations: 8
+      max-tool-calls: 20
+      max-run-duration-seconds: 600
   memory:
     enabled: ${MEMORY_ENABLED:true}
     async-pool-size: ${MEMORY_ASYNC_POOL_SIZE:2}
@@ -128,8 +143,11 @@ fitmate:
     extract:
       min-conversation-turns: ${MEMORY_EXTRACT_MIN_TURNS:3}
       min-conversation-chars: ${MEMORY_EXTRACT_MIN_CHARS:100}
+      trigger-rounds: ${MEMORY_EXTRACT_TRIGGER_ROUNDS:5}
   wiki:
     enabled: ${WIKI_ENABLED:true}
+    retention-months: ${WIKI_RETENTION_MONTHS:3}
+    max-pages-per-space: ${WIKI_MAX_PAGES_PER_SPACE:1000}
     compile:
       async-pool-size: ${WIKI_COMPILE_POOL_SIZE:3}
       max-retry: ${WIKI_COMPILE_MAX_RETRY:2}

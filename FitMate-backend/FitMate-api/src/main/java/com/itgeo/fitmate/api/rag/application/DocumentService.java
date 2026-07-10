@@ -49,6 +49,16 @@ public interface DocumentService {
     List<RagDocumentItem> listUserDocuments(Long userId);
 
     /**
+     * 删除指定 RAG 文档及其全部向量/关键词索引。
+     * <p>
+     * 删除前校验 userId 归属，防止越权删除他人文档。
+     *
+     * @param userId 当前用户主键（用于归属校验）
+     * @param docId  待删除文档主键
+     */
+    void deleteDocument(Long userId, Long docId);
+
+    /**
      * 获取当前手动 RAG 配置快照。
      *
      * @return 代码侧生效中的 RAG 配置

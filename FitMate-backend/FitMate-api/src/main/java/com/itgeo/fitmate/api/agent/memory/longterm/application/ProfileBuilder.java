@@ -3,6 +3,7 @@ package com.itgeo.fitmate.api.agent.memory.longterm.application;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.itgeo.fitmate.api.agent.llm.LlmJsonSanitizer;
 import com.itgeo.fitmate.api.agent.memory.longterm.config.MemoryProperties;
 import com.itgeo.fitmate.api.agent.memory.longterm.infrastructure.entity.UserMemory;
 import com.itgeo.fitmate.api.agent.memory.longterm.infrastructure.entity.UserProfile;
@@ -84,7 +85,7 @@ public class ProfileBuilder {
         String llmOutput = chatModel.call(new Prompt(promptText)).getResult().getOutput().getText();
 
         // 解析
-        JSONObject json = JSONUtil.parseObj(llmOutput);
+        JSONObject json = JSONUtil.parseObj(LlmJsonSanitizer.sanitize(llmOutput));
         String profileText = json.getStr("profile_text");
         String tagsJson = json.getJSONArray("tags") != null ? json.getJSONArray("tags").toString() : null;
 

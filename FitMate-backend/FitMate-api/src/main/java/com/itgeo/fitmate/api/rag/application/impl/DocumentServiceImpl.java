@@ -27,7 +27,6 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
-import org.springframework.ai.reader.TextReader;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.redis.RedisVectorStore;
 import org.springframework.core.io.Resource;
@@ -130,6 +129,9 @@ public class DocumentServiceImpl implements DocumentService {
             document.getMetadata().put("documentId", documentId);
             document.getMetadata().put("chunkId", chunkId);
             document.getMetadata().put("chunkSeq", i);
+
+            // 用 chunkId 作为向量库文档 ID，使删除时可按 chunkId 精确清理
+            splitDocuments.set(i, new Document(chunkId, document.getText(), document.getMetadata()));
         }
 
         redisVectorStore.add(splitDocuments);
@@ -144,65 +146,42 @@ public class DocumentServiceImpl implements DocumentService {
 
         return documentList;
     }
-//    @Override
-//    public List<Document> loadText(Resource resource, String fileName, Long userId) {
-//        if (userId == null) {
-//            throw new IllegalArgumentException("userId不能为空");
-//        }
-//
-//        /*
-//         * 入库步骤：
-//         * 1. 先把 `fileName`、`userId` 写入原始文档 metadata，确保后续切分链路继承文档归属信息；
-//         * 2. 调用 `SemanticDocumentChunker` 生成适合向量检索的 chunk；
-//         * 3. 为每个 chunk 再次补齐 `fileName`、`userId` 与 `source`，保证向量库检索与来源展示字段完整；
-//         * 4. 调用 `RedisVectorStore.add(...)` 写入向量索引；
-//         * 5. 最后把文件级入库结果写入 `t_rag_document`，供文档列表与运维排查使用。
-//         */
-//
-//        String safeFileName = (fileName == null || fileName.isBlank()) ? "unknown" : fileName;
-//        String metadataUserId = String.valueOf(userId);
-//
-//        TextReader reader = new TextReader(resource);
-//        reader.getCustomMetadata().put("fileName", safeFileName);
-//        reader.getCustomMetadata().put("userId", metadataUserId);
-//
-//        List<Document> documentList = reader.get();
-//        List<Document> splitDocuments = semanticDocumentChunker.splitDocuments(documentList);
-//
-//        //
-//        RagDocument ragDocument = new RagDocument();
-//        ragDocument.setUserId(userId);
-//        ragDocument.setFileName(safeFileName);
-//        ragDocument.setSourceCount(documentList.size());
-//        ragDocument.setChunkCount(splitDocuments.size());
-//        ragDocument.setStatus("READY");
-//        ragDocumentMapper.insert(ragDocument);
-//
-//        String documentId = String.valueOf(ragDocument.getId());
-//
-//
-//        for (int i = 0; i < splitDocuments.size(); i++) {
-//            Document document = splitDocuments.get(i);
-//            String chunkId = documentId + ":" + i;
-//
-//            document.getMetadata().put("fileName", safeFileName);
-//            document.getMetadata().put("userId", metadataUserId);
-//            document.getMetadata().put("source", safeFileName);
-//            document.getMetadata().put("documentId", documentId);
-//            document.getMetadata().put("chunkId", chunkId);
-//            document.getMetadata().put("chunkSeq", i);
-//        }
-//
-//        redisVectorStore.add(splitDocuments);
-//        keywordSearchService.indexChunks(splitDocuments);
-//
-//        log.info("RAG文档入库完成, userId={}, fileName={}, sourceCount={}, chunkCount={}",
-//                userId,
-//                safeFileName,
-//                documentList.size(),
-//                splitDocuments.size());
-//        return documentList;
-//    }
+
+    /**
+     * 删除指定 RAG 文档及其全部向量/关键词索引。
+     * <p>
+     * 流程：校验 userId 归属 → 拼 chunkId 列表删向量索引 → SCAN 删关键词索引 → 删 MySQL 记录。
+     */
+    @Override
+    public void deleteDocument(Long userId, Long docId) {
+        if (userId == null || docId == null) {
+            throw new IllegalArgumentException("userId/docId 不能为空");
+        }
+
+        RagDocument doc = ragDocumentMapper.selectOne(
+                new LambdaQueryWrapper<RagDocument>()
+                        .eq(RagDocument::getId, docId)
+                        .eq(RagDocument::getUserId, userId));
+        if (doc == null) {
+            throw new IllegalArgumentException("文档不存在或无权操作");
+        }
+
+        int chunkCount = doc.getChunkCount() != null ? doc.getChunkCount() : 0;
+        List<String> chunkIds = new ArrayList<>();
+        for (int i = 0; i < chunkCount; i++) {
+            chunkIds.add(docId + ":" + i);
+        }
+        if (!chunkIds.isEmpty()) {
+            redisVectorStore.delete(chunkIds);
+        }
+
+        keywordSearchService.deleteByDocument(docId);
+
+        ragDocumentMapper.deleteById(docId);
+
+        log.info("RAG 文档删除完成 userId={} docId={} fileName={} chunks={}",
+                userId, docId, doc.getFileName(), chunkCount);
+    }
 
     /**
      * 基于问题检索当前用户可见的 RAG 文档片段。
@@ -369,29 +348,11 @@ public class DocumentServiceImpl implements DocumentService {
 
         List<Document> results = redisVectorStore.similaritySearch(request);
         int resultSize = results == null ? 0 : results.size();
-        log.info("vectorRecall完成, userId={}, topK={}, resultSize={}, question={}, filterExpression={}",
-                userId, topK, resultSize, question, filterExpression);
+        log.info("vectorRecall完成, userId={}, topK={}, resultSize={}, question={}",
+                userId, topK, resultSize, question);
 
         if (resultSize == 0) {
-            SearchRequest noFilterRequest = SearchRequest.builder()
-                    .query(question)
-                    .topK(topK)
-                    .build();
-            List<Document> noFilterResults = redisVectorStore.similaritySearch(noFilterRequest);
-            int noFilterResultSize = noFilterResults == null ? 0 : noFilterResults.size();
-            log.info("vectorRecall无过滤对照, userId={}, topK={}, resultSize={}, question={}",
-                    userId, topK, noFilterResultSize, question);
-            if (noFilterResults != null) {
-                for (int i = 0; i < Math.min(noFilterResults.size(), 3); i++) {
-                    Document doc = noFilterResults.get(i);
-                    log.info("vectorRecall无过滤hit idx={}, fileName={}, userId={}, chunkId={}, preview={}",
-                            i + 1,
-                            doc.getMetadata().get("fileName"),
-                            doc.getMetadata().get("userId"),
-                            doc.getMetadata().get("chunkId"),
-                            doc.getText() == null ? "" : doc.getText().substring(0, Math.min(80, doc.getText().length())));
-                }
-            }
+            // 用户过滤结果为空时直接返回，不执行无过滤对照检索，避免其他用户文档信息泄露到日志
             return List.of();
         }
 

@@ -93,6 +93,11 @@ CREATE TABLE IF NOT EXISTS `t_body_metrics` (
     `record_date` DATE NOT NULL COMMENT '记录日期',
     `weight` DECIMAL(5,2) DEFAULT NULL COMMENT '体重 kg',
     `body_fat` DECIMAL(4,2) DEFAULT NULL COMMENT '体脂 %',
+    `chest_girth` DECIMAL(6,1) DEFAULT NULL COMMENT '胸围 cm',
+    `waist_girth` DECIMAL(6,1) DEFAULT NULL COMMENT '腰围 cm',
+    `hip_girth` DECIMAL(6,1) DEFAULT NULL COMMENT '臀围 cm',
+    `arm_girth` DECIMAL(6,1) DEFAULT NULL COMMENT '臂围 cm',
+    `thigh_girth` DECIMAL(6,1) DEFAULT NULL COMMENT '大腿围 cm',
     `sleep_hours` DECIMAL(3,1) DEFAULT NULL COMMENT '睡眠时长 h',
     `fatigue_level` VARCHAR(16) DEFAULT NULL COMMENT '疲劳度：低/中/高',
     `note` VARCHAR(500) DEFAULT NULL COMMENT '备注',
@@ -146,6 +151,18 @@ CREATE TABLE IF NOT EXISTS `t_chat_message` (
     KEY `idx_chat_message_created` (`created_at`),
     CONSTRAINT `fk_chat_message_session` FOREIGN KEY (`session_id`) REFERENCES `t_chat_session` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='聊天消息表';
+
+CREATE TABLE IF NOT EXISTS `t_chat_thinking` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `message_id` BIGINT NOT NULL COMMENT '关联 t_chat_message.id',
+    `content` LONGTEXT NOT NULL COMMENT '思考内容全文',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_thinking_message` (`message_id`),
+    CONSTRAINT `fk_thinking_message` FOREIGN KEY (`message_id`)
+        REFERENCES `t_chat_message` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='LLM 思考内容表';
 
 CREATE TABLE IF NOT EXISTS `t_context_summary` (
     `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '压缩记录主键',
@@ -255,12 +272,14 @@ CREATE TABLE IF NOT EXISTS `t_agent_run` (
     `finished_at` DATETIME DEFAULT NULL,
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `bot_msg_id` VARCHAR(64) NOT NULL COMMENT '机器人消息ID',
+    `parent_run_id` BIGINT DEFAULT NULL COMMENT '父AgentRun ID，Sub-Agent指向主Agent的runId',
 
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_agent_run_user_bot_msg` (`user_id`, `bot_msg_id`),
     KEY `idx_agent_run_user` (`user_id`, `created_at`),
     KEY `idx_agent_run_status` (`status`, `created_at`),
     KEY `idx_agent_run_session` (`chat_session_id`),
+    KEY `idx_agent_run_parent` (`parent_run_id`),
     CONSTRAINT `fk_agent_run_user` FOREIGN KEY (`user_id`) REFERENCES `t_user` (`id`),
     CONSTRAINT `fk_agent_run_session` FOREIGN KEY (`chat_session_id`) REFERENCES `t_chat_session` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Agent 运行主表';
@@ -274,6 +293,7 @@ CREATE TABLE IF NOT EXISTS `t_agent_step` (
     `event_type` VARCHAR(64) DEFAULT NULL COMMENT '动态事件类型',
     `tool_name` VARCHAR(100) DEFAULT NULL COMMENT '调用工具名称',
     `tool_call_id` VARCHAR(128) DEFAULT NULL COMMENT '工具调用ID',
+    `subagent_run_id` BIGINT DEFAULT NULL COMMENT '派生的SubAgent Run ID，仅subagent_started/subagent_finished步骤有值',
     `iteration_no` INT DEFAULT NULL COMMENT 'Agent Loop 迭代轮次',
     `duration_ms` BIGINT DEFAULT NULL COMMENT '事件耗时毫秒数',
     `input_json` JSON DEFAULT NULL COMMENT '步骤输入',
@@ -382,12 +402,16 @@ CREATE TABLE IF NOT EXISTS `t_user_preference` (
     `user_id` BIGINT NOT NULL COMMENT '所属用户主键',
     `preferences_json` JSON NOT NULL COMMENT '偏好设置 JSON，如 {"themeMode":"dark","accentColor":"blue"}',
     `llm_config_json` JSON NULL COMMENT 'LLM 配置 JSON，apiKey 字段为 AES 加密密文',
+    `mcp_config_json` JSON NULL COMMENT 'MCP 自定义 server 配置 JSON，如 {"servers":[{"name":"...","url":"...","sseEndpoint":"/sse","enabled":true}]}',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_user_preference_user` (`user_id`),
     CONSTRAINT `fk_user_preference_user` FOREIGN KEY (`user_id`) REFERENCES `t_user` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户偏好设置表';
+
+-- MCP 配置字段增量迁移（已存在的库执行）
+-- ALTER TABLE `t_user_preference` ADD COLUMN `mcp_config_json` JSON NULL COMMENT 'MCP 自定义 server 配置 JSON' AFTER `llm_config_json`;
 
 -- ========== 长期记忆 ==========
 CREATE TABLE IF NOT EXISTS `t_user_memory` (
@@ -505,11 +529,58 @@ CREATE TABLE IF NOT EXISTS `t_diet_item` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='饮食明细表';
 
 -- ========== 升级脚本（已有库执行）==========
--- 以下 ALTER 用于已存在的数据库升级，新建库无需执行（上方 CREATE TABLE 已含字段）
-ALTER TABLE `t_body_metrics`
-    ADD COLUMN `chest_girth` DECIMAL(6,1) DEFAULT NULL COMMENT '胸围 cm' AFTER `body_fat`,
-    ADD COLUMN `waist_girth` DECIMAL(6,1) DEFAULT NULL COMMENT '腰围 cm' AFTER `chest_girth`,
-    ADD COLUMN `hip_girth` DECIMAL(6,1) DEFAULT NULL COMMENT '臀围 cm' AFTER `waist_girth`,
-    ADD COLUMN `arm_girth` DECIMAL(6,1) DEFAULT NULL COMMENT '臂围 cm' AFTER `hip_girth`,
-    ADD COLUMN `thigh_girth` DECIMAL(6,1) DEFAULT NULL COMMENT '大腿围 cm' AFTER `arm_girth`,
-    ADD COLUMN `source` VARCHAR(20) NOT NULL DEFAULT 'manual' COMMENT '来源：manual/chat/import' AFTER `summary`;
+-- 以下升级段用于已存在的数据库升级；新建库直接执行上方 CREATE TABLE 即可
+-- 使用 information_schema + PREPARE 做幂等判断，兼容不支持 ADD COLUMN IF NOT EXISTS 的 MySQL 版本
+-- 注意：本段仅用于老库补齐围度字段，不再重复添加 source 字段
+SET @ddl = IF(
+    (SELECT COUNT(*) FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 't_body_metrics' AND COLUMN_NAME = 'chest_girth') = 0,
+    'ALTER TABLE `t_body_metrics` ADD COLUMN `chest_girth` DECIMAL(6,1) DEFAULT NULL COMMENT ''胸围 cm'' AFTER `body_fat`',
+    'SELECT 1'
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @ddl = IF(
+    (SELECT COUNT(*) FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 't_body_metrics' AND COLUMN_NAME = 'waist_girth') = 0,
+    'ALTER TABLE `t_body_metrics` ADD COLUMN `waist_girth` DECIMAL(6,1) DEFAULT NULL COMMENT ''腰围 cm'' AFTER `chest_girth`',
+    'SELECT 1'
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @ddl = IF(
+    (SELECT COUNT(*) FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 't_body_metrics' AND COLUMN_NAME = 'hip_girth') = 0,
+    'ALTER TABLE `t_body_metrics` ADD COLUMN `hip_girth` DECIMAL(6,1) DEFAULT NULL COMMENT ''臀围 cm'' AFTER `waist_girth`',
+    'SELECT 1'
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @ddl = IF(
+    (SELECT COUNT(*) FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 't_body_metrics' AND COLUMN_NAME = 'arm_girth') = 0,
+    'ALTER TABLE `t_body_metrics` ADD COLUMN `arm_girth` DECIMAL(6,1) DEFAULT NULL COMMENT ''臂围 cm'' AFTER `hip_girth`',
+    'SELECT 1'
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @ddl = IF(
+    (SELECT COUNT(*) FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 't_body_metrics' AND COLUMN_NAME = 'thigh_girth') = 0,
+    'ALTER TABLE `t_body_metrics` ADD COLUMN `thigh_girth` DECIMAL(6,1) DEFAULT NULL COMMENT ''大腿围 cm'' AFTER `arm_girth`',
+    'SELECT 1'
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+
+ALTER TABLE t_user_preference ADD COLUMN mcp_config_json TEXT COMMENT 'MCP 自定义 server 配置 JSON' AFTER llm_config_json;

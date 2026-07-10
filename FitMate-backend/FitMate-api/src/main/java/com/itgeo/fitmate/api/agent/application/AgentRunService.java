@@ -44,8 +44,27 @@ public interface AgentRunService {
      */
     Long createRun(Long userId, Long chatSessionId, String botMsgId, String requestText);
 
+    /**
+     * 创建一条 Sub-Agent run 主记录。
+     * <p>
+     * 与主 Agent createRun 的差异：
+     * - 携带 parentRunId，建立父子 run 关系；
+     * - 不携带 botMsgId（Sub-Agent 不创建 ChatMessage，幂等查询按 botMsgId 不会冲突）；
+     * - requestText 用主 Agent 分配的任务描述填充。
+     *
+     * @param parentRunId 主 Agent run ID
+     * @param userId 用户ID（与主 Agent 共享登录态）
+     * @param chatSessionId 会话ID（与主 Agent 共享同一会话）
+     * @param taskText 主 Agent 分配给 Sub-Agent 的任务描述
+     * @return Sub-Agent run 主记录ID
+     */
+    Long createSubAgentRun(Long parentRunId, Long userId, Long chatSessionId, String taskText);
+
 /**
-     * 创建一条动态执行轨迹。
+     * 创建一条动态执行轨迹（使用调用方提供的 stepNo，避免 SELECT MAX 查询）。
+     * <p>
+     * 用于 Agent 执行链路：stepNo 由 AgentExecuteContext 的内存计数器递增产生，
+     * 避免每次 createStep 都查一次数据库。数据库 INSERT 仍然照常执行，历史查询不受影响。
      *
      * @param runId run 主记录ID
      * @param eventType 事件类型
@@ -55,6 +74,7 @@ public interface AgentRunService {
      * @param toolCallId 工具调用ID，可为空
      * @param iterationNo Agent Loop 迭代轮次，可为空
      * @param inputJson 输入快照JSON字符串
+     * @param stepNo 调用方提供的步骤序号
      * @return 新建 trace 记录
      */
     AgentStep createStep(
@@ -65,7 +85,30 @@ public interface AgentRunService {
             String toolName,
             String toolCallId,
             Integer iterationNo,
-            String inputJson
+            String inputJson,
+            Integer stepNo
+    );
+
+    /**
+     * 创建一条动态执行轨迹（带 subagentRunId，用于 subagent_started / subagent_finished 事件）。
+     * <p>
+     * 与 {@link #createStep} 的差异仅在于显式携带 subagentRunId，让前端能通过 SSE AGENT_STEP 事件
+     * 的 subagentRunId 字段建立父子 run 关系，从而把 Sub-Agent 的 trace 嵌套渲染到主 Agent 步骤下。
+     *
+     * @param subagentRunId Sub-Agent run ID；非 subagent 事件传 null
+     * @see #createStep(Long, String, String, String, String, String, Integer, String, Integer)
+     */
+    AgentStep createStep(
+            Long runId,
+            String eventType,
+            String stepName,
+            String stepStatus,
+            String toolName,
+            String toolCallId,
+            Long subagentRunId,
+            Integer iterationNo,
+            String inputJson,
+            Integer stepNo
     );
 
 /**
@@ -164,4 +207,16 @@ public interface AgentRunService {
      * @return 运行详情；不存在时返回 null
      */
     AgentRunDetailResponse getRunDetail(Long userId, Long runId);
+
+    /**
+     * 按 botMsgId 查询当前用户指定 run 的详情及 step 列表。
+     * <p>
+     * 用于历史会话消息二次加载执行轨迹：前端展开历史 bot 消息的思考过程时，
+     * 通过 botMsgId 反查关联的 AgentRun，并补齐 step 列表，以便还原本轮执行链路。
+     *
+     * @param userId   用户ID
+     * @param botMsgId 机器人消息ID
+     * @return 运行详情；不存在时返回 null
+     */
+    AgentRunDetailResponse getRunDetailByBotMsgId(Long userId, String botMsgId);
 }

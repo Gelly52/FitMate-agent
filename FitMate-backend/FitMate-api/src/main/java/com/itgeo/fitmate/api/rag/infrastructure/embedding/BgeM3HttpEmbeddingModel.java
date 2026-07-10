@@ -31,6 +31,12 @@ public class BgeM3HttpEmbeddingModel implements EmbeddingModel {
 
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
 
+    /** bge-m3 单批向量化文本数。 */
+    private static final int BATCH_SIZE = 8;
+
+    /** bge-m3 单条文本最大 token 数（模型上限 8192，避免长文本被服务端截断导致向量不完整）。 */
+    private static final int MAX_LENGTH = 8192;
+
     private final OkHttpClient okHttpClient;
     private final String serviceUrl;
     private final String modelName;
@@ -56,7 +62,7 @@ public class BgeM3HttpEmbeddingModel implements EmbeddingModel {
          * 注意：这里是 HTTP 协议适配器，不是本地推理实现。
          */
 
-        BgeM3EmbedRequest payload = new BgeM3EmbedRequest(texts, 8, 1024);
+        BgeM3EmbedRequest payload = new BgeM3EmbedRequest(texts, BATCH_SIZE, MAX_LENGTH);
         String json = JSONUtil.toJsonStr(payload);
 
         Request httpRequest = new Request.Builder()

@@ -12,12 +12,24 @@
  * 该模块无 Vue 依赖，纯函数 + sessionStorage。
  */
 
+export interface ThinkingCacheSubRunEntry {
+  runId: string;
+  parentRunId: string;
+  status: string;
+  sceneType: string;
+  steps: any[];
+  thinkingSegments: any[];
+  thinkingContent: string;
+  subAgentContent: string;
+}
+
 export interface ThinkingCacheEntry {
-  v: 1;
+  v: 2;
   cachedAt: number;
   thinkingContent: string;
   thinkingSegments: any[];
   agentSteps: any[];
+  subRuns?: ThinkingCacheSubRunEntry[];
 }
 
 const TTL_MS = 60 * 60 * 1000; // 1 小时
@@ -40,7 +52,7 @@ function safeParse(raw: string | null): ThinkingCacheEntry | null {
   try {
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") return null;
-    if (parsed.v !== 1) return null; // schema 不匹配，视为未命中
+    if (parsed.v !== 2) return null; // schema 不匹配，视为未命中
     if (typeof parsed.cachedAt !== "number") return null;
     return parsed as ThinkingCacheEntry;
   } catch (e) {
@@ -92,16 +104,18 @@ export function setThinking(
     thinkingContent: string;
     thinkingSegments: any[];
     agentSteps: any[];
+    subRuns?: ThinkingCacheSubRunEntry[];
   }
 ): void {
   if (!userKey || sessionId == null || !botMsgId) return;
   if (!data) return;
   const entry: ThinkingCacheEntry = {
-    v: 1,
+    v: 2,
     cachedAt: Date.now(),
     thinkingContent: String(data.thinkingContent || ""),
     thinkingSegments: Array.isArray(data.thinkingSegments) ? data.thinkingSegments : [],
     agentSteps: Array.isArray(data.agentSteps) ? data.agentSteps : [],
+    subRuns: Array.isArray(data.subRuns) ? data.subRuns : undefined,
   };
   const key = buildKey(userKey, sessionId, botMsgId);
   try {

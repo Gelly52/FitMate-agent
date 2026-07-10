@@ -47,27 +47,9 @@
         @input="handleInput"
         @keydown="handleKeyDown"
       ></textarea>
-      <button
-        v-if="!(isSending || isStreaming)"
-        type="button"
-        class="chat-send-btn"
-        :aria-label="'发送任务'"
-        @click="$emit('send')"
-      >
-        <span class="material-symbols-outlined">arrow_upward</span>
-      </button>
-      <button
-        v-else
-        type="button"
-        class="chat-stop-btn"
-        :aria-label="'停止生成'"
-        @click="$emit('stop')"
-      >
-        <span class="material-symbols-outlined">stop_circle</span>
-      </button>
     </div>
 
-    <!-- Footer: model selector 左对齐 + token 用量右对齐 -->
+    <!-- Footer: model selector 左对齐 + token 用量 + 发送按钮 右对齐 -->
     <div class="chat-input-footer">
       <div class="footer-left">
         <ModelSelector
@@ -129,6 +111,24 @@
           <span>正在压缩上下文</span>
         </span>
         <TokenUsageIndicator :token-usage="tokenUsage" />
+        <button
+          v-if="!(isSending || isStreaming)"
+          type="button"
+          class="chat-send-btn"
+          :aria-label="'发送任务'"
+          @click="$emit('send')"
+        >
+          <span class="material-symbols-outlined">arrow_upward</span>
+        </button>
+        <button
+          v-else
+          type="button"
+          class="chat-stop-btn"
+          :aria-label="'停止生成'"
+          @click="$emit('stop')"
+        >
+          <span class="material-symbols-outlined">stop_circle</span>
+        </button>
       </div>
     </div>
   </div>

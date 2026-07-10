@@ -5,6 +5,7 @@ import com.itgeo.fitmate.api.auth.dto.UserPreferenceItem;
 import com.itgeo.fitmate.api.auth.dto.UserProfileResponse;
 import com.itgeo.fitmate.api.auth.dto.UserProfileUpdateRequest;
 import com.itgeo.fitmate.api.auth.infrastructure.entity.User;
+import java.util.Map;
 
 /**
  * 用户登录服务接口。
@@ -47,6 +48,15 @@ public interface UserService {
      * @return 登录响应
      */
     UserLoginResponse emailLogin(String email, String code, String password, String clientIp, String userAgent);
+
+    /**
+     * 检查邮箱注册状态，用于登录页判断是否需要验证码。
+     * 当账号存在且已设置密码时，前端可允许跳过验证码。
+     *
+     * @param email 邮箱
+     * @return 包含 exists 与 passwordSet 两个布尔字段
+     */
+    Map<String, Boolean> checkEmailRegistered(String email);
 
     /**
      * 注销指定令牌对应的登录会话。

@@ -235,6 +235,28 @@
           <div class="summary-value">{{ bodyMetricsSummary.weightChangeRate ? bodyMetricsSummary.weightChangeRate + '%' : '-' }}</div>
         </div>
       </div>
+      <!-- 身高设置 -->
+      <div class="height-setting">
+        <div class="summary-label">HEIGHT (CM)</div>
+        <div class="height-row">
+          <input
+            v-model.number="heightCm"
+            class="metric-input height-input"
+            type="number"
+            min="80"
+            max="250"
+            step="1"
+            placeholder="输入身高"
+            @blur="saveHeight"
+            @keyup.enter="saveHeight"
+          />
+          <button
+            v-if="heightCm !== savedHeightCm"
+            class="height-save-btn"
+            @click="saveHeight"
+          >SAVE</button>
+        </div>
+      </div>
     </aside>
   </div>
 </template>
@@ -269,6 +291,8 @@ export default {
         hrv: null,
         note: ''
       },
+      heightCm: null as number | null,
+      savedHeightCm: null as number | null,
     };
   },
   computed: {
@@ -292,6 +316,7 @@ export default {
   mounted() {
     this.fetchRecentMetrics();
     this.fetchBodyMetricsSummary();
+    this.loadHeight();
   },
   methods: {
     submitMetrics() {
@@ -366,6 +391,36 @@ export default {
       if (data.hrv) parts.push('HRV ' + data.hrv + 'ms');
       return '我今天测了' + parts.join('，') + '，请帮我记录';
     },
+    loadHeight() {
+      var me = this;
+      doctorApi.getUserPreferences().then(function (res) {
+        var data = res && res.data;
+        if (data && data.heightCm) {
+          me.heightCm = data.heightCm;
+          me.savedHeightCm = data.heightCm;
+        }
+      }).catch(function () {});
+    },
+    saveHeight() {
+      var v = this.heightCm;
+      if (v == null || v < 80 || v > 250) {
+        return;
+      }
+      if (v === this.savedHeightCm) return;
+      var me = this;
+      // 先获取已有偏好，合并 heightCm 后再保存，避免覆盖 themeMode/accentColor
+      doctorApi.getUserPreferences().then(function (res) {
+        var existing = (res && res.data) || {};
+        existing.heightCm = v;
+        return doctorApi.saveUserPreferences(existing);
+      }).then(function () {
+        me.savedHeightCm = v;
+        me.showUiMessage("success", "身高已保存，BMI已更新");
+        me.fetchBodyMetricsSummary();
+      }).catch(function () {
+        me.showUiMessage("error", "保存身高失败");
+      });
+    },
   },
 };
 </script>
@@ -396,6 +451,17 @@ export default {
   gap: 8px;
   border-bottom: 1px solid var(--color-surface-container);
   padding-bottom: 24px;
+  position: relative;
+}
+.form-header::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 60px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--color-primary), transparent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--color-primary) 70%, transparent);
 }
 
 .form-section {
@@ -410,6 +476,24 @@ export default {
   display: flex;
   align-items: center;
   gap: 8px;
+  position: relative;
+  padding-left: 10px;
+}
+.form-section-head::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 2px;
+  bottom: 2px;
+  width: 2px;
+  background: var(--color-primary);
+  border-radius: 2px;
+  box-shadow: 0 0 6px color-mix(in srgb, var(--color-primary) 70%, transparent);
+}
+.form-section-head h2 {
+  font-family: ui-monospace, "Inter", sans-serif !important;
+  letter-spacing: 0.14em !important;
+  text-shadow: 0 0 8px color-mix(in srgb, var(--color-primary) 25%, transparent);
 }
 
 .metrics-grid {
@@ -524,6 +608,7 @@ export default {
   color: var(--color-on-primary);
   background: var(--color-primary-fixed-dim);
   border-color: var(--color-primary-fixed-dim);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--color-primary) 40%, transparent);
 }
 
 .history-list {
@@ -559,20 +644,35 @@ export default {
 .form-submit-btn {
   padding: 10px 28px;
   background: var(--color-primary);
-  color: var(--color-on-surface);
+  color: var(--color-on-primary);
   border: none;
-  border-radius: 0.5rem;
+  border-radius: 4px;
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  font-family: "Inter", sans-serif;
+  font-family: ui-monospace, "Inter", sans-serif;
   cursor: pointer;
-  transition: background 0.2s ease, opacity 0.2s ease;
+  transition: background 0.2s ease, opacity 0.2s ease, box-shadow 0.2s ease;
+  position: relative;
+  overflow: hidden;
 }
-
+.form-submit-btn::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+  transition: left 0.4s ease;
+}
 .form-submit-btn:hover:not(:disabled) {
-  background: var(--color-primary-container);
+  background: var(--color-primary-fixed-dim);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--color-primary) 50%, transparent);
+}
+.form-submit-btn:hover:not(:disabled)::before {
+  left: 100%;
 }
 
 .form-submit-btn:disabled {
@@ -588,6 +688,17 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  position: relative;
+}
+.form-aside::before {
+  content: "";
+  position: absolute;
+  left: -1px;
+  top: 32px;
+  width: 2px;
+  height: 40px;
+  background: linear-gradient(180deg, var(--color-primary), transparent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--color-primary) 70%, transparent);
 }
 
 .aside-title {
@@ -614,6 +725,8 @@ export default {
   font-size: 15px;
   color: var(--color-on-surface);
   font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, "Inter", sans-serif;
+  text-shadow: 0 0 8px color-mix(in srgb, var(--color-primary) 20%, transparent);
 }
 
 .aside-stat-value small {
@@ -654,6 +767,7 @@ export default {
 .tab-btn-active {
   background: var(--color-primary);
   color: var(--color-on-primary);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--color-primary) 40%, transparent);
 }
 
 .heart-rate-section {
@@ -730,6 +844,45 @@ export default {
   font-weight: 600;
   color: var(--color-on-surface);
   font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, "Inter", sans-serif;
+  text-shadow: 0 0 8px color-mix(in srgb, var(--color-primary) 25%, transparent);
+}
+
+.height-setting {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-surface-container);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.height-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.height-input {
+  flex: 1;
+  font-size: 16px;
+  font-weight: 600;
+}
+.height-save-btn {
+  padding: 4px 12px;
+  border: none;
+  border-radius: 4px;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-family: ui-monospace, "Inter", sans-serif;
+  cursor: pointer;
+  transition: box-shadow 0.2s ease;
+  flex-shrink: 0;
+}
+.height-save-btn:hover {
+  box-shadow: 0 0 12px color-mix(in srgb, var(--color-primary) 50%, transparent);
 }
 
 @media (max-width: 900px) {

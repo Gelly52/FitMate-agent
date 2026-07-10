@@ -21,8 +21,8 @@ public class LlmConfigProperties {
         private String baseUrl = "https://api.deepseek.com";
         private String apiKey = "";
         private String model = "deepseek-v4-flash";
-        private Integer maxInputContextTokens = 204800;
-        private Integer maxOutputContextTokens = 65536;
+        private Integer maxInputContextTokens = 512000;
+        private Integer maxOutputContextTokens = 384000;
         private Boolean thinkingEnabled = true;
         private String reasoningEffort = "high";
     }

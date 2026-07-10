@@ -103,6 +103,37 @@ public class AgentRunServiceImpl implements AgentRunService {
     }
 
     @Override
+    public Long createSubAgentRun(Long parentRunId, Long userId, Long chatSessionId, String taskText) {
+        // 1. 校验 Sub-Agent run 所需核心参数
+        if (parentRunId == null) {
+            throw new IllegalArgumentException("parentRunId不能为空");
+        }
+        if (userId == null) {
+            throw new IllegalArgumentException("用户ID不能为空");
+        }
+        if (StrUtil.isBlank(taskText)) {
+            throw new IllegalArgumentException("Sub-Agent任务描述不能为空");
+        }
+
+        // 2. 初始化 Sub-Agent run 主记录：
+        //    - parentRunId 建立父子关系，便于历史加载递归组装；
+        //    - botMsgId 用虚拟值（"subagent-{parentRunId}-{nanoTime}"），满足 NOT NULL + 唯一索引约束；
+        //      Sub-Agent 不创建 ChatMessage，此虚拟值仅用于数据库约束，SSE chunk 路由不依赖它；
+        //    - requestText 用主 Agent 分配的任务描述填充，便于回溯；
+        //    - 初始状态固定 pending，startedAt / finishedAt 先不填。
+        AgentRun run = new AgentRun();
+        run.setParentRunId(parentRunId);
+        run.setUserId(userId);
+        run.setChatSessionId(chatSessionId);
+        run.setBotMsgId("subagent-" + parentRunId + "-" + System.nanoTime());
+        run.setRequestText(taskText.trim());
+        run.setStatus("pending");
+        agentRunMapper.insert(run);
+
+        return run.getId();
+    }
+
+    @Override
     public AgentStep createStep(Long runId,
                                 String eventType,
                                 String stepName,
@@ -110,17 +141,35 @@ public class AgentRunServiceImpl implements AgentRunService {
                                 String toolName,
                                 String toolCallId,
                                 Integer iterationNo,
-                                String inputJson) {
+                                String inputJson,
+                                Integer stepNo) {
+        // 原 9 参数版本委托给带 subagentRunId 的重载，传 null 表示非 subagent 事件
+        return createStep(runId, eventType, stepName, stepStatus, toolName, toolCallId,
+                null, iterationNo, inputJson, stepNo);
+    }
+
+    @Override
+    public AgentStep createStep(Long runId,
+                                String eventType,
+                                String stepName,
+                                String stepStatus,
+                                String toolName,
+                                String toolCallId,
+                                Long subagentRunId,
+                                Integer iterationNo,
+                                String inputJson,
+                                Integer stepNo) {
         ensureRunExists(runId);
 
         AgentStep step = new AgentStep();
         step.setAgentRunId(runId);
-        step.setStepNo(nextStepNo(runId));
+        step.setStepNo(stepNo);
         step.setStepName(StrUtil.blankToDefault(stepName, StrUtil.blankToDefault(eventType, "Agent事件")));
         step.setStepStatus(StrUtil.blankToDefault(stepStatus, "running"));
         step.setEventType(eventType);
         step.setToolName(StrUtil.blankToDefault(toolName, null));
         step.setToolCallId(StrUtil.blankToDefault(toolCallId, null));
+        step.setSubagentRunId(subagentRunId);
         step.setIterationNo(iterationNo);
         step.setInputJson(normalizeJson(inputJson));
         if ("running".equals(step.getStepStatus())) {
@@ -279,6 +328,7 @@ public class AgentRunServiceImpl implements AgentRunService {
 
         LambdaQueryWrapper<AgentRun> wrapper = new LambdaQueryWrapper<AgentRun>()
                 .eq(AgentRun::getUserId, userId)
+                .isNull(AgentRun::getParentRunId)
                 .orderByDesc(AgentRun::getId)
                 .last("limit " + safeLimit);
 
@@ -294,6 +344,7 @@ public class AgentRunServiceImpl implements AgentRunService {
 
     /**
      * 查询指定 run 的详情，并补齐该 run 下的 step 列表。
+     * 主 Agent run 会递归加载关联的 Sub-Agent run 详情（通过 parent_run_id 反查）。
      */
 
     @Override
@@ -312,14 +363,48 @@ public class AgentRunServiceImpl implements AgentRunService {
         );
         if (run == null) return null;
 
+        return buildDetailResponse(run, userId, true);
+    }
+
+    /**
+     * 按 botMsgId 查询 run 详情并补齐 step 列表。
+     * <p>
+     * 复用 {@link #findByUserIdAndBotMsgId} 反查 run 主记录，
+     * 再加载该 run 下的全部 step，用于历史消息二次加载执行轨迹。
+     * 主 Agent run 会递归加载关联的 Sub-Agent run 详情。
+     */
+    @Override
+    public AgentRunDetailResponse getRunDetailByBotMsgId(Long userId, String botMsgId) {
+        if (userId == null) {
+            throw new IllegalArgumentException("userId不能为空");
+        }
+        if (StrUtil.isBlank(botMsgId)) {
+            throw new IllegalArgumentException("botMsgId不能为空");
+        }
+        AgentRun run = findByUserIdAndBotMsgId(userId, botMsgId.trim());
+        if (run == null) {
+            return null;
+        }
+        return buildDetailResponse(run, userId, true);
+    }
+
+    /**
+     * 构建 run 详情响应，补齐 step 列表；主 Agent run 时递归加载 Sub-Agent run。
+     *
+     * @param run 已查到的 run 主记录
+     * @param userId 当前用户 ID（用于子 run 权限校验）
+     * @param includeSubRuns 是否递归加载 Sub-Agent run。Sub-Agent run 调用时传 false 避免无限递归。
+     */
+    private AgentRunDetailResponse buildDetailResponse(AgentRun run, Long userId, boolean includeSubRuns) {
         List<AgentStep> steps = agentStepMapper.selectList(
                 new LambdaQueryWrapper<AgentStep>()
-                        .eq(AgentStep::getAgentRunId, runId)
+                        .eq(AgentStep::getAgentRunId, run.getId())
                         .orderByAsc(AgentStep::getStepNo)
         );
 
         AgentRunDetailResponse response = new AgentRunDetailResponse();
         response.setRunId(run.getId());
+        response.setParentRunId(run.getParentRunId());
         response.setChatSessionId(run.getChatSessionId());
         response.setSessionCode(resolveSessionCode(run.getChatSessionId()));
         response.setBotMsgId(run.getBotMsgId());
@@ -335,8 +420,24 @@ public class AgentRunServiceImpl implements AgentRunService {
                         .map(this::toStepResponse)
                         .collect(Collectors.toList())
         );
-        return response;
 
+        // 主 Agent run 递归加载 Sub-Agent run（Sub-Agent run 的 parentRunId 非空，但不在此处递归）
+        if (includeSubRuns && run.getParentRunId() == null) {
+            List<AgentRun> subRuns = agentRunMapper.selectList(
+                    new LambdaQueryWrapper<AgentRun>()
+                            .eq(AgentRun::getParentRunId, run.getId())
+                            .eq(AgentRun::getUserId, userId)
+                            .orderByAsc(AgentRun::getId)
+            );
+            if (subRuns != null && !subRuns.isEmpty()) {
+                List<AgentRunDetailResponse> subRunResponses = subRuns.stream()
+                        .map(subRun -> buildDetailResponse(subRun, userId, false))
+                        .collect(Collectors.toList());
+                response.setSubRuns(subRunResponses);
+            }
+        }
+
+        return response;
     }
 
     /**
@@ -395,22 +496,6 @@ public class AgentRunServiceImpl implements AgentRunService {
     }
 
     /**
-     * 获取下一个动态 trace 序号，仅用于前端排序展示。
-     */
-    private Integer nextStepNo(Long runId) {
-        AgentStep latest = agentStepMapper.selectOne(
-                new LambdaQueryWrapper<AgentStep>()
-                        .eq(AgentStep::getAgentRunId, runId)
-                        .orderByDesc(AgentStep::getStepNo)
-                        .last("limit 1")
-        );
-        if (latest == null || latest.getStepNo() == null) {
-            return 1;
-        }
-        return latest.getStepNo() + 1;
-    }
-
-    /**
      * 规范化 JSON 文本字段。
      *
      * 规则：
@@ -446,6 +531,7 @@ public class AgentRunServiceImpl implements AgentRunService {
     private AgentRunListItemResponse toListItemResponse(AgentRun run) {
         AgentRunListItemResponse response = new AgentRunListItemResponse();
         response.setRunId(run.getId());
+        response.setParentRunId(run.getParentRunId());
         response.setChatSessionId(run.getChatSessionId());
         response.setSessionCode(resolveSessionCode(run.getChatSessionId()));
         response.setBotMsgId(run.getBotMsgId());
@@ -470,6 +556,7 @@ public class AgentRunServiceImpl implements AgentRunService {
         response.setEventType(step.getEventType());
         response.setToolName(step.getToolName());
         response.setToolCallId(step.getToolCallId());
+        response.setSubagentRunId(step.getSubagentRunId());
         response.setIterationNo(step.getIterationNo());
         response.setDurationMs(step.getDurationMs());
         response.setInputJson(step.getInputJson());

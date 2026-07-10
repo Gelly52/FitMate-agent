@@ -20,6 +20,8 @@ public class AgentRun {
     private Long chatSessionId;
     @TableField("bot_msg_id")
     private String botMsgId;
+    @TableField("parent_run_id")
+    private Long parentRunId;
     @TableField("request_text")
     private String requestText;
     private String status;

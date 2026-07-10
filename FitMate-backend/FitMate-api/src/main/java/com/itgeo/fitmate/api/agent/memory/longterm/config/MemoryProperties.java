@@ -29,5 +29,9 @@ public class MemoryProperties {
     public static class Extract {
         private int minConversationTurns = 3;
         private int minConversationChars = 100;
+        /**
+         * 会话内每多少轮用户消息触发一次记忆提取（默认 5）。
+         */
+        private int triggerRounds = 5;
     }
 }

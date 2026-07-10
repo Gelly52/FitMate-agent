@@ -11,6 +11,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
 import org.springframework.stereotype.Service;
 import redis.clients.jedis.JedisPooled;
+import redis.clients.jedis.params.ScanParams;
+import redis.clients.jedis.resps.ScanResult;
 import redis.clients.jedis.search.Query;
 import redis.clients.jedis.search.SearchResult;
 
@@ -46,6 +48,29 @@ public class RedisKeywordSearchServiceImpl implements KeywordSearchService {
             ));
         }
 
+    }
+
+    @Override
+    public void deleteByDocument(Long docId) {
+        if (docId == null) {
+            return;
+        }
+        String keyPrefix = ragEmbeddingProperties.getRetrieval().getKeywordKeyPrefix();
+        String pattern = keyPrefix + docId + ":*";
+        ScanParams scanParams = new ScanParams().match(pattern).count(100);
+
+        List<String> keysToDelete = new ArrayList<>();
+        String cursor = "0";
+        do {
+            ScanResult<String> result = jedisPooled.scan(cursor, scanParams);
+            cursor = result.getCursor();
+            keysToDelete.addAll(result.getResult());
+        } while (!"0".equals(cursor));
+
+        if (!keysToDelete.isEmpty()) {
+            jedisPooled.del(keysToDelete.toArray(new String[0]));
+        }
+        log.info("RAG 关键词索引已清理 docId={} keys={}", docId, keysToDelete.size());
     }
 
     @Override

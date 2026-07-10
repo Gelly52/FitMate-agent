@@ -5,6 +5,10 @@ import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.itgeo.fitmate.api.agent.infrastructure.entity.AgentRun;
+import com.itgeo.fitmate.api.agent.infrastructure.entity.AgentStep;
+import com.itgeo.fitmate.api.agent.infrastructure.mapper.AgentRunMapper;
+import com.itgeo.fitmate.api.agent.infrastructure.mapper.AgentStepMapper;
 import com.itgeo.fitmate.api.chat.application.ChatSessionService;
 import com.itgeo.fitmate.api.chat.dto.ChatRecordItem;
 import com.itgeo.fitmate.api.chat.dto.ChatRecordsResponse;
@@ -67,6 +71,12 @@ public class ChatSessionServiceImpl implements ChatSessionService {
 
     @Resource
     private ChatThinkingMapper chatThinkingMapper;
+
+    @Resource
+    private AgentRunMapper agentRunMapper;
+
+    @Resource
+    private AgentStepMapper agentStepMapper;
 
     /**
      * 创建默认 agent 场景会话。
@@ -716,18 +726,159 @@ public class ChatSessionServiceImpl implements ChatSessionService {
     }
 
     @Override
-    public String getThinkingByMessageId(Long messageId) {
-        // 1. messageId 不能为空
-        if (messageId == null) {
+    public String getThinkingByMessageId(Long userId, Long messageId) {
+        // 1. userId / messageId 不能为空
+        if (userId == null || messageId == null) {
             return null;
         }
-        // 2. 按 messageId 查询
+        // 2. 按 messageId 查询消息，定位所属 session
+        ChatMessage message = chatMessageMapper.selectOne(
+                new LambdaQueryWrapper<ChatMessage>()
+                        .eq(ChatMessage::getId, messageId)
+                        .last("limit 1")
+        );
+        if (message == null) {
+            return null;
+        }
+        // 3. 校验 session 归属当前用户，防止 IDOR 越权
+        ChatSession session = chatSessionMapper.selectById(message.getSessionId());
+        if (session == null || !userId.equals(session.getUserId())) {
+            return null;
+        }
+        // 4. 归属校验通过后，查询思考内容
         ChatThinking thinking = chatThinkingMapper.selectOne(
                 new LambdaQueryWrapper<ChatThinking>()
                         .eq(ChatThinking::getMessageId, messageId)
                         .last("limit 1")
         );
-        // 3. 返回 content，不存在返回 null
         return thinking == null ? null : thinking.getContent();
+    }
+
+    /**
+     * 删除指定会话及其全部关联数据。
+     * <p>
+     * 清理顺序（外层依赖先删）：
+     * 1. ChatThinking（按 message_id 关联，需先取 messageIds）
+     * 2. ChatMessage（按 session_id）
+     * 3. ContextSummary（按 session_id）
+     * 4. AgentStep（按 agent_run_id，需先取该会话所有 runId）
+     * 5. AgentRun（按 chat_session_id）
+     * 6. ChatSession 本身
+     * <p>
+     * 整个过程在 {@link Transactional} 内执行，任一失败回滚。
+     */
+    @Override
+    public int deleteSession(Long userId, Long sessionId) {
+        // 1. 参数与归属校验
+        if (userId == null || sessionId == null) {
+            throw new IllegalArgumentException("参数不能为空");
+        }
+        ChatSession session = chatSessionMapper.selectOne(
+                new LambdaQueryWrapper<ChatSession>()
+                        .eq(ChatSession::getId, sessionId)
+                        .eq(ChatSession::getUserId, userId)
+                        .last("limit 1")
+        );
+        if (session == null) {
+            throw new IllegalArgumentException("会话不存在或无权访问");
+        }
+
+        // 2. 取该会话下所有消息ID，用于清理 ChatThinking
+        List<ChatMessage> messages = chatMessageMapper.selectList(
+                new LambdaQueryWrapper<ChatMessage>()
+                        .select(ChatMessage::getId)
+                        .eq(ChatMessage::getSessionId, sessionId)
+        );
+        List<Long> messageIds = messages.stream()
+                .map(ChatMessage::getId)
+                .filter(id -> id != null)
+                .distinct()
+                .collect(Collectors.toList());
+        int deletedMessages = messageIds.size();
+
+        // 3. 清理 ChatThinking（按 message_id 批量）
+        if (!messageIds.isEmpty()) {
+            chatThinkingMapper.delete(
+                    new LambdaQueryWrapper<ChatThinking>()
+                            .in(ChatThinking::getMessageId, messageIds)
+            );
+        }
+
+        // 4. 清理 ChatMessage
+        chatMessageMapper.delete(
+                new LambdaQueryWrapper<ChatMessage>()
+                        .eq(ChatMessage::getSessionId, sessionId)
+        );
+
+        // 5. 清理 ContextSummary
+        contextSummaryMapper.delete(
+                new LambdaQueryWrapper<ContextSummary>()
+                        .eq(ContextSummary::getSessionId, sessionId)
+        );
+
+        // 6. 清理 AgentStep + AgentRun（按 chat_session_id 取该会话所有 runId）
+        List<AgentRun> runs = agentRunMapper.selectList(
+                new LambdaQueryWrapper<AgentRun>()
+                        .select(AgentRun::getId)
+                        .eq(AgentRun::getChatSessionId, sessionId)
+        );
+        List<Long> runIds = runs.stream()
+                .map(AgentRun::getId)
+                .filter(id -> id != null)
+                .distinct()
+                .collect(Collectors.toList());
+        if (!runIds.isEmpty()) {
+            agentStepMapper.delete(
+                    new LambdaQueryWrapper<AgentStep>()
+                            .in(AgentStep::getAgentRunId, runIds)
+            );
+        }
+        agentRunMapper.delete(
+                new LambdaQueryWrapper<AgentRun>()
+                        .eq(AgentRun::getChatSessionId, sessionId)
+        );
+
+        // 7. 删除会话本身
+        chatSessionMapper.deleteById(sessionId);
+
+        return deletedMessages;
+    }
+
+    /**
+     * 重命名会话标题。
+     * 仅更新 title 字段，使用 LambdaUpdateWrapper 显式 set，避免空值覆盖。
+     */
+    @Override
+    public ChatSession renameSession(Long userId, Long sessionId, String newTitle) {
+        // 1. 参数与归属校验
+        if (userId == null || sessionId == null) {
+            throw new IllegalArgumentException("参数不能为空");
+        }
+        if (StrUtil.isBlank(newTitle)) {
+            throw new IllegalArgumentException("标题不能为空");
+        }
+        ChatSession session = chatSessionMapper.selectOne(
+                new LambdaQueryWrapper<ChatSession>()
+                        .eq(ChatSession::getId, sessionId)
+                        .eq(ChatSession::getUserId, userId)
+                        .last("limit 1")
+        );
+        if (session == null) {
+            throw new IllegalArgumentException("会话不存在或无权访问");
+        }
+
+        // 2. 规范化标题：trim 后截断到 TITLE_MAX_LENGTH
+        String normalizedTitle = buildTitle(newTitle);
+
+        // 3. 显式 set title，updateById 也能用，但这里用 update + wrapper 更明确
+        chatSessionMapper.update(null,
+                new LambdaUpdateWrapper<ChatSession>()
+                        .eq(ChatSession::getId, sessionId)
+                        .set(ChatSession::getTitle, normalizedTitle)
+        );
+
+        // 4. 返回更新后的会话对象
+        session.setTitle(normalizedTitle);
+        return session;
     }
 }
