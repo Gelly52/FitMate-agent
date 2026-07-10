@@ -34,6 +34,7 @@ import {
 import { extractSourcesFromResponse as extractSourcesFromResponseUtil } from "../../utils/sourceNormalizer";
 import { llmConfig } from "../../services/llmConfig";
 import { DEFAULT_LLM_MAX_INPUT_CONTEXT_TOKENS } from "../../types/settings";
+import { setDocumentTitle, resetDocumentTitle } from "../../router";
 
 export default {
   name: "ChatLogicBase",
@@ -201,6 +202,18 @@ export default {
         : [];
       return list.slice(0, 12);
     },
+    currentSessionTitle() {
+      if (this.activeChatSessionId == null) return null;
+      var list = Array.isArray(this.chatSessionList)
+        ? this.chatSessionList
+        : [];
+      for (var i = 0; i < list.length; i++) {
+        if (list[i].sessionId === this.activeChatSessionId) {
+          return list[i].title || "未命名会话";
+        }
+      }
+      return null;
+    },
     activeModeLabel() {
       var mainLabel = "Agent";
       var parts = [];
@@ -298,8 +311,10 @@ export default {
   },
   mounted() {
     this.scrollToBottom(true);
+    this.updateTabTitle();
   },
   beforeUnmount() {
+    resetDocumentTitle();
     if (this._stopTimeout) {
       clearTimeout(this._stopTimeout);
     }
@@ -319,6 +334,10 @@ export default {
     },
     "$route.path"() {
       this.applyRouteView();
+      this.updateTabTitle();
+    },
+    "$route.name"() {
+      this.updateTabTitle();
     },
     // 会话 ID 变化时同步到 URL 路径参数与 sessionStorage，
     // 实现切换其他页面再回来时仍能恢复原会话（类似 DeepSeek /chat/s/{id} 行为）
@@ -344,9 +363,33 @@ export default {
         this.isThinking = false;
         this.thinkingExpanded = true;
       }
+      this.updateTabTitle();
+    },
+    isStreaming() {
+      this.updateTabTitle();
+    },
+    isSending() {
+      this.updateTabTitle();
+    },
+    currentSessionTitle() {
+      this.updateTabTitle();
     },
   },
   methods: {
+    updateTabTitle() {
+      var routeName = this.$route && this.$route.name;
+      if (routeName !== "chat") {
+        resetDocumentTitle();
+        return;
+      }
+      var sessionTitle = this.currentSessionTitle;
+      var title = sessionTitle || "对话";
+      if (this.isStreaming || this.isSending) {
+        setDocumentTitle(title, "生成中…");
+      } else {
+        setDocumentTitle(title);
+      }
+    },
     applyRouteView() {
       var forceView =
         this.$route && this.$route.meta && this.$route.meta.forceView;

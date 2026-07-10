@@ -11,10 +11,10 @@
         >
       </div>
       <h2 class="font-inter text-headline-md text-on-surface tracking-tight">
-        我是 FitMate，有什么可以帮你？
+        你好，我是 FitMate
       </h2>
       <p class="font-inter text-body-base text-on-surface-variant max-w-md">
-        直接描述你的目标，我来帮你拆解并执行。
+        记住你的每一次训练，读懂你的每一次变化。
       </p>
     </div>
 
