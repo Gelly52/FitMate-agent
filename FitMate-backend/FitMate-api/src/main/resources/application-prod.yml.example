@@ -1,0 +1,135 @@
+# =============================================================================
+# FitMate-API 生产环境配置模板
+# 使用方法：复制为 application-prod.yml，填入真实生产值
+#   cp application-prod.yml.example application-prod.yml
+#   vim application-prod.yml
+# 注意：application-prod.yml 已被 .gitignore 排除，不会进入仓库
+# =============================================================================
+
+# Server
+server:
+  port: ${MCP_CLIENT_PORT:7070}
+
+# Website
+website:
+  domain: ${ALLOWED_ORIGINS:https://your-domain.com}
+
+# Spring
+spring:
+  datasource:
+    type: com.zaxxer.hikari.HikariDataSource
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/${DB_NAME:fitmate}?useUnicode=true&characterEncoding=UTF-8&autoReconnect=true&useSSL=true&serverTimezone=Asia/Shanghai
+    username: ${DB_USERNAME:fitmate}
+    password: ${DB_PASSWORD:your_strong_production_db_password}
+    hikari:
+      pool-name: FitMateApiHikariCP
+      connection-timeout: 30000
+      minimum-idle: 5
+      maximum-pool-size: 20
+      auto-commit: true
+      idle-timeout: 600000
+      max-lifetime: 18000000
+      connection-test-query: SELECT 1
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 20MB
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:your_strong_production_redis_password}
+  mail:
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: false
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY:your_production_api_key}
+      base-url: ${OPENAI_BASE_URL:https://api.deepseek.com}
+      chat:
+        options:
+          model: ${OPENAI_MODEL:deepseek-v4-flash}
+    mcp:
+      client:
+        enabled: true
+        name: fitmate-api
+        type: ASYNC
+        sse:
+          connections:
+            server2:
+              url: ${MCP_SERVER_URL:http://localhost:9070}
+              sse-endpoint: /sse
+
+# RAG
+rag:
+  ocr:
+    api-key: ${DASHSCOPE_API_KEY:your_dashscope_api_key}
+    model: qwen-vl-max-latest
+  embedding:
+    provider: ${RAG_EMBEDDING_PROVIDER:bge-m3-http}
+    service-url: ${EMBEDDING_SERVICE_URL:http://127.0.0.1:7086}
+    model-name: ${RAG_EMBEDDING_MODEL_NAME:bge-m3}
+    dimension: ${RAG_EMBEDDING_DIMENSION:1024}
+  vectorstore:
+    index-name: ${RAG_VECTOR_INDEX_NAME:fitmate-vectorstore-bgem3}
+    prefix: ${RAG_VECTOR_PREFIX:fitmate:prod:rag:embedding:bgem3:}
+  retrieval:
+    keyword-index-name: ${RAG_KEYWORD_INDEX_NAME:fitmate-keyword-index}
+    keyword-key-prefix: ${RAG_KEYWORD_KEY_PREFIX:fitmate:prod:rag:chunk:}
+    mode: hybrid
+    default-top-k: 4
+    max-top-k: 10
+    vector-recall-k: 16
+    keyword-recall-k: 16
+    rrf-k: 60
+    vector-weight: 1.0
+    keyword-weight: 1.0
+    rerank-enabled: false
+    rerank-candidate-k: 10
+    rerank-fusion-weight: 1.0
+    rerank-dual-hit-boost: 0.15
+    rerank-query-coverage-weight: 0.35
+  chunking:
+    strategy: token
+    merge-threshold: 0.20
+    breakpoint-drop-threshold: 0.55
+    max-chunk-sentence-count: 80
+    max-chunk-chars: 1200
+    sentence-embedding-batch-size: 64
+    paragraph-boundary-enabled: false
+    debug-log-enabled: false
+
+# Internet
+internet:
+  websearch:
+    searxng:
+      url: ${SEARXNG_URL:http://127.0.0.1:6080/search}
+      counts: ${SEARXNG_COUNTS:25}
+    bing:
+      counts: ${BING_SEARCH_COUNTS:10}
+
+# FitMate
+fitmate:
+  llm:
+    encryption-key: ${LLM_ENCRYPTION_KEY:your_production_encryption_key_base64}
+    default-config:
+      api-key: ${OPENAI_API_KEY:your_production_api_key}
+  agent:
+    max-iterations: ${AGENT_MAX_ITERATIONS:20}
+    max-tool-calls: ${AGENT_MAX_TOOL_CALLS:100}
+    max-run-duration-seconds: ${AGENT_MAX_RUN_DURATION_SECONDS:1800}
+    llm-timeout-seconds: ${AGENT_LLM_TIMEOUT_SECONDS:120}
+    tool-timeout-seconds: ${AGENT_TOOL_TIMEOUT_SECONDS:30}
+    memory-window-size: ${AGENT_MEMORY_WINDOW_SIZE:20}
+    cleanup-enabled: ${AGENT_CLEANUP_ENABLED:true}
+    retention-days: ${AGENT_RETENTION_DAYS:30}
+    cleanup-cron: ${AGENT_CLEANUP_CRON:0 0 3 * * *}
+    sub-agent:
+      max-iterations: ${SUB_AGENT_MAX_ITERATIONS:8}
+      max-tool-calls: ${SUB_AGENT_MAX_TOOL_CALLS:20}
+      max-run-duration-seconds: ${SUB_AGENT_MAX_RUN_DURATION_SECONDS:600}
