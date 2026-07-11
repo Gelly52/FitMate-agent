@@ -19,6 +19,11 @@ import org.springframework.stereotype.Component;
 /**
  * LLM 配置解析器：DB 覆盖 env。
  * DB 有 llm_config_json 时解密并使用 DB 值；DB 无值时回退 env 默认值。
+ *
+ * 配置语义：
+ * - DB 中 llm_config_json 为 NULL/空 → 完全使用系统默认配置（跟随 env 动态变化）
+ * - DB 中有配置且 apiKey 非空 → 使用用户自定义 key；其他字段缺省也回退 env 默认值
+ * - 用户可通过 resetByUserId 将配置清空为 NULL，回到系统默认状态
  */
 @Slf4j
 @Component
@@ -77,6 +82,8 @@ public class LlmConfigResolver {
 
     /** 获取脱敏配置（供 GET 接口返回） */
     public LlmConfigItem getByUserId(Long userId) {
+        UserPreference pref = loadPreference(userId);
+        boolean usingDefault = pref == null || StrUtil.isBlank(pref.getLlmConfigJson());
         ResolvedLlmConfig resolved = resolveByUserId(userId);
         LlmConfigItem item = new LlmConfigItem();
         item.setBaseUrl(resolved.getBaseUrl());
@@ -86,10 +93,32 @@ public class LlmConfigResolver {
         item.setMaxOutputContextTokens(resolved.getMaxOutputContextTokens());
         item.setThinkingEnabled(resolved.getThinkingEnabled());
         item.setReasoningEffort(resolved.getReasoningEffort());
+        item.setUsingDefault(usingDefault);
         return item;
     }
 
-    /** 保存用户 LLM 配置（apiKey 加密落库；apiKey 为空保留原密文） */
+    /**
+     * 重置用户 LLM 配置为系统默认（将 llm_config_json 清空为 NULL）。
+     * 重置后所有 LLM 调用均使用环境变量默认配置。
+     */
+    public LlmConfigItem resetByUserId(Long userId) {
+        UserPreference existing = loadPreference(userId);
+        if (existing != null) {
+            existing.setLlmConfigJson(null);
+            userPreferenceMapper.updateById(existing);
+            log.info("LLM 配置已重置为系统默认: userId={}", userId);
+        }
+        return getByUserId(userId);
+    }
+
+    /**
+     * 保存用户 LLM 配置。
+     * apiKey 处理规则：
+     * - 请求中 apiKey 非空且非脱敏值 → 加密新 key 存入 DB
+     * - 请求中 apiKey 为空或为脱敏值，且 DB 已有旧 key → 保留旧 key
+     * - 请求中 apiKey 为空或为脱敏值，且 DB 无旧 key → apiKey 字段留空，解析时回退 env 默认
+     *   （不再自动将 env 默认 key 加密写入 DB，避免钉死默认 key 导致无法跟随 env 更新）
+     */
     public void saveByUserId(Long userId, LlmConfigSaveRequest request) {
         if (request == null) {
             throw new IllegalArgumentException("LLM 配置不能为空");
@@ -106,8 +135,6 @@ public class LlmConfigResolver {
             } catch (Exception ignored) {
             }
         }
-        // apiKey：请求非空且非脱敏值则加密新值；为空或脱敏值则保留原密文（若有）
-        // 防御：前端可能误传脱敏值（如 sk-****e05f），若直接加密会污染密文导致后续 401
         String requestApiKey = request.getApiKey();
         boolean isMasked = StrUtil.isNotBlank(requestApiKey) && requestApiKey.contains("****");
         String encryptedKey;
@@ -115,14 +142,12 @@ public class LlmConfigResolver {
             encryptedKey = cipher.encrypt(requestApiKey);
         } else if (StrUtil.isNotBlank(existingEncryptedKey)) {
             encryptedKey = existingEncryptedKey;
-        } else if (StrUtil.isNotBlank(envDefault().getApiKey())) {
-            // 新用户无 DB 记录且未提供 apiKey：回退 env 默认 key 加密落库，
-            // 使聊天页的思考强度/开关等局部配置变更能持久化（否则会抛异常导致静默失败）
-            encryptedKey = cipher.encrypt(envDefault().getApiKey());
         } else {
             encryptedKey = "";
         }
-        if (StrUtil.isBlank(encryptedKey)) {
+        if (StrUtil.isBlank(encryptedKey) && StrUtil.isBlank(requestApiKey)) {
+            // 用户未填写自定义 key，允许仅保存其他配置项（apiKey 留空，resolve 时回退 env 默认）
+        } else if (StrUtil.isBlank(encryptedKey)) {
             throw new IllegalArgumentException("API Key 不能为空");
         }
 
@@ -147,8 +172,9 @@ public class LlmConfigResolver {
                 existing.setLlmConfigJson(jsonStr);
                 userPreferenceMapper.updateById(existing);
             }
-            log.info("LLM 配置已保存: userId={}, model={}, thinkingEnabled={}, reasoningEffort={}",
-                    userId, json.getStr("model"), json.getBool("thinkingEnabled"), json.getStr("reasoningEffort"));
+            log.info("LLM 配置已保存: userId={}, model={}, thinkingEnabled={}, reasoningEffort={}, usingCustomKey={}",
+                    userId, json.getStr("model"), json.getBool("thinkingEnabled"), json.getStr("reasoningEffort"),
+                    StrUtil.isNotBlank(encryptedKey));
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             throw new IllegalStateException("序列化默认 preferencesJson 失败", e);
         }

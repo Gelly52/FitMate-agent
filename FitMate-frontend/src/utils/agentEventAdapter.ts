@@ -156,36 +156,39 @@ export function normalizeAgentTraceEvent(payload: unknown): AgentTraceEvent | nu
 }
 
 function resolveTraceLabel(event: AgentTraceEvent, fallbackIndex: number): string {
-  if (event.stepName) {
-    return event.stepName;
-  }
   const eventType = (event.eventType || "").toLowerCase();
   if (eventType === "tool_call_started" && event.toolName) {
-    return "调用工具：" + event.toolName;
+    return "Calling tool: " + event.toolName;
   }
   if (eventType === "tool_call_finished" && event.toolName) {
-    return "工具完成：" + event.toolName;
+    return "Tool finished: " + event.toolName;
   }
   if (eventType === "tool_call_failed" && event.toolName) {
-    return "工具失败：" + event.toolName;
+    return "Tool failed: " + event.toolName;
   }
   if (eventType === "llm_started") {
-    return "LLM 正在分析";
+    return "Agent: Let me think...";
   }
   if (eventType === "llm_finished") {
-    return "LLM 分析完成";
+    return "Done thinking";
   }
   if (eventType === "subagent_started") {
-    return "派生 Sub-Agent";
+    return "Sub-agent spawned";
   }
   if (eventType === "subagent_finished") {
-    return "Sub-Agent 已完成";
+    return "Sub-agent completed";
   }
   if (eventType === "final_answer" || eventType === "run_finished") {
-    return "最终答案已生成";
+    return "Ready to respond";
+  }
+  if (eventType === "run_started") {
+    return "Agent started";
   }
   if (eventType === "run_failed") {
-    return "任务执行失败";
+    return "Task failed";
+  }
+  if (event.stepName) {
+    return event.stepName;
   }
   if (event.toolName) {
     return event.toolName;
@@ -193,7 +196,7 @@ function resolveTraceLabel(event: AgentTraceEvent, fallbackIndex: number): strin
   if (event.message) {
     return event.message;
   }
-  return "事件 " + (fallbackIndex + 1);
+  return "Event " + (fallbackIndex + 1);
 }
 
 export function normalizeAgentTraceNode(value: unknown, index = 0): AgentTraceNode | null {

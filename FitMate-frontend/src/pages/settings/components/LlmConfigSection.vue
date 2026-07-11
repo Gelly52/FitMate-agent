@@ -2,6 +2,12 @@
 <template>
   <section class="llm-config-section">
     <div class="llm-config-card">
+      <!-- 使用系统默认提示 -->
+      <div v-if="config.usingDefault" class="llm-default-banner">
+        <span class="llm-default-icon">✓</span>
+        <span>当前使用系统默认配置，修改任意字段即切换为自定义配置</span>
+      </div>
+
       <!-- API 地址 -->
       <div class="llm-field">
         <label class="llm-label">API 地址 <span class="llm-required">*</span></label>
@@ -23,7 +29,7 @@
           :placeholder="apiKeyPlaceholder"
           @focus="onApiKeyFocus"
         />
-        <p class="llm-hint">留空表示不修改原 Key（显示为脱敏值）</p>
+        <p class="llm-hint">{{ apiKeyHint }}</p>
       </div>
 
       <!-- 模型 -->
@@ -87,6 +93,15 @@
       </div>
 
       <div class="llm-actions">
+        <button
+          v-if="!config.usingDefault"
+          type="button"
+          class="llm-btn-danger"
+          :disabled="resetting"
+          @click="onReset"
+        >
+          {{ resetting ? "重置中..." : "重置为系统默认" }}
+        </button>
         <button type="button" class="llm-btn-primary" :disabled="saving" @click="onSave">
           {{ saving ? "保存中..." : "保存" }}
         </button>
@@ -104,26 +119,46 @@ export default {
   name: "LlmConfigSection",
   data() {
     return {
-      form: { ...DEFAULT_LLM_CONFIG } as LlmConfig,
+      form: { ...DEFAULT_LLM_CONFIG, apiKey: "" } as LlmConfig,
       models: [] as LlmModelOption[],
       fetchingModels: false,
       testing: false,
       saving: false,
+      resetting: false,
       testResult: null as LlmTestResult | null,
       apiKeyEdited: false,
     };
   },
   computed: {
+    config(): LlmConfig {
+      return llmConfig.getConfig();
+    },
     apiKeyPlaceholder() {
       const current = llmConfig.getConfig().apiKey;
       if (current && !this.apiKeyEdited) {
         return current;
       }
-      return "输入 API Key（留空不修改）";
+      return llmConfig.getConfig().usingDefault
+        ? "输入自定义 API Key 覆盖系统默认（留空使用系统默认）"
+        : "输入 API Key（留空不修改）";
+    },
+    apiKeyHint() {
+      if (llmConfig.getConfig().usingDefault) {
+        return "当前使用系统默认 Key，留空将继续使用系统默认 Key";
+      }
+      return "留空表示不修改原 Key（显示为脱敏值）";
     },
   },
   mounted() {
     this.syncFromStore();
+    this.unsubscribe = llmConfig.subscribe(() => {
+      this.syncFromStore();
+    });
+  },
+  beforeUnmount() {
+    if (this.unsubscribe) {
+      this.unsubscribe();
+    }
   },
   methods: {
     syncFromStore() {
@@ -131,6 +166,7 @@ export default {
       this.form = { ...cfg, apiKey: "" };
       this.models = llmConfig.getModels();
       this.apiKeyEdited = false;
+      this.testResult = null;
     },
     onApiKeyFocus() {
       this.apiKeyEdited = true;
@@ -168,7 +204,7 @@ export default {
         return;
       }
       const stored = llmConfig.getConfig();
-      if (!this.form.apiKey && !stored.apiKey) {
+      if (!this.form.apiKey && !stored.apiKey && !stored.usingDefault) {
         this.$message && this.$message.error && this.$message.error("API Key 不能为空");
         return;
       }
@@ -178,9 +214,24 @@ export default {
         this.syncFromStore();
         this.$message && this.$message.success && this.$message.success("LLM 配置已保存");
       } catch (e) {
-        this.$message && this.$message.error && this.$message.error("保存失败");
+        this.$message && this.$message.error && this.$message.error((e as Error).message || "保存失败");
       } finally {
         this.saving = false;
+      }
+    },
+    async onReset() {
+      if (!window.confirm("确定要重置为系统默认配置吗？这将清除你的自定义 API Key。")) {
+        return;
+      }
+      this.resetting = true;
+      try {
+        await llmConfig.reset();
+        this.syncFromStore();
+        this.$message && this.$message.success && this.$message.success("已重置为系统默认配置");
+      } catch (e) {
+        this.$message && this.$message.error && this.$message.error((e as Error).message || "重置失败");
+      } finally {
+        this.resetting = false;
       }
     },
   },
@@ -199,6 +250,29 @@ export default {
   border: 1px solid var(--color-outline-variant);
   border-radius: 12px;
   background: var(--color-surface-container-lowest, var(--color-background));
+}
+.llm-default-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  color: var(--color-primary);
+  font-size: 13px;
+  font-weight: 500;
+}
+.llm-default-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 12px;
+  flex-shrink: 0;
 }
 .llm-field {
   display: flex;
@@ -319,8 +393,28 @@ export default {
 }
 .llm-actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
   margin-top: 8px;
+  gap: 12px;
+}
+.llm-btn-danger {
+  padding: 9px 18px;
+  border: 1px solid var(--color-error, #ef4444);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-error, #ef4444);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s ease, opacity 0.2s ease;
+}
+.llm-btn-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-error, #ef4444) 10%, transparent);
+}
+.llm-btn-danger:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 .llm-btn-primary {
   padding: 9px 24px;
@@ -332,6 +426,7 @@ export default {
   font-weight: 600;
   cursor: pointer;
   transition: opacity 0.2s ease;
+  margin-left: auto;
 }
 .llm-btn-primary:hover:not(:disabled) {
   opacity: 0.85;

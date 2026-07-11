@@ -105,6 +105,24 @@ async function save(patch: Partial<LlmConfig>): Promise<void> {
   notify();
 }
 
+/** 重置为系统默认配置（DELETE 后端，清空用户自定义配置） */
+async function reset(): Promise<void> {
+  const resetRes = await doctorApi.resetLlmConfig();
+  if (resetRes && resetRes.status && resetRes.status !== 200) {
+    throw new Error(resetRes.msg || "重置 LLM 配置失败");
+  }
+  try {
+    const res = await doctorApi.getLlmConfig();
+    if (res && res.status === 200 && res.data) {
+      state.config = Object.assign({}, DEFAULT_LLM_CONFIG, res.data);
+    }
+  } catch (e) {
+    state.config = { ...DEFAULT_LLM_CONFIG };
+  }
+  persistLocal();
+  notify();
+}
+
 /** 拉取模型列表（用当前配置或传入的临时配置） */
 async function fetchModels(
   override?: Partial<LlmConfig>
@@ -152,6 +170,7 @@ export const llmConfig = {
   getConfig,
   getModels,
   save,
+  reset,
   fetchModels,
   testConnection,
   subscribe,

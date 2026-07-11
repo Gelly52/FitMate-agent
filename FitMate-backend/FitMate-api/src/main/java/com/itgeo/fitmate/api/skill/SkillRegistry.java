@@ -17,8 +17,9 @@ import org.springframework.util.StreamUtils;
 /**
  * 技能注册表。
  * <p>
- * 启动时扫描 prompts/skills/ 目录下所有 .md 文件，解析为 SkillInfo。
- * 文件格式：前几行为 name/description/trigger 元数据，--- 分隔后为技能正文。
+ * 启动时扫描 prompts/skills/ 目录下每个子目录中的 SKILL.md 文件，解析为 SkillInfo。
+ * 文件格式：标准 YAML frontmatter（开头 --- ... 结束 ---），元数据在两个 --- 之间，
+ * 正文在第二个 --- 之后。兼容 CRLF 换行。
  */
 @Component
 @Slf4j
@@ -61,19 +62,28 @@ public class SkillRegistry {
 
     private Resource[] scanDirectory(ClassPathResource dirResource) throws IOException {
         PathMatchingResourcePatternResolver resolver = new PathMatchingResourcePatternResolver();
-        return resolver.getResources("classpath*:" + SKILLS_DIR + "/*.md");
+        return resolver.getResources("classpath*:" + SKILLS_DIR + "/*/SKILL.md");
     }
 
     private SkillInfo parseSkill(Resource resource) throws IOException {
         String text = StreamUtils.copyToString(resource.getInputStream(), StandardCharsets.UTF_8);
-        int separatorIndex = text.indexOf("\n" + SEPARATOR + "\n");
-        if (separatorIndex < 0) {
-            log.warn("技能文件 {} 缺少 --- 分隔符，跳过", resource.getFilename());
+        // 兼容 Windows CRLF 换行，统一转为 LF
+        text = text.replace("\r\n", "\n");
+
+        // 标准格式：文件以 --- 开头，元数据在两个 --- 之间，正文在第二个 --- 之后
+        if (!text.startsWith("---\n")) {
+            log.warn("技能文件 {} 缺少开头的 --- 分隔符，跳过", resource.getFilename());
             return null;
         }
 
-        String metadata = text.substring(0, separatorIndex);
-        String content = text.substring(separatorIndex + SEPARATOR.length() + 2).trim();
+        int closingIndex = text.indexOf("\n---\n", 4);
+        if (closingIndex < 0) {
+            log.warn("技能文件 {} 缺少结束的 --- 分隔符，跳过", resource.getFilename());
+            return null;
+        }
+
+        String metadata = text.substring(4, closingIndex);
+        String content = text.substring(closingIndex + 5).trim();
 
         SkillInfo skill = new SkillInfo();
         for (String line : metadata.split("\n")) {

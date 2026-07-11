@@ -142,12 +142,12 @@ public class AgentLoopExecutor {
         agentTraceService.startEvent(
                 context,
                 "run_started",
-                "Agent 开始执行",
+                "Agent started",
                 null,
                 null,
                 0,
                 JSONUtil.toJsonStr(Map.of("message", context.getChatEntity().getMessage())),
-                "Agent 已开始动态执行"
+                "Agent execution started"
         );
 
         int maxIterations = normalizePositive(agentProperties.getMaxIterations(), 20);
@@ -195,7 +195,7 @@ public class AgentLoopExecutor {
 
         for (int iteration = 1; iteration <= maxIterations; iteration++) {
             if (Duration.between(runStarted, Instant.now()).toSeconds() > maxDurationSeconds) {
-                throw new IllegalStateException("Agent执行超时");
+                throw new IllegalStateException("Agent execution timed out");
             }
             if (isContextCancelled(context)) {
                 throw new AgentCancelledException(extractPartialContent(context));
@@ -205,12 +205,12 @@ public class AgentLoopExecutor {
             AgentStep llmStep = agentTraceService.startEvent(
                     context,
                     "llm_started",
-                    "LLM 决策",
+                    "Agent: Let me think...",
                     null,
                     null,
                     iteration,
                     JSONUtil.toJsonStr(Map.of("observationCount", observations.size())),
-                    "LLM 正在决定下一步"
+                    "Deciding next step..."
             );
 
             Instant llmStarted = Instant.now();
@@ -273,17 +273,17 @@ public class AgentLoopExecutor {
                         "llm_finished",
                         JSONUtil.toJsonStr(llmOutput),
                         elapsedMs(llmStarted),
-                        "LLM 已完成决策"
+                        "Done thinking"
                 );
             } catch (Exception e) {
-                agentTraceService.failEvent(context, llmStep, "run_failed", e.getMessage(), elapsedMs(llmStarted), "LLM 决策失败");
+                agentTraceService.failEvent(context, llmStep, "run_failed", e.getMessage(), elapsedMs(llmStarted), "Reasoning failed");
                 throw e;
             }
 
             JSONObject decision = parseDecision(decisionText);
             String action = decision.getStr("action");
             if ("final".equalsIgnoreCase(action)) {
-                String finalAnswer = StrUtil.blankToDefault(decision.getStr("final_answer"), "已完成处理。请查看上方执行轨迹。");
+                String finalAnswer = StrUtil.blankToDefault(decision.getStr("final_answer"), "Processing complete. Please review the execution trace above.");
                 // 如果状态机已流式推送，跳过整段推送；否则走原逻辑
                 if (!streamState.hasStreamed()) {
                     sendContentChunk(context, finalAnswer);
@@ -308,7 +308,7 @@ public class AgentLoopExecutor {
             }
 
             if (toolCallCount >= maxToolCalls) {
-                throw new IllegalStateException("工具调用次数超过上限");
+                throw new IllegalStateException("Tool call limit exceeded");
             }
             toolCallCount++;
 
@@ -320,16 +320,16 @@ public class AgentLoopExecutor {
             AgentStep toolStep = agentTraceService.startEvent(
                     context,
                     "tool_call_started",
-                    "调用工具: " + toolCall.getName(),
+                    "Calling tool: " + toolCall.getName(),
                     toolCall.getName(),
                     toolCall.getToolCallId(),
                     iteration,
                     JSONUtil.toJsonStr(toolCall),
-                    "开始调用工具: " + toolCall.getName()
+                    "Calling tool: " + toolCall.getName()
             );
             Instant toolStarted = Instant.now();
             if (!allowedToolNames.contains(toolCall.getName())) {
-                result = ToolResult.error("当前请求不允许调用工具: " + toolCall.getName());
+                result = ToolResult.error("Tool not allowed in current request: " + toolCall.getName());
             } else {
                 KbSearchContextHolder.setKbEnabled(context.getChatEntity() != null
                         && !Boolean.FALSE.equals(context.getChatEntity().getKnowledgeBaseEnabled()));
@@ -357,7 +357,7 @@ public class AgentLoopExecutor {
                         "tool_call_finished",
                         JSONUtil.toJsonStr(result),
                         elapsedMs(toolStarted),
-                        "工具调用完成: " + toolCall.getName()
+                        "Tool finished: " + toolCall.getName()
                 );
             } else {
                 agentTraceService.failEvent(
@@ -366,14 +366,14 @@ public class AgentLoopExecutor {
                         "tool_call_failed",
                         result.getErrorMessage(),
                         elapsedMs(toolStarted),
-                        "工具调用失败: " + toolCall.getName()
+                        "Tool failed: " + toolCall.getName()
                 );
             }
         }
 
         // 达到最大循环次数仍未生成最终答案：不抛异常，改为构造兜底答案走正常完成流程，
         // 避免前端因收到 failed 状态 FINISH 事件而崩溃，同时把本轮已收集的工具调用结果作为部分信息反馈给用户。
-        log.warn("Agent达到最大循环次数仍未生成最终答案, runId={}, maxIterations={}", context.getRunId(), maxIterations);
+        log.warn("Agent reached max iterations without final answer, runId={}, maxIterations={}", context.getRunId(), maxIterations);
         String fallbackAnswer = buildMaxIterationsFallback(observations);
         finishWithAnswer(context, fallbackAnswer, observations, memory, allowedTools, summarySection, userProfileSection);
     }
@@ -412,13 +412,13 @@ public class AgentLoopExecutor {
                                String userProfileSection) {
         // 0. 递归屏蔽兜底：Sub-Agent 不允许派生 Sub-Agent，防止无限递归
         if (context.isSubAgent()) {
-            throw new IllegalStateException("Sub-Agent 不允许派生 Sub-Agent（递归屏蔽）");
+            throw new IllegalStateException("Sub-Agent spawning Sub-Agent is not allowed (recursion guard)");
         }
 
         // 1. 解析 Sub-Agent 任务描述（必填）
         String task = decision.getStr("task");
         if (StrUtil.isBlank(task)) {
-            throw new IllegalStateException("spawn_subagent 决策缺少 task 字段");
+            throw new IllegalStateException("spawn_subagent decision missing 'task' field");
         }
         task = task.trim();
 
@@ -448,13 +448,13 @@ public class AgentLoopExecutor {
         AgentStep subStartStep = agentTraceService.startEvent(
                 context,
                 "subagent_started",
-                "派生 Sub-Agent",
+                "Sub-agent spawned",
                 null,
                 null,
                 subRunId,
                 null,
                 JSONUtil.toJsonStr(Map.of("subRunId", subRunId, "task", task)),
-                "Sub-Agent 已派生，开始执行子任务"
+                "Sub-agent spawned, executing subtask"
         );
         Instant subStarted = Instant.now();
 
@@ -509,14 +509,14 @@ public class AgentLoopExecutor {
                     JSONUtil.toJsonStr(Map.of("subRunId", subRunId, "resultLength",
                             subResult == null ? 0 : subResult.length())),
                     elapsedMs(subStarted),
-                    "Sub-Agent 已完成子任务"
+                    "Sub-agent completed"
             );
 
             Map<String, Object> observation = new LinkedHashMap<>();
             observation.put("toolCallId", "subagent-" + subRunId);
             observation.put("toolName", "subagent");
             observation.put("success", true);
-            observation.put("content", StrUtil.blankToDefault(subResult, "Sub-Agent 未返回结果"));
+            observation.put("content", StrUtil.blankToDefault(subResult, "Sub-agent returned no result"));
             observation.put("data", Map.of("subRunId", subRunId, "task", task));
             observations.add(observation);
         } catch (Exception e) {
@@ -525,11 +525,11 @@ public class AgentLoopExecutor {
             String errorMessage = e.getMessage();
             if (isCancelled) {
                 // 取消级联：主 Agent 被取消导致 Sub-Agent 中断，标记 cancelled 保持语义一致
-                log.info("Sub-Agent 因父 run 取消而中断, parentRunId={}, subRunId={}", parentRunId, subRunId);
-                agentRunService.markRunCancelled(subRunId, "父 Agent 被取消，Sub-Agent 级联中断");
+                log.info("Sub-agent interrupted due to parent run cancellation, parentRunId={}, subRunId={}", parentRunId, subRunId);
+                agentRunService.markRunCancelled(subRunId, "Parent agent cancelled, sub-agent cascade interrupted");
             } else {
                 // 真正失败：标记 failed
-                log.warn("Sub-Agent 执行失败, parentRunId={}, subRunId={}", parentRunId, subRunId, e);
+                log.warn("Sub-agent execution failed, parentRunId={}, subRunId={}", parentRunId, subRunId, e);
                 agentRunService.markRunFailed(subRunId, errorMessage);
             }
             agentTraceService.failEvent(
@@ -538,7 +538,7 @@ public class AgentLoopExecutor {
                     "subagent_finished",
                     errorMessage,
                     elapsedMs(subStarted),
-                    isCancelled ? "Sub-Agent 因取消中断" : "Sub-Agent 执行失败: " + errorMessage
+                    isCancelled ? "Sub-agent cancelled" : "Sub-agent failed: " + errorMessage
             );
 
             Map<String, Object> observation = new LinkedHashMap<>();
@@ -546,8 +546,8 @@ public class AgentLoopExecutor {
             observation.put("toolName", "subagent");
             observation.put("success", false);
             observation.put("content", isCancelled
-                    ? "Sub-Agent 因父 Agent 取消而中断"
-                    : "Sub-Agent 执行失败: " + errorMessage);
+                    ? "Sub-agent interrupted due to parent agent cancellation"
+                    : "Sub-agent failed: " + errorMessage);
             observation.put("data", Map.of("subRunId", subRunId, "task", task,
                     "error", errorMessage, "cancelled", isCancelled));
             observations.add(observation);
@@ -568,12 +568,12 @@ public class AgentLoopExecutor {
         AgentStep finalStep = agentTraceService.startEvent(
                 context,
                 "final_answer",
-                "生成最终答案",
+                "Ready to respond",
                 null,
                 null,
                 null,
                 JSONUtil.toJsonStr(Map.of("observationCount", observations.size())),
-                "开始生成最终答案"
+                "Generating response..."
         );
         Instant started = Instant.now();
         if (isContextCancelled(context)) {
@@ -591,7 +591,7 @@ public class AgentLoopExecutor {
                     "final_answer",
                     JSONUtil.toJsonStr(Map.of("finalAnswer", finalAnswer, "observationCount", observations.size())),
                     elapsedMs(started),
-                    "Sub-Agent 最终答案已生成"
+                    "Sub-agent ready"
             );
             agentRunService.markRunSuccess(context.getRunId(),
                     JSONUtil.toJsonStr(Map.of("finalAnswer", finalAnswer)));
@@ -616,7 +616,7 @@ public class AgentLoopExecutor {
             try {
                 chatSessionService.saveThinking(context.getAssistantMessageId(), thinkingContent);
             } catch (Exception e) {
-                log.warn("保存思考内容失败，messageId={}, runId={}, error={}",
+                log.warn("Failed to save thinking content, messageId={}, runId={}, error={}",
                         context.getAssistantMessageId(), context.getRunId(), e.getMessage());
             }
         }
@@ -637,7 +637,7 @@ public class AgentLoopExecutor {
                 "final_answer",
                 JSONUtil.toJsonStr(finish),
                 elapsedMs(started),
-                "最终答案已生成"
+                "Ready to respond"
         );
         agentRunService.markRunSuccess(context.getRunId(), JSONUtil.toJsonStr(finish));
         // FINISH 之前 flush 残留 chunk buffer，确保前端先收完 chunk 再收到结束信号
@@ -657,7 +657,7 @@ public class AgentLoopExecutor {
             long lastExtracted = memoryExtractCounter.getLastExtractedUserMsgCount(sessionId);
             int triggerRounds = normalizePositive(memoryProperties.getExtract().getTriggerRounds(), 5);
             if (currentUserMsgCount - lastExtracted < triggerRounds) {
-                log.debug("记忆提取未到触发轮次（current={} last={} trigger={}），跳过 sessionId={}",
+                log.debug("Memory extraction not yet triggered (current={} last={} trigger={}), skipping sessionId={}",
                         currentUserMsgCount, lastExtracted, triggerRounds, sessionId);
                 return;
             }
@@ -665,7 +665,7 @@ public class AgentLoopExecutor {
             // 同时把 authenticatedUser 透传到 memoryTaskExecutor 线程，确保下游 LLM 调用与 Agent 决策同源
             sessionMemoryExtractor.extract(userId, sessionId, memory, allowedTools, summarySection, userProfileSection, currentUserMsgCount, context.getAuthenticatedUser());
         } catch (Exception e) {
-            log.warn("触发会话记忆提取失败", e);
+            log.warn("Session memory extraction failed", e);
         }
     }
 
@@ -744,7 +744,7 @@ public class AgentLoopExecutor {
                 }
             }
         } catch (Exception e) {
-            log.warn("Agent Wiki 预检索失败, userId={}, question={}", userId, question, e);
+            log.warn("Agent Wiki pre-search failed, userId={}, question={}", userId, question, e);
         }
 
         // 2. RAG 叠加检索（ragEnabled=true 时）
@@ -753,13 +753,13 @@ public class AgentLoopExecutor {
             try {
                 List<Document> ragDocs = documentService.doSearch(question, userId, topK);
                 if (ragDocs != null && !ragDocs.isEmpty()) {
-                    contentBuilder.append("### 原始文档片段（RAG 预检索）\n");
+                    contentBuilder.append("### Document fragments (RAG pre-retrieval)\n");
                     for (Document doc : ragDocs) {
                         contentBuilder.append(doc.getText() == null ? "" : doc.getText()).append("\n\n");
                     }
                 }
             } catch (Exception e) {
-                log.warn("Agent RAG 预检索失败, userId={}, question={}", userId, question, e);
+                log.warn("Agent RAG pre-search failed, userId={}, question={}", userId, question, e);
             }
         }
 
@@ -781,7 +781,7 @@ public class AgentLoopExecutor {
     private JSONObject parseDecision(String raw) {
         String json = LlmJsonSanitizer.sanitize(raw);
         if (!JSONUtil.isTypeJSON(json)) {
-            throw new IllegalStateException("模型未返回合法 JSON 决策: " + abbreviate(json));
+            throw new IllegalStateException("Model did not return valid JSON decision: " + abbreviate(json));
         }
         return JSONUtil.parseObj(json);
     }
@@ -902,9 +902,9 @@ public class AgentLoopExecutor {
      */
     private String buildMaxIterationsFallback(List<Map<String, Object>> observations) {
         StringBuilder sb = new StringBuilder();
-        sb.append("> ⚠️ **已达到 Agent 最大循环次数**，未能给出完整最终答案。以下是本轮已收集到的工具调用结果：\n\n");
+        sb.append("> ⚠️ **Agent reached maximum iterations** without producing a complete answer. Below are the tool call results collected so far:\n\n");
         if (observations == null || observations.isEmpty()) {
-            sb.append("本轮未收集到任何工具调用结果，建议改写问题或缩小范围后重试。");
+            sb.append("No tool call results were collected. Please try rephrasing your question or narrowing the scope.");
             return sb.toString();
         }
         for (int i = 0; i < observations.size(); i++) {
@@ -912,17 +912,17 @@ public class AgentLoopExecutor {
             Object toolName = obs.getOrDefault("toolName", "unknown");
             Object success = obs.getOrDefault("success", Boolean.FALSE);
             Object content = obs.get("content");
-            sb.append("### ").append(i + 1).append(". 工具: ").append(toolName)
-                    .append("（").append(Boolean.TRUE.equals(success) ? "成功" : "失败").append("）\n");
+            sb.append("### ").append(i + 1).append(". Tool: ").append(toolName)
+                    .append(" (").append(Boolean.TRUE.equals(success) ? "success" : "failed").append(")\n");
             if (content != null) {
                 String text = content.toString();
                 if (text.length() > 800) {
-                    text = text.substring(0, 800) + "...(已截断)";
+                    text = text.substring(0, 800) + "...(truncated)";
                 }
                 sb.append(text).append("\n\n");
             }
         }
-        sb.append("---\n\n你可以基于以上已收集到的信息重新提问，或调整问题范围以获得更精准的回答。");
+        sb.append("---\n\nYou may rephrase your question based on the above results, or narrow the scope for a more precise answer.");
         return sb.toString();
     }
 

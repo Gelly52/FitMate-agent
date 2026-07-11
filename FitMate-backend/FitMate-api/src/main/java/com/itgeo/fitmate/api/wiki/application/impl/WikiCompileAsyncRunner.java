@@ -1,5 +1,9 @@
 package com.itgeo.fitmate.api.wiki.application.impl;
 
+import com.itgeo.fitmate.api.auth.application.AuthenticatedUserContext;
+import com.itgeo.fitmate.api.auth.application.UserContextHolder;
+import com.itgeo.fitmate.api.auth.infrastructure.entity.User;
+import com.itgeo.fitmate.api.auth.infrastructure.mapper.UserMapper;
 import com.itgeo.fitmate.api.wiki.application.WikiCompileService;
 import com.itgeo.fitmate.api.wiki.infrastructure.entity.WikiCompileJob;
 import com.itgeo.fitmate.api.wiki.infrastructure.mapper.WikiCompileJobMapper;
@@ -8,15 +12,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
-/**
- * Wiki 编译异步执行入口。
- *
- * 通过 @Async("wikiCompileExecutor") 在独立线程池中执行编译任务，
- * 不阻塞调用方（如 RagController.uploadRagDoc）。
- *
- * 编译状态由 WikiCompileServiceImpl 在 t_wiki_compile_job 中维护；
- * 本 runner 仅作为异步触发器，并在异常时兜底标记 FAILED。
- */
 @Component
 @Slf4j
 @RequiredArgsConstructor
@@ -24,20 +19,35 @@ public class WikiCompileAsyncRunner {
 
     private final WikiCompileService wikiCompileService;
     private final WikiCompileJobMapper compileJobMapper;
+    private final UserMapper userMapper;
 
-    /**
-     * 异步执行编译任务。
-     *
-     * @param jobId compile job 主键
-     */
     @Async("wikiCompileExecutor")
     public void runAsync(Long jobId) {
+        WikiCompileJob job = null;
         try {
+            job = compileJobMapper.selectById(jobId);
+            if (job != null && job.getCreatedByUserId() != null) {
+                User user = userMapper.selectById(job.getCreatedByUserId());
+                if (user != null) {
+                    AuthenticatedUserContext ctx = AuthenticatedUserContext.builder()
+                            .userId(user.getId())
+                            .userKey(user.getUserKey())
+                            .username(user.getUsername())
+                            .nickname(user.getNickname())
+                            .phone(user.getPhone())
+                            .email(user.getUsername())
+                            .build();
+                    UserContextHolder.set(ctx);
+                    log.info("Wiki 异步编译设置用户上下文: userId={}", user.getId());
+                }
+            }
             wikiCompileService.executeCompile(jobId);
         } catch (Exception e) {
             log.error("异步编译异常 job={}", jobId, e);
             try {
-                WikiCompileJob job = compileJobMapper.selectById(jobId);
+                if (job == null) {
+                    job = compileJobMapper.selectById(jobId);
+                }
                 if (job != null && !"SUCCESS".equals(job.getStatus())) {
                     job.setStatus("FAILED");
                     job.setErrorMessage("异步执行异常: " + e.getMessage());
@@ -46,6 +56,8 @@ public class WikiCompileAsyncRunner {
             } catch (Exception ex) {
                 log.error("异步编译兜底状态更新失败 job={}", jobId, ex);
             }
+        } finally {
+            UserContextHolder.clear();
         }
     }
 }

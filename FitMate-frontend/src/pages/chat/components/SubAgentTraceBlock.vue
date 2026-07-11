@@ -66,7 +66,7 @@
                   v-else-if="entry.segment.isStreaming"
                   class="subagent-merged-thinking-content subagent-merged-thinking-muted"
                 >
-                  正在思考中...
+                  Thinking...
                 </div>
               </div>
             </div>
@@ -94,7 +94,7 @@
             <div class="subagent-step-body">
               <div class="subagent-merged-thinking-label">
                 <span v-if="entry.segment.isStreaming" class="subagent-trace-dot"></span>
-                <span>{{ entry.segment.isStreaming ? "思考中..." : "思考内容" }}</span>
+                <span>{{ entry.segment.isStreaming ? "Thinking..." : "Thoughts" }}</span>
               </div>
               <div
                 v-if="entry.segment.content"
@@ -104,7 +104,7 @@
                 v-else-if="entry.segment.isStreaming"
                 class="subagent-merged-thinking-content subagent-merged-thinking-muted"
               >
-                正在思考中...
+                Thinking...
               </div>
             </div>
           </div>
@@ -113,7 +113,7 @@
 
       <!-- Sub-Agent 最终答案内容 -->
       <div v-if="subAgentContent" class="subagent-final-content">
-        <div class="subagent-final-label">Sub-Agent 输出</div>
+        <div class="subagent-final-label">Sub-agent Output</div>
         <div class="subagent-final-text">{{ subAgentContent }}</div>
       </div>
     </div>
@@ -162,18 +162,18 @@ export default {
     },
     headerTitle() {
       if (this.isRunning) {
-        return "Sub-Agent 执行中";
+        return "Sub-agent: Working...";
       }
-      return "Sub-Agent 推理过程";
+      return "Sub-agent Reasoning";
     },
     metaText() {
       var stepCount = this.steps.length;
       var segCount = this.thinkingSegments.length;
       if (stepCount > 0) {
-        return stepCount + " 步" + (segCount > 0 ? " · " + segCount + " 段思考" : "");
+        return stepCount + " steps" + (segCount > 0 ? " · " + segCount + " thoughts" : "");
       }
       if (segCount > 0) {
-        return segCount + " 段思考";
+        return segCount + " thoughts";
       }
       return "";
     },
@@ -199,7 +199,7 @@ export default {
         }
         return text2;
       }
-      return "点击展开查看 Sub-Agent 推理过程";
+      return "点击展开";
     },
     mergedTimeline() {
       var steps = this.steps;
@@ -326,17 +326,17 @@ export default {
       this.expanded = !this.expanded;
     },
     resolveStepLabel(step: any) {
-      if (!step) return "未命名步骤";
+      if (!step) return "Step";
       var eventType = step.eventType ? String(step.eventType).toLowerCase() : "";
-      if (eventType === "llm_started") return "SubAgent 决策";
-      if (eventType === "llm_finished") return "SubAgent 决策完成";
-      if (eventType === "tool_call_started" && step.toolName) return "调用工具：" + step.toolName;
-      if (eventType === "tool_call_finished" && step.toolName) return "工具完成：" + step.toolName;
-      if (eventType === "tool_call_failed" && step.toolName) return "工具失败：" + step.toolName;
-      if (eventType === "final_answer" || eventType === "run_finished") return "Sub-Agent 答案已生成";
-      if (eventType === "run_failed") return "Sub-Agent 执行失败";
+      if (eventType === "llm_started") return "Sub-agent: Let me think...";
+      if (eventType === "llm_finished") return "Sub-agent done thinking";
+      if (eventType === "tool_call_started" && step.toolName) return "Calling tool: " + step.toolName;
+      if (eventType === "tool_call_finished" && step.toolName) return "Tool finished: " + step.toolName;
+      if (eventType === "tool_call_failed" && step.toolName) return "Tool failed: " + step.toolName;
+      if (eventType === "final_answer" || eventType === "run_finished") return "Sub-agent ready";
+      if (eventType === "run_failed") return "Sub-agent failed";
       if (step.label || step.stepName) return step.label || step.stepName;
-      return step.message || "未命名事件";
+      return step.message || "Event";
     },
     resolveStepMeta(step: any) {
       if (!step) return "";

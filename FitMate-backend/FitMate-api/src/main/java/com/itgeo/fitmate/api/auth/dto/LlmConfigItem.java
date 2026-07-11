@@ -16,4 +16,6 @@ public class LlmConfigItem {
     private Boolean thinkingEnabled;
     /** high / max */
     private String reasoningEffort;
+    /** 是否使用系统默认配置（DB无自定义配置时为true，此时apiKey显示为系统默认key的脱敏值） */
+    private Boolean usingDefault;
 }

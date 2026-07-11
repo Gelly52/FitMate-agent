@@ -9,14 +9,17 @@ import com.itgeo.fitmate.api.agent.memory.longterm.infrastructure.entity.UserMem
 import com.itgeo.fitmate.api.agent.memory.longterm.infrastructure.entity.UserProfile;
 import com.itgeo.fitmate.api.agent.memory.longterm.infrastructure.mapper.UserMemoryMapper;
 import com.itgeo.fitmate.api.agent.memory.longterm.infrastructure.mapper.UserProfileMapper;
+import com.itgeo.fitmate.api.auth.application.AuthenticatedUserContext;
+import com.itgeo.fitmate.api.auth.application.UserContextHolder;
+import com.itgeo.fitmate.api.auth.infrastructure.entity.User;
+import com.itgeo.fitmate.api.auth.infrastructure.mapper.UserMapper;
+import com.itgeo.fitmate.api.chat.infrastructure.ReasoningChatClient;
 import com.itgeo.fitmate.api.prompt.PromptTemplateManager;
 import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -27,13 +30,31 @@ public class ProfileBuilder {
 
     private final UserMemoryMapper memoryMapper;
     private final UserProfileMapper profileMapper;
-    private final ChatModel chatModel;
+    private final ReasoningChatClient reasoningChatClient;
     private final PromptTemplateManager promptTemplateManager;
     private final MemoryProperties properties;
+    private final UserMapper userMapper;
 
     @Async("memoryTaskExecutor")
     public void asyncRebuild(Long userId) {
-        rebuild(userId);
+        try {
+            User user = userMapper.selectById(userId);
+            if (user != null) {
+                AuthenticatedUserContext ctx = AuthenticatedUserContext.builder()
+                        .userId(user.getId())
+                        .userKey(user.getUserKey())
+                        .username(user.getUsername())
+                        .nickname(user.getNickname())
+                        .phone(user.getPhone())
+                        .email(user.getUsername())
+                        .build();
+                UserContextHolder.set(ctx);
+                log.info("画像异步重建设置用户上下文: userId={}", userId);
+            }
+            rebuild(userId);
+        } finally {
+            UserContextHolder.clear();
+        }
     }
 
     public void rebuild(Long userId) {
@@ -48,7 +69,6 @@ public class ProfileBuilder {
     }
 
     private void doRebuild(Long userId) {
-        // 查询全部 active 记忆
         List<UserMemory> allMemories = memoryMapper.selectList(new LambdaQueryWrapper<UserMemory>()
                 .eq(UserMemory::getUserId, userId)
                 .eq(UserMemory::getStatus, "active"));
@@ -58,7 +78,6 @@ public class ProfileBuilder {
             return;
         }
 
-        // 按类型分组
         String facts = allMemories.stream()
                 .filter(m -> "FACT".equals(m.getMemoryType()))
                 .map(UserMemory::getContent)
@@ -80,21 +99,17 @@ public class ProfileBuilder {
                 .map(UserMemory::getContent)
                 .collect(Collectors.joining("\n"));
 
-        // LLM 生成
         String promptText = promptTemplateManager.buildProfileBuildPrompt(facts, episodics, snapshot, insights);
-        String llmOutput = chatModel.call(new Prompt(promptText)).getResult().getOutput().getText();
+        String llmOutput = reasoningChatClient.call(promptText).getContent();
 
-        // 解析
         JSONObject json = JSONUtil.parseObj(LlmJsonSanitizer.sanitize(llmOutput));
         String profileText = json.getStr("profile_text");
         String tagsJson = json.getJSONArray("tags") != null ? json.getJSONArray("tags").toString() : null;
 
-        // 计算版本号
         int memoryVersion = allMemories.stream()
                 .mapToInt(m -> m.getId() != null ? m.getId().intValue() : 0)
                 .max().orElse(0);
 
-        // upsert
         UserProfile existing = profileMapper.selectOne(new LambdaQueryWrapper<UserProfile>()
                 .eq(UserProfile::getUserId, userId));
         if (existing == null) {

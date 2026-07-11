@@ -71,7 +71,7 @@
                   v-else-if="entry.segment.isStreaming"
                   class="reasoning-merged-thinking-content reasoning-merged-thinking-muted"
                 >
-                  正在思考中...
+                  Thinking...
                 </div>
               </div>
             </div>
@@ -122,7 +122,7 @@
             <div class="reasoning-step-body">
               <div class="reasoning-merged-thinking-label">
                 <span v-if="entry.segment.isStreaming" class="reasoning-trace-dot"></span>
-                <span>{{ entry.segment.isStreaming ? "思考中..." : "思考内容" }}</span>
+                <span>{{ entry.segment.isStreaming ? "Thinking..." : "Thoughts" }}</span>
               </div>
               <div
                 v-if="entry.segment.content"
@@ -132,7 +132,7 @@
                 v-else-if="entry.segment.isStreaming"
                 class="reasoning-merged-thinking-content reasoning-merged-thinking-muted"
               >
-                正在思考中...
+                Thinking...
               </div>
             </div>
           </div>
@@ -144,7 +144,7 @@
         {{ thinkingContent }}
       </div>
       <div v-else-if="isThinking" class="reasoning-merged-thinking-content reasoning-merged-thinking-muted">
-        正在思考中...
+        Thinking...
       </div>
     </div>
   </div>
@@ -348,18 +348,18 @@ export default {
     },
     headerTitle() {
       if (this.isThinking) {
-        return "思考中...";
+        return "Thinking...";
       }
       if (this.thinkingLoading) {
-        return "加载思考内容...";
+        return "Loading thoughts...";
       }
       if (
         (this.thinkingSegments && this.thinkingSegments.length > 0) ||
         (this.thinkingContent && this.thinkingContent.length > 0)
       ) {
-        return "思考过程";
+        return "Reasoning";
       }
-      return "思考过程";
+      return "Reasoning";
     },
     resolveMeta() {
       var stepCount = this.steps ? this.steps.length : 0;
@@ -367,16 +367,16 @@ export default {
         ? this.thinkingSegments.length
         : 0;
       if (stepCount > 0) {
-        return stepCount + " 步" + (segCount > 0 ? " · " + segCount + " 段思考" : "");
+        return stepCount + " steps" + (segCount > 0 ? " · " + segCount + " thoughts" : "");
       }
       if (segCount > 0) {
-        return segCount + " 段思考";
+        return segCount + " thoughts";
       }
       return "";
     },
     collapsedText() {
       if (this.thinkingLoading) {
-        return "正在加载思考内容...";
+        return "Loading thoughts...";
       }
       // 优先用最新 segment 的内容做摘要
       var segments = Array.isArray(this.thinkingSegments)
@@ -400,40 +400,43 @@ export default {
         return text2;
       }
       if (this.isThinking) {
-        return "正在思考中...";
+        return "Thinking...";
       }
-      return "点击展开查看思考内容";
+      return "点击展开";
     },
     resolveStepLabel(step) {
       if (!step) {
-        return "未命名步骤";
+        return "Step";
+      }
+      var eventType = step.eventType ? String(step.eventType).toLowerCase() : "";
+      if (eventType === "tool_call_started" && step.toolName) {
+        return "Calling tool: " + step.toolName;
+      }
+      if (eventType === "tool_call_finished" && step.toolName) {
+        return "Tool finished: " + step.toolName;
+      }
+      if (eventType === "tool_call_failed" && step.toolName) {
+        return "Tool failed: " + step.toolName;
+      }
+      if (eventType === "llm_started") {
+        return "Agent: Let me think...";
+      }
+      if (eventType === "llm_finished") {
+        return "Done thinking";
+      }
+      if (eventType === "final_answer" || eventType === "run_finished") {
+        return "Ready to respond";
+      }
+      if (eventType === "run_started") {
+        return "Agent started";
+      }
+      if (eventType === "run_failed") {
+        return "Task failed";
       }
       if (step.label || step.stepName) {
         return step.label || step.stepName;
       }
-      var eventType = step.eventType ? String(step.eventType).toLowerCase() : "";
-      if (eventType === "tool_call_started" && step.toolName) {
-        return "调用工具：" + step.toolName;
-      }
-      if (eventType === "tool_call_finished" && step.toolName) {
-        return "工具完成：" + step.toolName;
-      }
-      if (eventType === "tool_call_failed" && step.toolName) {
-        return "工具失败：" + step.toolName;
-      }
-      if (eventType === "llm_started") {
-        return "LLM 决策";
-      }
-      if (eventType === "llm_finished") {
-        return "LLM 决策完成";
-      }
-      if (eventType === "final_answer" || eventType === "run_finished") {
-        return "最终答案已生成";
-      }
-      if (eventType === "run_failed") {
-        return "任务执行失败";
-      }
-      return step.message || "未命名事件";
+      return step.message || "Event";
     },
     resolveStepMeta(step) {
       if (!step) {
@@ -470,11 +473,11 @@ export default {
     },
     subStepLabel(type) {
       var map = {
-        wiki_search: "检索知识库 Wiki",
-        query_rewrite: "改写查询",
-        rag_search: "检索原始文档",
+        wiki_search: "Searching Wiki",
+        query_rewrite: "Rewriting query",
+        rag_search: "Searching documents",
       };
-      return map[type] || type || "子步骤";
+      return map[type] || type || "Sub-step";
     },
     subStepIcon(type) {
       var map = {

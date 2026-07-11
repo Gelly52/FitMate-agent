@@ -8,6 +8,7 @@ import com.itgeo.fitmate.api.agent.memory.longterm.application.MemoryWriteReques
 import com.itgeo.fitmate.api.agent.memory.longterm.application.MemoryWriter;
 import com.itgeo.fitmate.api.agent.llm.LlmJsonSanitizer;
 import com.itgeo.fitmate.api.agent.memory.longterm.config.MemoryProperties;
+import com.itgeo.fitmate.api.chat.infrastructure.ReasoningChatClient;
 import com.itgeo.fitmate.api.prompt.PromptTemplateManager;
 import com.itgeo.fitmate.api.rag.application.DocumentService;
 import com.itgeo.fitmate.api.rag.infrastructure.entity.RagDocument;
@@ -39,8 +40,6 @@ import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.redis.RedisVectorStore;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -67,7 +66,7 @@ public class WikiCompileServiceImpl implements WikiCompileService {
     private final WikiLogMapper logMapper;
     private final RagDocumentMapper ragDocumentMapper;
     private final DocumentService documentService;
-    private final ChatModel chatModel;
+    private final ReasoningChatClient reasoningChatClient;
     private final PromptTemplateManager promptTemplateManager;
     private final WikiProperties wikiProperties;
     private final WikiKeywordSearchService wikiKeywordSearchService;
@@ -83,7 +82,7 @@ public class WikiCompileServiceImpl implements WikiCompileService {
             WikiLogMapper logMapper,
             RagDocumentMapper ragDocumentMapper,
             DocumentService documentService,
-            ChatModel chatModel,
+            ReasoningChatClient reasoningChatClient,
             PromptTemplateManager promptTemplateManager,
             WikiProperties wikiProperties,
             WikiKeywordSearchService wikiKeywordSearchService,
@@ -97,7 +96,7 @@ public class WikiCompileServiceImpl implements WikiCompileService {
         this.logMapper = logMapper;
         this.ragDocumentMapper = ragDocumentMapper;
         this.documentService = documentService;
-        this.chatModel = chatModel;
+        this.reasoningChatClient = reasoningChatClient;
         this.promptTemplateManager = promptTemplateManager;
         this.wikiProperties = wikiProperties;
         this.wikiKeywordSearchService = wikiKeywordSearchService;
@@ -154,8 +153,7 @@ public class WikiCompileServiceImpl implements WikiCompileService {
             String promptText = promptTemplateManager.buildWikiCompilePrompt(
                     schemaContent, rawContent, indexContent);
             log.info("Wiki 编译调用 LLM job={} fileName={}", jobId, ragDoc.getFileName());
-            String llmOutput = chatModel.call(new Prompt(promptText))
-                    .getResult().getOutput().getText();
+            String llmOutput = reasoningChatClient.call(promptText).getContent();
 
             // 6. 解析 JSON 指令
             JSONObject root = JSONUtil.parseObj(LlmJsonSanitizer.sanitize(llmOutput));

@@ -12,6 +12,7 @@ import com.itgeo.fitmate.common.response.LeeResult;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -257,6 +258,25 @@ public class UserController {
         } catch (Exception e) {
             log.error("保存 LLM 配置失败", e);
             return LeeResult.errorException("保存 LLM 配置失败");
+        }
+    }
+
+    /**
+     * 重置当前登录用户的 LLM 配置为系统默认。
+     * 清除用户自定义配置后，所有 LLM 调用将使用环境变量默认配置。
+     *
+     * @return 通用响应结果
+     */
+    @DeleteMapping("/llm-config")
+    public LeeResult resetLlmConfig() {
+        try {
+            Long userId = UserContextHolder.getRequired().getUserId();
+            return LeeResult.ok(llmConfigResolver.resetByUserId(userId));
+        } catch (IllegalArgumentException e) {
+            return LeeResult.errorMsg(e.getMessage());
+        } catch (Exception e) {
+            log.error("重置 LLM 配置失败", e);
+            return LeeResult.errorException("重置 LLM 配置失败");
         }
     }
 

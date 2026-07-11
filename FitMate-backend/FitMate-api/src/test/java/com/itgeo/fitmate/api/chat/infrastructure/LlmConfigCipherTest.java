@@ -37,7 +37,7 @@ class LlmConfigCipherTest {
 
     @Test
     void mask_keeps_prefix3_and_suffix4() {
-        String plain = "your_openai_api_key";
+        String plain = "sk-abc123def456e05f";
         String masked = cipher.mask(plain);
         assertTrue(masked.startsWith("sk-"));
         assertTrue(masked.endsWith("e05f"));
