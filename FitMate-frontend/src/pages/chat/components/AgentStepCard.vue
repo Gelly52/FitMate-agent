@@ -4,14 +4,14 @@
     class="agent-step-card"
     :class="{ 'is-active': isThinking || (isSending && !isStreaming) }"
     role="region"
-    aria-label="Agent 执行轨迹与思考过程"
+    aria-label="Agent execution trace"
   >
     <div class="agent-step-header">
       <div class="flex flex-col gap-xs">
         <h4
           class="font-inter text-label-sm text-on-surface uppercase tracking-widest"
         >
-          Agent 执行轨迹
+          Agent Steps
         </h4>
         <p class="font-inter text-label-xs text-on-surface-variant uppercase tracking-wider">
           {{ resolveCardSummary() }}
@@ -108,34 +108,37 @@ export default {
     },
     resolveStepLabel(step) {
       if (!step) {
-        return "未命名步骤";
+        return "Step";
+      }
+      var eventType = step.eventType ? String(step.eventType).toLowerCase() : "";
+      if (eventType === "tool_call_started" && step.toolName) {
+        return "Calling tool: " + step.toolName;
+      }
+      if (eventType === "tool_call_finished" && step.toolName) {
+        return "Tool finished: " + step.toolName;
+      }
+      if (eventType === "tool_call_failed" && step.toolName) {
+        return "Tool failed: " + step.toolName;
+      }
+      if (eventType === "llm_started") {
+        return "Agent: Let me think...";
+      }
+      if (eventType === "llm_finished") {
+        return "Done thinking";
+      }
+      if (eventType === "final_answer" || eventType === "run_finished") {
+        return "Ready to respond";
+      }
+      if (eventType === "run_started") {
+        return "Agent started";
+      }
+      if (eventType === "run_failed") {
+        return "Task failed";
       }
       if (step.label || step.stepName) {
         return step.label || step.stepName;
       }
-      var eventType = step.eventType ? String(step.eventType).toLowerCase() : "";
-      if (eventType === "tool_call_started" && step.toolName) {
-        return "调用工具：" + step.toolName;
-      }
-      if (eventType === "tool_call_finished" && step.toolName) {
-        return "工具完成：" + step.toolName;
-      }
-      if (eventType === "tool_call_failed" && step.toolName) {
-        return "工具失败：" + step.toolName;
-      }
-      if (eventType === "llm_started") {
-        return "LLM 决策";
-      }
-      if (eventType === "llm_finished") {
-        return "LLM 决策完成";
-      }
-      if (eventType === "final_answer" || eventType === "run_finished") {
-        return "最终答案已生成";
-      }
-      if (eventType === "run_failed") {
-        return "任务执行失败";
-      }
-      return step.message || "未命名事件";
+      return step.message || "Event";
     },
     findStepByStatus(status) {
       for (var i = 0; i < this.steps.length; i++) {
@@ -157,29 +160,29 @@ export default {
     resolveCardSummary() {
       var failedStep = this.findStepByStatus("failed");
       if (failedStep) {
-        return this.resolveStepLabel(failedStep) + " · 失败";
+        return this.resolveStepLabel(failedStep) + " · Failed";
       }
       var runningStep = this.findStepByStatus("running");
       if (runningStep) {
-        return this.resolveStepLabel(runningStep) + " · 执行中";
+        return this.resolveStepLabel(runningStep) + " · In progress";
       }
       if (this.steps.length > 0) {
         var completedCount = this.completedStepCount();
         if (completedCount >= this.steps.length) {
-          return "全部事件已完成";
+          return "All steps completed";
         }
-        return "已记录 " + this.steps.length + " 条事件";
+        return this.steps.length + " steps recorded";
       }
       if (this.isThinking || (this.isSending && !this.isStreaming)) {
-        return "正在等待 Agent 执行事件";
+        return "Waiting for agent...";
       }
       if (
         (this.thinkingSegments && this.thinkingSegments.length > 0) ||
         (this.thinkingContent && this.thinkingContent.length > 0)
       ) {
-        return "可查看本轮进度摘要";
+        return "View progress summary";
       }
-      return "等待开始";
+      return "Waiting to start";
     },
   },
 };

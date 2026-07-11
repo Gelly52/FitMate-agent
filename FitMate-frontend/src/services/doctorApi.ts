@@ -271,6 +271,13 @@ export function saveLlmConfig(bo) {
   });
 }
 
+export function resetLlmConfig() {
+  return instance({
+    url: "/user/llm-config",
+    method: "delete",
+  });
+}
+
 export function listLlmModels(bo) {
   return instance({
     url: "/user/llm/models",
@@ -389,6 +396,7 @@ const doctorApi = {
   saveUserPreferences,
   getLlmConfig,
   saveLlmConfig,
+  resetLlmConfig,
   listLlmModels,
   testLlmConnection,
   getLlmBalance,

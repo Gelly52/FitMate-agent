@@ -78,13 +78,13 @@ public class AgentRunServiceImpl implements AgentRunService {
     public Long createRun(Long userId, Long chatSessionId, String botMsgId, String requestText) {
         // 1. 校验创建 run 所需核心参数
         if (userId == null) {
-            throw new IllegalArgumentException("用户ID不能为空");
+            throw new IllegalArgumentException("userId must not be null");
         }
         if (StrUtil.isBlank(botMsgId)) {
-            throw new IllegalArgumentException("botMsgId不能为空");
+            throw new IllegalArgumentException("botMsgId must not be blank");
         }
         if (StrUtil.isBlank(requestText)) {
-            throw new IllegalArgumentException("请求文本不能为空");
+            throw new IllegalArgumentException("Request text must not be blank");
         }
 
         // 2. 初始化 run 主记录：
@@ -106,13 +106,13 @@ public class AgentRunServiceImpl implements AgentRunService {
     public Long createSubAgentRun(Long parentRunId, Long userId, Long chatSessionId, String taskText) {
         // 1. 校验 Sub-Agent run 所需核心参数
         if (parentRunId == null) {
-            throw new IllegalArgumentException("parentRunId不能为空");
+            throw new IllegalArgumentException("parentRunId must not be null");
         }
         if (userId == null) {
-            throw new IllegalArgumentException("用户ID不能为空");
+            throw new IllegalArgumentException("userId must not be null");
         }
         if (StrUtil.isBlank(taskText)) {
-            throw new IllegalArgumentException("Sub-Agent任务描述不能为空");
+            throw new IllegalArgumentException("Sub-Agent task description must not be blank");
         }
 
         // 2. 初始化 Sub-Agent run 主记录：
@@ -164,7 +164,7 @@ public class AgentRunServiceImpl implements AgentRunService {
         AgentStep step = new AgentStep();
         step.setAgentRunId(runId);
         step.setStepNo(stepNo);
-        step.setStepName(StrUtil.blankToDefault(stepName, StrUtil.blankToDefault(eventType, "Agent事件")));
+        step.setStepName(StrUtil.blankToDefault(stepName, StrUtil.blankToDefault(eventType, "Agent event")));
         step.setStepStatus(StrUtil.blankToDefault(stepStatus, "running"));
         step.setEventType(eventType);
         step.setToolName(StrUtil.blankToDefault(toolName, null));
@@ -203,7 +203,7 @@ public class AgentRunServiceImpl implements AgentRunService {
         update.setId(existing.getId());
         update.setStepStatus("failed");
         update.setEventType(StrUtil.blankToDefault(eventType, existing.getEventType()));
-        update.setErrorMessage(normalizeErrorMessage(errorMessage, "步骤执行失败"));
+        update.setErrorMessage(normalizeErrorMessage(errorMessage, "Step failed"));
         update.setDurationMs(durationMs);
         update.setFinishedAt(LocalDateTime.now());
 
@@ -249,7 +249,7 @@ public class AgentRunServiceImpl implements AgentRunService {
         AgentRun update = new AgentRun();
         update.setId(runId);
         update.setStatus("failed");
-        update.setErrorMessage(normalizeErrorMessage(errorMessage, "Agent执行失败"));
+        update.setErrorMessage(normalizeErrorMessage(errorMessage, "Agent run failed"));
         update.setFinishedAt(LocalDateTime.now());
 
         agentRunMapper.updateById(update);
@@ -308,7 +308,7 @@ public class AgentRunServiceImpl implements AgentRunService {
         AgentStep update = new AgentStep();
         update.setId(existing.getId());
         update.setStepStatus("failed");
-        update.setErrorMessage(normalizeErrorMessage(errorMessage, "步骤执行失败"));
+        update.setErrorMessage(normalizeErrorMessage(errorMessage, "Step failed"));
         update.setFinishedAt(LocalDateTime.now());
 
         agentStepMapper.updateById(update);
@@ -321,7 +321,7 @@ public class AgentRunServiceImpl implements AgentRunService {
     @Override
     public List<AgentRunListItemResponse> listRuns(Long userId, String status, Integer limit) {
         if (userId == null) {
-            throw new IllegalArgumentException("userId不能为空");
+            throw new IllegalArgumentException("userId must not be null");
         }
 
         int safeLimit = normalizeListLimit(limit);
@@ -350,10 +350,10 @@ public class AgentRunServiceImpl implements AgentRunService {
     @Override
     public AgentRunDetailResponse getRunDetail(Long userId, Long runId) {
         if (userId == null) {
-            throw new IllegalArgumentException("userId不能为空");
+            throw new IllegalArgumentException("userId must not be null");
         }
         if (runId == null) {
-            throw new IllegalArgumentException("runId不能为空");
+            throw new IllegalArgumentException("runId must not be null");
         }
         AgentRun run = agentRunMapper.selectOne(
                 new LambdaQueryWrapper<AgentRun>()
@@ -376,10 +376,10 @@ public class AgentRunServiceImpl implements AgentRunService {
     @Override
     public AgentRunDetailResponse getRunDetailByBotMsgId(Long userId, String botMsgId) {
         if (userId == null) {
-            throw new IllegalArgumentException("userId不能为空");
+            throw new IllegalArgumentException("userId must not be null");
         }
         if (StrUtil.isBlank(botMsgId)) {
-            throw new IllegalArgumentException("botMsgId不能为空");
+            throw new IllegalArgumentException("botMsgId must not be blank");
         }
         AgentRun run = findByUserIdAndBotMsgId(userId, botMsgId.trim());
         if (run == null) {
@@ -446,11 +446,11 @@ public class AgentRunServiceImpl implements AgentRunService {
     private void ensureRunExists(Long runId) {
         // 1. runId 不能为空
         if (runId == null) {
-            throw new IllegalArgumentException("runId不能为空");
+            throw new IllegalArgumentException("runId must not be null");
         }
         // 2. run 主记录必须存在，否则后续状态更新没有意义
         if (agentRunMapper.selectById(runId) == null) {
-            throw new IllegalArgumentException("Agent运行记录不存在");
+            throw new IllegalArgumentException("Agent run record not found");
         }
     }
 
@@ -460,10 +460,10 @@ public class AgentRunServiceImpl implements AgentRunService {
     private AgentStep findRequiredStep(Long runId, Integer stepNo) {
         // 1. runId 和 stepNo 都不能为空
         if (runId == null) {
-            throw new IllegalArgumentException("runId不能为空");
+            throw new IllegalArgumentException("runId must not be null");
         }
         if (stepNo == null) {
-            throw new IllegalArgumentException("stepNo不能为空");
+            throw new IllegalArgumentException("stepNo must not be null");
         }
 
         // 2. 按 runId + stepNo 查唯一的步骤记录
@@ -476,7 +476,7 @@ public class AgentRunServiceImpl implements AgentRunService {
 
         // 3. 如果没查到，说明步骤未初始化或步骤编号非法
         if (step == null) {
-            throw new IllegalArgumentException("Agent步骤不存在");
+            throw new IllegalArgumentException("Agent step not found");
         }
         return step;
     }
@@ -486,11 +486,11 @@ public class AgentRunServiceImpl implements AgentRunService {
      */
     private AgentStep findRequiredStep(Long stepId) {
         if (stepId == null) {
-            throw new IllegalArgumentException("stepId不能为空");
+            throw new IllegalArgumentException("stepId must not be null");
         }
         AgentStep step = agentStepMapper.selectById(stepId);
         if (step == null) {
-            throw new IllegalArgumentException("Agent步骤不存在");
+            throw new IllegalArgumentException("Agent step not found");
         }
         return step;
     }

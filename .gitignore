@@ -18,6 +18,9 @@ FitMate-backend/FitMate-mcpServer/src/main/resources/application-prod.yml
 # Brainstorming visual companion artifacts (local mockups, not source)
 .superpowers/
 
+# Cloudflare tunnel config (contains tunnel UUID and internal service topology)
+cloudflared-config.yml
+
 # Common credential/key files
 *.key
 *.pem

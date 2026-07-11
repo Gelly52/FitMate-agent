@@ -9,36 +9,37 @@ import com.itgeo.fitmate.api.agent.memory.longterm.infrastructure.entity.UserMem
 import com.itgeo.fitmate.api.agent.memory.longterm.infrastructure.entity.UserProfile;
 import com.itgeo.fitmate.api.agent.memory.longterm.infrastructure.mapper.UserMemoryMapper;
 import com.itgeo.fitmate.api.agent.memory.longterm.infrastructure.mapper.UserProfileMapper;
+import com.itgeo.fitmate.api.auth.infrastructure.entity.User;
+import com.itgeo.fitmate.api.auth.infrastructure.mapper.UserMapper;
+import com.itgeo.fitmate.api.chat.dto.ReasoningStreamChunk;
+import com.itgeo.fitmate.api.chat.infrastructure.ReasoningChatClient;
 import com.itgeo.fitmate.api.prompt.PromptTemplateManager;
 import java.util.Collections;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.ai.chat.model.ChatResponse;
-import org.springframework.ai.chat.model.Generation;
-import org.springframework.ai.chat.messages.AssistantMessage;
 
 class ProfileBuilderTest {
 
     private UserMemoryMapper memoryMapper;
     private UserProfileMapper profileMapper;
-    private ChatModel chatModel;
+    private ReasoningChatClient reasoningChatClient;
     private PromptTemplateManager promptTemplateManager;
     private MemoryProperties properties;
+    private UserMapper userMapper;
     private ProfileBuilder builder;
 
     @BeforeEach
     void setUp() {
         memoryMapper = mock(UserMemoryMapper.class);
         profileMapper = mock(UserProfileMapper.class);
-        chatModel = mock(ChatModel.class);
+        reasoningChatClient = mock(ReasoningChatClient.class);
         promptTemplateManager = mock(PromptTemplateManager.class);
         properties = new MemoryProperties();
+        userMapper = mock(UserMapper.class);
         when(promptTemplateManager.buildProfileBuildPrompt(any(), any(), any(), any())).thenReturn("prompt");
-        builder = new ProfileBuilder(memoryMapper, profileMapper, chatModel, promptTemplateManager, properties);
+        builder = new ProfileBuilder(memoryMapper, profileMapper, reasoningChatClient, promptTemplateManager, properties, userMapper);
     }
 
     @Test
@@ -47,7 +48,7 @@ class ProfileBuilderTest {
 
         builder.rebuild(1L);
 
-        verify(chatModel, never()).call(any(Prompt.class));
+        verify(reasoningChatClient, never()).call(any(String.class));
         verify(profileMapper, never()).insert(any(UserProfile.class));
         verify(profileMapper, never()).updateById(any(UserProfile.class));
     }
@@ -59,8 +60,9 @@ class ProfileBuilderTest {
         fact.setContent("用户身高180cm，目标增肌");
         fact.setStatus("active");
         when(memoryMapper.selectList(any())).thenReturn(List.of(fact));
-        when(chatModel.call(any(Prompt.class))).thenReturn(mockChatResponse(
-                "{\"profile_text\":\"28岁男性，目标增肌\",\"tags\":[{\"label\":\"增肌期\",\"weight\":0.9,\"category\":\"goal\"}]}"));
+        ReasoningStreamChunk chunk = new ReasoningStreamChunk();
+        chunk.setContent("{\"profile_text\":\"28岁男性，目标增肌\",\"tags\":[{\"label\":\"增肌期\",\"weight\":0.9,\"category\":\"goal\"}]}");
+        when(reasoningChatClient.call(any(String.class))).thenReturn(chunk);
         when(profileMapper.selectOne(any())).thenReturn(null);
 
         builder.rebuild(1L);
@@ -79,8 +81,9 @@ class ProfileBuilderTest {
         fact.setContent("用户身高180cm");
         fact.setStatus("active");
         when(memoryMapper.selectList(any())).thenReturn(List.of(fact));
-        when(chatModel.call(any(Prompt.class))).thenReturn(mockChatResponse(
-                "{\"profile_text\":\"更新后的画像\",\"tags\":[]}"));
+        ReasoningStreamChunk chunk = new ReasoningStreamChunk();
+        chunk.setContent("{\"profile_text\":\"更新后的画像\",\"tags\":[]}");
+        when(reasoningChatClient.call(any(String.class))).thenReturn(chunk);
 
         UserProfile existing = new UserProfile();
         existing.setId(5L);
@@ -91,12 +94,5 @@ class ProfileBuilderTest {
 
         verify(profileMapper).updateById(any(UserProfile.class));
         verify(profileMapper, never()).insert(any(UserProfile.class));
-    }
-
-    private ChatResponse mockChatResponse(String text) {
-        // Spring AI 1.1.0 中 Generation.getOutput() 与 ChatResponse.getResult() 均为 final 方法，
-        // 无法被 Mockito stub，改用真实实例构造 ChatResponse。
-        Generation generation = new Generation(new AssistantMessage(text));
-        return new ChatResponse(List.of(generation));
     }
 }

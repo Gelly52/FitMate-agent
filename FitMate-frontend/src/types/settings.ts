@@ -74,6 +74,8 @@ export interface LlmConfig {
   thinkingEnabled: boolean;
   /** 推理强度，默认 high */
   reasoningEffort: "high" | "max";
+  /** 是否使用系统默认配置（DB无自定义配置时为true） */
+  usingDefault?: boolean;
 }
 
 /** 默认 LLM 配置（DB 无值时回退） */
@@ -85,6 +87,7 @@ export const DEFAULT_LLM_CONFIG: LlmConfig = {
   maxOutputContextTokens: DEFAULT_LLM_MAX_OUTPUT_CONTEXT_TOKENS,
   thinkingEnabled: true,
   reasoningEffort: "high",
+  usingDefault: true,
 };
 
 /** DeepSeek 模型列表项（GET /models 返回） */

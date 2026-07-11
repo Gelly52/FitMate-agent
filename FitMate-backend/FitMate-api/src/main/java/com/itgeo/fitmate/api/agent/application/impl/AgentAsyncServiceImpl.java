@@ -103,15 +103,15 @@ public class AgentAsyncServiceImpl implements AgentAsyncService {
             agentRunService.markRunRunning(context.getRunId());
             agentLoopExecutor.run(context);
         } catch (AgentCancelledException e) {
-            log.info("Agent执行被用户取消, runId={}", context.getRunId());
+            log.info("Agent execution cancelled by user, runId={}", context.getRunId());
             // FINISH 之前 flush 残留 chunk，避免最后一批 thinking/content 丢失
             agentLoopExecutor.flushSseBuffers(context);
             handleCancellation(context, e.getPartialContent());
         } catch (Exception e) {
-            log.error("Agent异步执行失败, runId={}", context.getRunId(), e);
+            log.error("Agent async execution failed, runId={}", context.getRunId(), e);
             // FINISH 之前 flush 残留 chunk，避免最后一批 thinking/content 丢失
             agentLoopExecutor.flushSseBuffers(context);
-            String failedMessage = "任务执行失败：" + (e.getMessage() == null ? "未知错误" : e.getMessage());
+            String failedMessage = "Task failed: " + (e.getMessage() == null ? "Unknown error" : e.getMessage());
             agentRunService.markRunFailed(context.getRunId(), failedMessage);
             sendFailureFinish(context, failedMessage);
         } finally {
@@ -126,10 +126,10 @@ public class AgentAsyncServiceImpl implements AgentAsyncService {
         try {
             boolean renewed = renewLock(context.getLockKey(), context.getLockOwner(), AGENT_LOCK_TTL_SECONDS);
             if (!renewed) {
-                log.warn("Agent锁续期失败, runId={}, lockKey={}", context.getRunId(), context.getLockKey());
+                log.warn("Agent lock renewal failed, runId={}, lockKey={}", context.getRunId(), context.getLockKey());
             }
         } catch (Exception ex) {
-            log.warn("Agent锁续期异常, runId={}, lockKey={}", context.getRunId(), context.getLockKey(), ex);
+            log.warn("Agent lock renewal exception, runId={}, lockKey={}", context.getRunId(), context.getLockKey(), ex);
         }
     }
 
@@ -137,7 +137,7 @@ public class AgentAsyncServiceImpl implements AgentAsyncService {
         try {
             chatSessionService.finishAssistantMessage(context.getAssistantMessageId(), failedMessage, null);
         } catch (Exception ex) {
-            log.warn("回填失败消息失败, runId={}", context.getRunId(), ex);
+            log.warn("Failed to backfill failure message, runId={}", context.getRunId(), ex);
         }
 
         AgentFinishResponse failed = new AgentFinishResponse(
@@ -161,9 +161,9 @@ public class AgentAsyncServiceImpl implements AgentAsyncService {
         // 1. 回填 assistant 消息：部分内容 + "已中断"标注
         String displayContent = (partialContent == null ? "" : partialContent);
         if (displayContent.isBlank()) {
-            displayContent = "> ⚠️ **已中断** — 用户主动停止了生成。";
+            displayContent = "> ⚠️ **Stopped** — Generation cancelled by user.";
         } else {
-            displayContent = displayContent + "\n\n> ⚠️ **已中断** — 用户主动停止了生成。";
+            displayContent = displayContent + "\n\n> ⚠️ **Stopped** — Generation cancelled by user.";
         }
         try {
             chatSessionService.finishAssistantMessage(
@@ -172,11 +172,11 @@ public class AgentAsyncServiceImpl implements AgentAsyncService {
                     null
             );
         } catch (Exception ex) {
-            log.warn("回填中断消息失败, runId={}", context.getRunId(), ex);
+            log.warn("Failed to backfill interrupted message, runId={}", context.getRunId(), ex);
         }
 
         // 2. 标记 run 为 cancelled
-        agentRunService.markRunCancelled(context.getRunId(), "用户主动取消");
+        agentRunService.markRunCancelled(context.getRunId(), "User cancelled");
 
         // 3. 推送 interrupted FINISH 事件给前端
         AgentFinishResponse interrupted = new AgentFinishResponse(

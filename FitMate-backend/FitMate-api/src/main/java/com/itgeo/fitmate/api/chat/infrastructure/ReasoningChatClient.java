@@ -180,8 +180,8 @@ public class ReasoningChatClient {
         if (delta != null) {
             String reasoning = delta.getStr("reasoning_content", "");
             String content = delta.getStr("content", "");
-            if (StrUtil.isNotBlank(reasoning)) {
-                log.warn("收到 reasoning_content 但 thinkingEnabled={}, 可能存在配置不一致", config.getThinkingEnabled());
+            if (StrUtil.isNotBlank(reasoning) && !Boolean.TRUE.equals(config.getThinkingEnabled())) {
+                log.warn("收到 reasoning_content 但 thinkingEnabled=false, 可能存在配置不一致");
             }
             if (StrUtil.isNotBlank(reasoning) || StrUtil.isNotBlank(content)) {
                 sink.next(new ReasoningStreamChunk(reasoning, content));
