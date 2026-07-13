@@ -150,8 +150,8 @@ public class AgentLoopExecutor {
                 "Agent execution started"
         );
 
-        int maxIterations = normalizePositive(agentProperties.getMaxIterations(), 20);
-        int maxToolCalls = normalizePositive(agentProperties.getMaxToolCalls(), 100);
+        int maxIterations = normalizePositive(agentProperties.getMaxIterations(), 100);
+        int maxToolCalls = normalizePositive(agentProperties.getMaxToolCalls(), 300);
         int maxDurationSeconds = normalizePositive(agentProperties.getMaxRunDurationSeconds(), 1800);
         // 用户画像在本轮 Agent 执行期间不会变化（记忆写入在 run 结束后异步发生），
         // 在循环外计算一次即可，同时作为记忆提取 prompt 的前缀组成部分，保证与 Agent 决策 prompt 完全一致以命中 KV cache。
@@ -468,8 +468,8 @@ public class AgentLoopExecutor {
         agentRunService.markRunRunning(subRunId);
 
         // 8. 计算 Sub-Agent 预算（独立配置，避免 Sub-Agent 消耗主 Agent 预算）
-        int subMaxIterations = normalizePositive(subAgentProperties.getMaxIterations(), 8);
-        int subMaxToolCalls = normalizePositive(subAgentProperties.getMaxToolCalls(), 20);
+        int subMaxIterations = normalizePositive(subAgentProperties.getMaxIterations(), 40);
+        int subMaxToolCalls = normalizePositive(subAgentProperties.getMaxToolCalls(), 80);
         int subMaxDurationSeconds = normalizePositive(subAgentProperties.getMaxRunDurationSeconds(), 600);
 
         // Sub-Agent 工具描述符列表（用于 prompt 构建）与主 Agent 全集一致，保持 prompt 前缀一致以命中 KV cache；

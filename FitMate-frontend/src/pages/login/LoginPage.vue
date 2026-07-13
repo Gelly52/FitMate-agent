@@ -294,7 +294,7 @@ export default {
 
 <style scoped>
 /* ===== 字体：Manrope，简约现代有特色 ===== */
-@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700&display=swap");
+@import url("https://fonts.loli.net/css2?family=Manrope:wght@400;500;600;700&display=swap");
 
 .login-page {
   font-family: "Manrope", system-ui, -apple-system, sans-serif;

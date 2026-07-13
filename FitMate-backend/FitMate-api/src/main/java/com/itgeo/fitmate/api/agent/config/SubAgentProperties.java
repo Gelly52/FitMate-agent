@@ -14,9 +14,9 @@ import org.springframework.stereotype.Component;
 public class SubAgentProperties {
 
     /** Sub-Agent 最大迭代轮次。 */
-    private Integer maxIterations = 8;
+    private Integer maxIterations = 40;
     /** Sub-Agent 最大工具调用次数。 */
-    private Integer maxToolCalls = 20;
+    private Integer maxToolCalls = 80;
     /** Sub-Agent 最大运行时长（秒）。 */
     private Integer maxRunDurationSeconds = 600;
 }

@@ -12,8 +12,8 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "fitmate.agent")
 public class AgentProperties {
 
-    private Integer maxIterations = 20;
-    private Integer maxToolCalls = 100;
+    private Integer maxIterations = 100;
+    private Integer maxToolCalls = 300;
     private Integer maxRunDurationSeconds = 1800;
     private Integer llmTimeoutSeconds = 120;
     private Integer toolTimeoutSeconds = 30;

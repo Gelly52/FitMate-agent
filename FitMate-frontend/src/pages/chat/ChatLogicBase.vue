@@ -2727,6 +2727,8 @@ export default {
           };
           if (compressRun) {
             compressRun.tokenUsage = nextUsage;
+          } else {
+            this.tokenUsage = nextUsage;
           }
         }
 

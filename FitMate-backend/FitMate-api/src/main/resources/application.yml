@@ -93,8 +93,8 @@ fitmate:
       thinking-enabled: true
       reasoning-effort: ${REASONING_EFFORT:high}
   agent:
-    max-iterations: 20
-    max-tool-calls: 100
+    max-iterations: 100
+    max-tool-calls: 300
     max-run-duration-seconds: 1800
     llm-timeout-seconds: 120
     tool-timeout-seconds: 30
@@ -129,8 +129,8 @@ fitmate:
       - skill.load
     # Sub-Agent 子循环配置（主 Agent 派生的子 Agent，拥有独立预算；工具超时复用主 Agent 配置）
     sub-agent:
-      max-iterations: 8
-      max-tool-calls: 20
+      max-iterations: 40
+      max-tool-calls: 80
       max-run-duration-seconds: 600
   memory:
     enabled: ${MEMORY_ENABLED:true}
@@ -139,7 +139,7 @@ fitmate:
       cache-ttl-hours: ${MEMORY_PROFILE_CACHE_TTL_HOURS:24}
     snapshot:
       window-days: ${MEMORY_SNAPSHOT_WINDOW_DAYS:14}
-      cron: ${MEMORY_SNAPSHOT_CRON:0 0 2 * * *}
+      cron: ${MEMORY_SNAPSHOT_CRON:0 0 2 */3 * *}
     extract:
       min-conversation-turns: ${MEMORY_EXTRACT_MIN_TURNS:3}
       min-conversation-chars: ${MEMORY_EXTRACT_MIN_CHARS:100}

@@ -23,8 +23,7 @@ export default {
   name: "AboutSection",
   methods: {
     openRepo() {
-      // 占位：实际仓库地址可后续配置
-      window.open("https://github.com/", "_blank", "noopener");
+      window.open("https://github.com/Gelly52/FitMate-agent", "_blank", "noopener");
     },
   },
 };
