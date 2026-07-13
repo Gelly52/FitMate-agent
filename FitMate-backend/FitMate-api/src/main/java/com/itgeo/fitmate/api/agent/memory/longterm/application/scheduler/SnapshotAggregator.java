@@ -37,7 +37,7 @@ public class SnapshotAggregator {
     private final MemoryWriter memoryWriter;
     private final MemoryProperties properties;
 
-    @Scheduled(cron = "${fitmate.memory.snapshot.cron:0 0 2 * * *}")
+    @Scheduled(cron = "${fitmate.memory.snapshot.cron:0 0 2 */3 * *}")
     public void aggregateSnapshots() {
         if (!properties.isEnabled()) {
             return;

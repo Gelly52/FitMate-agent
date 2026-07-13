@@ -22,7 +22,7 @@ public class MemoryProperties {
     @Data
     public static class Snapshot {
         private int windowDays = 14;
-        private String cron = "0 0 2 * * *";
+        private String cron = "0 0 2 */3 * *";
     }
 
     @Data
