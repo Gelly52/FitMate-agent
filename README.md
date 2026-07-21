@@ -32,7 +32,6 @@ FitMate AI 是一个面向个人健康管理的 AI 健身助手。它将训练�
 - [项目结构](#项目结构)
 - [测试](#测试)
 - [隐私与安全](#隐私与安全)
-- [设计文档](#设计文档)
 - [许可证](#许可证)
 
 ## 功能一览
@@ -249,7 +248,6 @@ mvn clean package -DskipTests
 │   ├── FitMate-mcpServer/            # MCP 工具服务与数据库初始化脚本
 │   ├── FitMate-common/               # 共享组件
 │   └── SPEC.md                       # 后端工程约定
-├── docs/superpowers/                 # Agent、记忆、Wiki、SSE 等设计文档
 ├── docker-compose.yml                # 本地 MySQL、Redis Stack、SearXNG
 ├── 部署过程.md                        # 部署记录与说明
 └── SPEC.md                           # 全局工程约定
