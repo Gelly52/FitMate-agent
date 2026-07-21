@@ -278,18 +278,6 @@ mvn -pl FitMate-mcpServer -am test
 > [!WARNING]
 > 如果仓库会公开，请在每次推送前检查 `git status` 和暂存区，确认其中没有运行时配置、导出的数据库文件、截图中的账号信息或任何真实凭据。
 
-## 设计文档
-
-[`docs/superpowers/`](docs/superpowers/) 中保存了关键设计与实施计划，包括：
-
-- 子智能体编排
-- SSE 流式优化
-- 长期记忆与用户画像
-- 多 run 并发与协作取消
-- 思维内容持久化与展示
-- 每用户 LLM 配置
-- Wiki 与知识库集成
-
 ## 许可证
 
 本项目采用 [MIT License](LICENSE)。
