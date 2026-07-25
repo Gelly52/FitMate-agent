@@ -1,6 +1,6 @@
 # FitMate-AI 全局代码规范 SPEC
 
-版本：v0.4  
+版本：v0.5  
 适用范围：FitMate-AI 前端、后端、MCP 工具服务、配置、数据库脚本与文档。  
 目标读者：开发者、维护者、代码评审者。
 
@@ -29,7 +29,8 @@ FitMate-AI 是面向健身场景的 AI 助手系统，提供用户认证、Agent
 - Vite
 - Vue Router（Hash 模式）
 - Axios
-- Tailwind CSS（Material Design 3 token 体系）
+- Tailwind CSS + `@fitmate/pixel-ui` 像素风设计系统（`packages/pixel-ui`，语义 token 兼容原 MD3 变量名）
+- 字体：VT323 + ZCOOL KuaiLe（像素风），图标：Material Symbols
 - marked
 - npm
 
@@ -60,19 +61,22 @@ FitMate-AI 是面向健身场景的 AI 助手系统，提供用户认证、Agent
 
 ```text
 FitMate-AI/
-├─ FitMate-frontend/       # Vue 3 + TypeScript 前端
+├─ FitMate-frontend/       # Vue 3 + TypeScript 前端（像素风 UI）
 ├─ FitMate-backend/        # Java 后端 Maven 父工程
 │  ├─ pom.xml
 │  ├─ FitMate-api/         # 主业务 API 服务
 │  ├─ FitMate-mcpServer/   # MCP 工具服务
 │  └─ FitMate-common/      # 统一响应、异常、错误码与通用工具
-├─ docs/                   # 设计文档、计划与 spec
+├─ packages/
+│  └─ pixel-ui/            # @fitmate/pixel-ui 像素风设计系统（token、Tailwind preset、基础样式、品牌资产）
 ├─ docker-compose.yml
 ├─ .env.example
 ├─ .gitignore
 ├─ LICENSE
 └─ SPEC.md
 ```
+
+> 本地可能存在 `FitMate-frontend-legacy/`（改版前的旧前端，仅本地保留，git 不跟踪）。
 
 ### 3.2 Maven 模块
 
@@ -763,6 +767,17 @@ src/
 - Header：`headerUserToken`、`headerUserId`
 - 页面不直接拼接认证 Header。
 
+### 12.5 设计系统（像素风 UI）
+
+视觉规范源头是 `packages/pixel-ui`（`@fitmate/pixel-ui`，`file:` 依赖引入），改设计先改包，不在组件内散落硬编码色值。
+
+- 调色板固定 7 色：`#101010`、`#F8F8F8`、`#6B6B6B`、`#3A5BA0`、`#2D7D46`、`#D4A533`、`#A83232`；组件优先使用语义变量 `var(--color-*)`（随主题切换）。
+- 零圆角；阴影只用硬偏移（2/3/4/6/8px，`#101010`），禁止模糊阴影、渐变、玻璃拟态。
+- 边框 2-4px 实线，颜色 `var(--color-outline)`（浅色主题为黑、深色为灰）。
+- 可点击元素必须有 hover 状态和 `:active translate(2px,2px)` 按压反馈；交互过渡 ≤150ms，动画偏好 `steps()`。
+- 主题由 `<html data-theme="dark|light" data-accent="...">` 驱动；强调色 `orange` 实际渲染为像素黄、`purple` 为像素红（UI 文案显示"黄/红"，存储值不变）。
+- 字体 VT323 + ZCOOL KuaiLe；图标字体 Material Symbols 的 `font-family` 不得被像素字体覆盖。
+
 ---
 
 ## 13. 定时任务
@@ -787,7 +802,7 @@ src/
 SPEC.md                    # 根全局规范
 FitMate-backend/SPEC.md    # 后端规范
 FitMate-frontend/SPEC.md   # 前端规范
-docs/                      # 设计文档与计划
+packages/pixel-ui/README.md # 设计系统使用说明
 ```
 
 文档要求：

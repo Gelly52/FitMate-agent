@@ -200,8 +200,8 @@ src/pages/
 
 ### 3.9 `src/styles/`
 
-- `base.css` 全局基础样式。
-- `tokens.css` Obsidian Precision token 体系（Material Design 3 色板）。
+- `base.css` 应用样式入口：先 `@import "@fitmate/pixel-ui/tokens.css"` 与 `@import "@fitmate/pixel-ui/base.css"`，再接 Tailwind 指令与应用私有样式（如 toast）。
+- 设计 token 与全局像素基础样式来自共享包 `../packages/pixel-ui`，本目录不再维护 `tokens.css`。
 
 ---
 
@@ -286,16 +286,15 @@ src/pages/
 
 ## 8. 样式规范
 
-- 全局样式放在 `src/styles/base.css` 与 `src/styles/tokens.css`。
-- Tailwind 主题扩展集中在 `tailwind.config.js`。
-- 颜色体系使用 Obsidian Precision token（Material Design 3 色板），全部映射到 CSS 变量。
-- 涵盖 surface、primary、secondary、tertiary、error、background 等色系。
-- 优先使用已有主题色、间距、字体和圆角 token。
-- 页面私有样式可以放在对应 Vue 文件中，但不要重复定义全局 token。
-- 暗色模式由根节点 `dark` class 控制。
-- 不在组件中散落大量无法复用的魔法颜色值；新增颜色先评估是否应进入 Tailwind theme。
-- borderRadius 偏紧凑风格：DEFAULT=0.125rem、lg=0.25rem、xl=0.5rem、full=0.75rem。
-- fontFamily：Inter。
+- 设计系统源头是 `@fitmate/pixel-ui`（`../packages/pixel-ui`，`file:` 依赖）：像素调色板 token、Tailwind preset、全局基础样式与品牌资产都在包内维护。
+- 应用侧 `tailwind.config.js` 通过 `presets: [pixelPreset]` 引入，只保留应用私有的 theme 扩展。
+- 颜色体系为 7 色像素调色板，组件优先使用语义变量 `var(--color-*)`（兼容原 MD3 变量名，随主题切换）。
+- 零圆角（preset 已把所有 `rounded-*` 归零）；阴影只用硬偏移（`shadow-pixel*`），禁止模糊阴影、渐变、玻璃拟态。
+- 边框 2-4px 实线 `var(--color-outline)`；可点击元素必须有 hover 与 `:active translate(2px,2px)` 按压反馈；过渡 ≤150ms，动画偏好 `steps()`。
+- 可复用的像素组件类：`.pixel-btn`、`.pixel-card`、`.pixel-panel`、`.pixel-input`、`.pixel-press`（来自包内 base.css）。
+- 页面私有样式可以放在对应 Vue 文件中，但不要重复定义全局 token；新增颜色先评估是否应进入调色板。
+- 字体：VT323 + ZCOOL KuaiLe（`var(--font-main)`）；Material Symbols 图标的 `font-family` 不得被覆盖。
+- 主题由根节点 `data-theme="dark|light"` 与 `data-accent` 控制（非 `dark` class）；强调色 `orange` 渲染为像素黄、`purple` 为像素红。
 - 配合 `fitmate-vite.html` 防闪烁脚本使用主题。
 
 ---
