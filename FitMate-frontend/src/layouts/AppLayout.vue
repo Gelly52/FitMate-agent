@@ -30,7 +30,7 @@ export default {
   components: { SideNav, TopBar },
   data() {
     return {
-      isSideNavExpanded: false,
+      isSideNavExpanded: true,
       isLoggingOut: false,
     };
   },
