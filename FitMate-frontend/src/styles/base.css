@@ -5,6 +5,7 @@
 
 * {
   box-sizing: border-box;
+  image-rendering: pixelated;
 }
 
 html,
@@ -15,13 +16,20 @@ body {
 
 body {
   min-height: 100vh;
+  font-family: var(--font-main);
+  font-size: 18px;
+  line-height: 1.4;
+  background-color: var(--color-background);
+  color: var(--color-on-background);
+  overflow-x: hidden;
 }
 
 body,
 button,
 input,
-textarea {
-  font-family: inherit;
+textarea,
+select {
+  font-family: var(--font-main);
 }
 
 #app {
@@ -42,10 +50,117 @@ h1 {
 
 p {
   margin-bottom: 16px;
-  line-height: 1.7;
+  line-height: 1.5;
 }
 
-/* --- Toast notifications (replaces Element Plus ElMessage) --- */
+/* Material Symbols icons must keep their icon font */
+.material-symbols-outlined {
+  font-family: "Material Symbols Outlined" !important;
+}
+
+::selection {
+  background-color: var(--pixel-blue);
+  color: var(--pixel-white);
+}
+
+/* ===== Pixel scrollbar ===== */
+::-webkit-scrollbar {
+  width: 14px;
+  height: 14px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-surface-container);
+  border: 2px solid var(--pixel-black);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--pixel-gray);
+  border: 2px solid var(--pixel-black);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--pixel-blue);
+}
+
+/* ===== Focus ===== */
+*:focus-visible {
+  outline: 3px solid var(--pixel-blue);
+  outline-offset: 2px;
+}
+
+button,
+a,
+input,
+textarea,
+select {
+  -webkit-tap-highlight-color: rgba(212, 165, 51, 0.35);
+}
+
+/* ===== Pixel component utilities ===== */
+@layer components {
+  /* press-down feedback for any clickable pixel element */
+  .pixel-press:active {
+    position: relative;
+    top: 2px;
+    left: 2px;
+  }
+
+  .pixel-btn {
+    font-family: var(--font-main);
+    border: 3px solid var(--pixel-black);
+    box-shadow: 4px 4px 0px 0px #101010;
+    transition: background-color 0.1s, color 0.1s, transform 0.1s;
+  }
+
+  .pixel-btn:hover:not(:disabled) {
+    transform: scale(1.05);
+  }
+
+  .pixel-btn:active:not(:disabled) {
+    transform: scale(0.95) translate(2px, 2px);
+    box-shadow: 2px 2px 0px 0px #101010;
+  }
+
+  .pixel-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    box-shadow: 2px 2px 0px 0px #666666;
+  }
+
+  .pixel-card {
+    background: var(--color-surface);
+    border: 4px solid var(--pixel-black);
+    box-shadow: 6px 6px 0px 0px #101010;
+  }
+
+  .pixel-panel {
+    background: var(--color-surface);
+    border: 3px solid var(--pixel-black);
+    box-shadow: 4px 4px 0px 0px #101010;
+  }
+
+  .pixel-input {
+    background: var(--color-surface);
+    border: 3px solid var(--pixel-black);
+    box-shadow: inset 2px 2px 0px 0px rgba(16, 16, 16, 0.35);
+    font-family: var(--font-main);
+  }
+
+  .pixel-input:focus {
+    border-color: var(--pixel-blue);
+    outline: none;
+  }
+}
+
+/* On dark surfaces black borders vanish — use gray borders/shadows there */
+[data-theme="dark"] .pixel-card,
+[data-theme="dark"] .pixel-panel {
+  border-color: var(--pixel-gray);
+  box-shadow: 4px 4px 0px 0px #000000;
+}
+
+/* --- Toast notifications (pixel style) --- */
 .fa-toast-container {
   position: fixed;
   top: 24px;
@@ -63,16 +178,16 @@ p {
   align-items: center;
   gap: 8px;
   padding: 10px 16px;
-  border-radius: 8px;
-  border: 1px solid var(--color-outline-variant);
+  border-radius: 0;
+  border: 3px solid var(--pixel-black);
   background: var(--color-surface-container);
   color: var(--color-on-surface);
-  font-size: 13px;
-  font-family: "Inter", sans-serif;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  font-size: 15px;
+  font-family: var(--font-main);
+  box-shadow: 4px 4px 0px 0px #101010;
   opacity: 0;
   transform: translateY(-8px);
-  transition: opacity 0.2s ease, transform 0.2s ease;
+  transition: opacity 0.15s steps(3), transform 0.15s steps(3);
 }
 
 .fa-toast-visible {
@@ -85,17 +200,17 @@ p {
 }
 
 .fa-toast-success .fa-toast-icon {
-  color: #22c55e;
+  color: var(--pixel-green);
 }
 
 .fa-toast-error .fa-toast-icon {
-  color: var(--color-error);
+  color: var(--pixel-red);
 }
 
 .fa-toast-warning .fa-toast-icon {
-  color: var(--color-tertiary);
+  color: var(--pixel-yellow);
 }
 
 .fa-toast-info .fa-toast-icon {
-  color: var(--color-primary);
+  color: var(--pixel-blue);
 }

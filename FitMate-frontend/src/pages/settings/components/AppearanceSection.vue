@@ -64,12 +64,12 @@ export default {
     },
     accentSwatchColor(accent: AccentColor): string {
       const map: Record<AccentColor, string> = {
-        blue: "#adc6ff",
-        green: "#7ee787",
-        orange: "#ffb595",
-        purple: "#c4a7e7",
-        light: "#e6e1e5",
-        dark: "#3a3b42",
+        blue: "#3A5BA0",
+        green: "#2D7D46",
+        orange: "#D4A533",
+        purple: "#A83232",
+        light: "#E8E8E8",
+        dark: "#101010",
       };
       return map[accent];
     },
@@ -80,21 +80,22 @@ export default {
 <style scoped>
 .settings-card {
   background: var(--color-surface-container);
-  border: 1px solid var(--color-outline-variant);
-  border-radius: 8px;
+  border: 4px solid var(--color-outline);
+  border-radius: 0;
   padding: 16px;
+  box-shadow: 6px 6px 0 0 #101010;
 }
 
 .settings-sublabel {
   color: var(--color-on-surface-variant);
-  font-size: 11px;
+  font-size: 13px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 
 .settings-btn-group {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
@@ -102,24 +103,34 @@ export default {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: 15px;
   padding: 6px 12px;
-  border-radius: 4px;
-  border: 1px solid var(--color-outline-variant);
+  border-radius: 0;
+  border: 2px solid var(--color-outline);
   color: var(--color-on-surface-variant);
   cursor: pointer;
-  background: transparent;
-  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+  background: var(--color-surface);
+  box-shadow: 2px 2px 0 0 #101010;
+  transition: color 0.1s, background-color 0.1s, transform 0.1s;
 }
 
 .settings-mode-btn:hover {
   color: var(--color-on-surface);
 }
 
+.settings-mode-btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+
 .settings-mode-btn-active {
-  color: var(--color-primary);
-  border-color: var(--color-primary);
-  background: var(--color-surface-container-high);
+  color: var(--color-on-primary);
+  border-color: var(--color-outline);
+  background: var(--color-primary);
+}
+
+.settings-mode-btn-active:hover {
+  color: var(--color-on-primary);
 }
 
 .settings-accent-row {
@@ -130,18 +141,25 @@ export default {
 .settings-accent-swatch {
   width: 28px;
   height: 28px;
-  border-radius: 50%;
-  border: 2px solid transparent;
+  border-radius: 0;
+  border: 2px solid var(--color-outline);
   cursor: pointer;
   padding: 0;
-  transition: border-color 0.2s ease, transform 0.2s ease;
+  box-shadow: 2px 2px 0 0 #101010;
+  transition: transform 0.1s, box-shadow 0.1s;
 }
 
 .settings-accent-swatch:hover {
   transform: scale(1.1);
 }
 
+.settings-accent-swatch:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+
 .settings-accent-swatch-active {
-  border-color: var(--color-on-surface);
+  border: 3px solid var(--color-on-surface);
+  box-shadow: 3px 3px 0 0 #101010;
 }
 </style>

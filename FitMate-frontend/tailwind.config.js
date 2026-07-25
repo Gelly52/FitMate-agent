@@ -7,6 +7,16 @@ export default {
   theme: {
     extend: {
       colors: {
+        /* pixel palette */
+        "pixel-black": "#101010",
+        "pixel-white": "#F8F8F8",
+        "pixel-gray": "#6B6B6B",
+        "pixel-blue": "#3A5BA0",
+        "pixel-green": "#2D7D46",
+        "pixel-yellow": "#D4A533",
+        "pixel-red": "#A83232",
+        "pixel-page": "#E8E8E8",
+        /* legacy semantic tokens (now resolve to pixel palette via tokens.css) */
         "surface": "var(--color-surface)",
         "surface-dim": "var(--color-surface-dim)",
         "surface-bright": "var(--color-surface-bright)",
@@ -55,11 +65,36 @@ export default {
         "on-background": "var(--color-on-background)",
         "surface-variant": "var(--color-surface-variant)",
       },
+      /* pixel style: hard edges only — every radius collapses to 0 */
       borderRadius: {
-        DEFAULT: "0.125rem",
-        lg: "0.25rem",
-        xl: "0.5rem",
-        full: "0.75rem",
+        none: "0",
+        DEFAULT: "0",
+        sm: "0",
+        md: "0",
+        lg: "0",
+        xl: "0",
+        "2xl": "0",
+        "3xl": "0",
+        full: "0",
+      },
+      /* hard offset shadows, never blurred */
+      boxShadow: {
+        "pixel-sm": "2px 2px 0px 0px #101010",
+        "pixel-md": "3px 3px 0px 0px #101010",
+        "pixel": "4px 4px 0px 0px #101010",
+        "pixel-lg": "6px 6px 0px 0px #101010",
+        "pixel-xl": "8px 8px 0px 0px #101010",
+        "pixel-inset": "inset 2px 2px 0px 0px #101010",
+        "pixel-disabled": "2px 2px 0px 0px #666666",
+        "pixel-white": "4px 4px 0px 0px #F8F8F8",
+        "pixel-white-sm": "2px 2px 0px 0px #F8F8F8",
+        "pixel-gray": "4px 4px 0px 0px #6B6B6B",
+        "pixel-gray-sm": "2px 2px 0px 0px #6B6B6B",
+      },
+      borderWidth: {
+        3: "3px",
+        5: "5px",
+        6: "6px",
       },
       spacing: {
         xs: "4px",
@@ -72,14 +107,45 @@ export default {
         margin: "24px",
       },
       fontFamily: {
-        inter: ["Inter", "sans-serif"],
+        pixel: ["VT323", "ZCOOL KuaiLe", "ui-monospace", "SFMono-Regular", "Menlo", "Monaco", "Consolas", "monospace"],
+        inter: ["VT323", "ZCOOL KuaiLe", "ui-monospace", "monospace"],
       },
       fontSize: {
-        "display-lg": ["40px", { lineHeight: "1.1", letterSpacing: "-0.02em", fontWeight: "600" }],
-        "headline-md": ["24px", { lineHeight: "1.2", letterSpacing: "-0.01em", fontWeight: "500" }],
-        "body-base": ["15px", { lineHeight: "1.5", letterSpacing: "0", fontWeight: "400" }],
-        "label-sm": ["11px", { lineHeight: "1.2", letterSpacing: "0.05em", fontWeight: "600" }],
-        "label-xs": ["9px", { lineHeight: "1", letterSpacing: "0.08em", fontWeight: "500" }],
+        "display-lg": ["40px", { lineHeight: "1.1", letterSpacing: "0", fontWeight: "400" }],
+        "headline-md": ["24px", { lineHeight: "1.2", letterSpacing: "0", fontWeight: "400" }],
+        "body-base": ["17px", { lineHeight: "1.4", letterSpacing: "0", fontWeight: "400" }],
+        "label-sm": ["13px", { lineHeight: "1.2", letterSpacing: "0.05em", fontWeight: "400" }],
+        "label-xs": ["11px", { lineHeight: "1", letterSpacing: "0.08em", fontWeight: "400" }],
+      },
+      keyframes: {
+        "bounce-pixel": {
+          "0%, 100%": { transform: "translateY(0)" },
+          "50%": { transform: "translateY(-8px)" },
+        },
+        "float": {
+          "0%, 100%": { transform: "translateY(0)" },
+          "50%": { transform: "translateY(-4px)" },
+        },
+        "shake": {
+          "0%, 100%": { transform: "translateX(0)" },
+          "25%": { transform: "translateX(-2px)" },
+          "75%": { transform: "translateX(2px)" },
+        },
+        "typewriter": {
+          "0%, 100%": { opacity: "1" },
+          "50%": { opacity: "0" },
+        },
+        "blink": {
+          "0%, 100%": { opacity: "1" },
+          "50%": { opacity: "0.5" },
+        },
+      },
+      animation: {
+        "bounce-pixel": "bounce-pixel 1s ease-in-out infinite",
+        "float": "float 3s ease-in-out infinite",
+        "shake": "shake 0.3s ease-in-out infinite",
+        "typewriter": "typewriter 0.5s steps(1) infinite",
+        "blink": "blink 1.2s ease-in-out infinite",
       },
     },
   },

@@ -330,16 +330,15 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  border: 1px solid color-mix(in srgb, var(--color-on-surface) 10%, transparent);
-  border-radius: 16px;
-  background: var(--color-surface-container-lowest, var(--color-background));
-  box-shadow: 0 1px 3px color-mix(in srgb, var(--color-on-surface) 8%, transparent);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  border: 3px solid var(--color-outline);
+  border-radius: 0;
+  background: var(--color-surface);
+  box-shadow: 4px 4px 0 0 #101010, inset 2px 2px 0 0 rgba(16, 16, 16, 0.15);
+  transition: border-color 0.1s;
 }
 
 .chat-input-card:focus-within {
-  border-color: color-mix(in srgb, var(--color-primary) 50%, transparent);
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--color-primary) 12%, transparent);
+  border-color: var(--pixel-blue);
 }
 
 .mode-toggle {
@@ -349,33 +348,39 @@ export default {
 }
 
 .mode-pill {
-  padding: 4px 14px;
-  border: 1px solid var(--color-outline-variant);
-  border-radius: 9999px;
-  background: transparent;
+  padding: 3px 14px;
+  border: 2px solid var(--color-outline);
+  border-radius: 0;
+  background: var(--color-surface);
   color: var(--color-on-surface-variant);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.05em;
-  font-family: "Inter", sans-serif;
+  letter-spacing: 0;
   cursor: pointer;
-  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+  box-shadow: 2px 2px 0 0 #101010;
+  transition: color 0.1s, border-color 0.1s, background-color 0.1s;
 }
 
 .mode-pill:hover {
-  color: var(--color-on-surface-variant);
-  border-color: var(--color-on-surface-variant);
+  color: var(--color-on-surface);
+  border-color: var(--pixel-blue);
+}
+
+.mode-pill:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 0 #101010;
 }
 
 .mode-pill-active {
   color: var(--color-on-primary);
-  background: var(--color-primary-fixed-dim);
-  border-color: var(--color-primary-fixed-dim);
+  background: var(--color-primary);
+  border-color: var(--color-outline);
 }
 
 .mode-pill:disabled {
   cursor: not-allowed;
-  opacity: 0.4;
+  opacity: 0.5;
+  box-shadow: 2px 2px 0 0 #666666;
 }
 
 .chat-input-bar {
@@ -392,15 +397,16 @@ export default {
   outline: none;
   resize: none;
   color: var(--color-on-surface);
-  font-size: 15px;
+  font-size: 17px;
   line-height: 1.5;
-  font-family: "Inter", sans-serif;
+  letter-spacing: 0;
   max-height: 160px;
   padding: 4px 0;
 }
 
 .chat-input-field::placeholder {
-  color: color-mix(in srgb, var(--color-on-surface-variant) 50%, transparent);
+  color: var(--color-on-surface-variant);
+  opacity: 0.7;
 }
 
 .chat-send-btn {
@@ -408,24 +414,32 @@ export default {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: none;
-  border-radius: 50%;
+  width: 34px;
+  height: 34px;
+  border: 2px solid var(--color-outline);
+  border-radius: 0;
   background: var(--color-primary);
   color: var(--color-on-primary);
   cursor: pointer;
-  transition: color 0.2s ease, background 0.2s ease, opacity 0.2s ease;
+  box-shadow: 2px 2px 0 0 #101010;
+  transition: background-color 0.1s, color 0.1s;
 }
 
 .chat-send-btn:hover:not(:disabled) {
-  opacity: 0.85;
+  background: var(--pixel-green);
+  color: var(--pixel-white);
+}
+
+.chat-send-btn:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 0 #101010;
 }
 
 .chat-send-btn:disabled {
   cursor: not-allowed;
-  opacity: 0.4;
-  background: var(--color-on-surface-variant);
+  opacity: 0.5;
+  background: var(--pixel-gray);
+  box-shadow: 2px 2px 0 0 #666666;
 }
 
 .chat-send-btn .material-symbols-outlined {
@@ -434,20 +448,26 @@ export default {
 
 .chat-stop-btn {
   flex-shrink: 0;
-  width: 36px;
-  height: 36px;
-  border: none;
-  border-radius: 50%;
-  background: #ef4444;
-  color: #fff;
+  width: 34px;
+  height: 34px;
+  border: 2px solid var(--color-outline);
+  border-radius: 0;
+  background: var(--pixel-red);
+  color: var(--pixel-white);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.2s;
+  box-shadow: 2px 2px 0 0 #101010;
+  transition: background-color 0.1s;
 }
 .chat-stop-btn:hover {
-  background: #dc2626;
+  background: var(--pixel-yellow);
+  color: var(--pixel-black);
+}
+.chat-stop-btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 0 #101010;
 }
 .chat-stop-btn .material-symbols-outlined {
   font-size: 20px;
@@ -479,22 +499,26 @@ export default {
   justify-content: center;
   width: 26px;
   height: 26px;
-  border: 1px solid var(--color-outline-variant);
-  border-radius: 50%;
-  background: transparent;
+  border: 2px solid var(--color-outline);
+  border-radius: 0;
+  background: var(--color-surface);
   color: var(--color-on-surface-variant);
   cursor: pointer;
-  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+  transition: color 0.1s, border-color 0.1s, background-color 0.1s;
 }
 
 .compress-trigger:hover:not(:disabled) {
   color: var(--color-primary);
-  border-color: var(--color-primary);
+  border-color: var(--pixel-blue);
+}
+
+.compress-trigger:active:not(:disabled) {
+  transform: translate(1px, 1px);
 }
 
 .compress-trigger:disabled {
   cursor: not-allowed;
-  opacity: 0.4;
+  opacity: 0.5;
 }
 
 .compress-trigger .material-symbols-outlined {
@@ -507,23 +531,29 @@ export default {
   align-items: center;
   gap: 3px;
   padding: 2px 8px;
-  border: none;
-  border-radius: 6px;
+  border: 2px solid transparent;
+  border-radius: 0;
   background: transparent;
   color: var(--color-on-surface-variant);
-  font-size: 11px;
-  font-family: "Inter", sans-serif;
+  font-size: 13px;
+  letter-spacing: 0;
   cursor: pointer;
-  transition: color 0.2s ease, background 0.2s ease;
+  transition: color 0.1s, background-color 0.1s, border-color 0.1s;
 }
 
 .thinking-toggle:hover {
   color: var(--color-on-surface);
   background: var(--color-surface-container);
+  border-color: var(--color-outline);
+}
+
+.thinking-toggle:active {
+  transform: translate(1px, 1px);
 }
 
 .thinking-toggle-on {
   color: var(--color-primary);
+  border-color: var(--color-outline);
 }
 
 .thinking-toggle-icon {
@@ -545,24 +575,25 @@ export default {
   align-items: center;
   gap: 2px;
   padding: 2px 6px;
-  border: none;
-  border-radius: 6px;
+  border: 2px solid transparent;
+  border-radius: 0;
   background: transparent;
   color: var(--color-on-surface-variant);
-  font-size: 11px;
-  font-family: "Inter", sans-serif;
+  font-size: 13px;
+  letter-spacing: 0;
   cursor: pointer;
-  transition: color 0.2s ease, background 0.2s ease;
+  transition: color 0.1s, background-color 0.1s, border-color 0.1s;
 }
 
 .effort-trigger:hover:not(:disabled) {
   color: var(--color-on-surface);
   background: var(--color-surface-container);
+  border-color: var(--color-outline);
 }
 
 .effort-trigger:disabled {
   cursor: not-allowed;
-  opacity: 0.4;
+  opacity: 0.5;
 }
 
 .effort-chevron {
@@ -571,14 +602,14 @@ export default {
 
 .effort-dropdown {
   position: absolute;
-  bottom: calc(100% + 4px);
+  bottom: calc(100% + 6px);
   left: 0;
   min-width: 80px;
   padding: 4px;
-  border: 1px solid var(--color-outline-variant);
-  border-radius: 8px;
-  background: var(--color-surface-container-lowest, var(--color-background));
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  border: 3px solid var(--color-outline);
+  border-radius: 0;
+  background: var(--color-surface);
+  box-shadow: 4px 4px 0 0 #101010;
   z-index: 100;
 }
 
@@ -588,12 +619,12 @@ export default {
   text-align: left;
   padding: 4px 8px;
   border: none;
-  border-radius: 4px;
+  border-radius: 0;
   background: transparent;
   color: var(--color-on-surface);
-  font-size: 12px;
+  font-size: 14px;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background-color 0.1s;
 }
 
 .effort-option:hover {
@@ -601,7 +632,8 @@ export default {
 }
 
 .effort-option-active {
-  color: var(--color-primary);
+  color: var(--color-on-primary);
+  background: var(--color-primary);
   font-weight: 600;
 }
 
@@ -609,7 +641,7 @@ export default {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 11px;
+  font-size: 13px;
   color: var(--color-primary);
 }
 
@@ -618,7 +650,7 @@ export default {
 }
 
 .spin {
-  animation: spin 1.2s linear infinite;
+  animation: spin 1.2s steps(8) infinite;
 }
 
 @keyframes spin {

@@ -1,6 +1,6 @@
 <template>
   <nav
-    class="fixed left-0 top-0 h-full flex flex-col py-8 border-r border-outline-variant bg-background z-50 transition-all duration-200 ease-out"
+    class="side-nav-root fixed left-0 top-0 h-full flex flex-col py-8 bg-background z-50 transition-all duration-150 ease-out"
     :class="expanded ? 'w-60' : 'w-20 items-center'"
   >
     <!-- Brand -->
@@ -10,10 +10,10 @@
     >
       <div class="side-nav-brand-mark">
         <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <rect x="4" y="4" width="10" height="10" rx="2.5" fill="currentColor" />
-          <rect x="18" y="4" width="10" height="10" rx="2.5" fill="currentColor" opacity="0.35" />
-          <rect x="4" y="18" width="10" height="10" rx="2.5" fill="currentColor" opacity="0.35" />
-          <rect x="18" y="18" width="10" height="10" rx="2.5" fill="currentColor" />
+          <rect x="4" y="4" width="8" height="24" fill="currentColor" />
+          <rect x="12" y="4" width="10" height="8" fill="currentColor" />
+          <rect x="12" y="16" width="8" height="8" fill="currentColor" />
+          <rect x="26" y="4" width="6" height="6" fill="#D4A533" />
         </svg>
       </div>
       <span v-if="expanded" class="side-nav-brand-text">FitMate</span>
@@ -112,6 +112,10 @@ export default {
 </script>
 
 <style scoped>
+.side-nav-root {
+  border-right: 4px solid var(--color-outline);
+}
+
 .side-nav-link {
   display: flex;
   align-items: center;
@@ -121,8 +125,12 @@ export default {
   position: relative;
   cursor: pointer;
   color: var(--color-on-surface-variant);
-  border-right: 2px solid transparent;
-  transition: color 0.2s ease, border-color 0.2s ease;
+  border: 2px solid transparent;
+  transition: color 0.1s, border-color 0.1s, background-color 0.1s;
+}
+
+.side-nav-link:active {
+  transform: translate(2px, 2px);
 }
 
 .side-nav-link-collapsed {
@@ -134,33 +142,60 @@ export default {
   flex-direction: row;
   justify-content: flex-start;
   gap: 12px;
-  padding: 10px 14px;
+  padding: 8px 12px;
 }
 
 .side-nav-link:hover {
   color: var(--color-primary);
-  border-right-color: var(--color-primary);
+  border-color: var(--color-outline);
+  background: var(--color-outline-variant);
 }
 
 .side-nav-link-active {
   color: var(--color-primary);
-  border-right-color: var(--color-primary);
+  border-color: var(--color-outline);
+  background: var(--color-outline-variant);
+}
+
+/* Icon tile: icon sits in a small bordered square */
+.side-nav-link .material-symbols-outlined {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--color-outline);
+  background: var(--color-surface-container);
+  font-size: 22px;
+}
+
+.side-nav-link:hover .material-symbols-outlined {
+  border-color: var(--color-primary);
+}
+
+.side-nav-link-active .material-symbols-outlined {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  border-color: var(--color-outline);
 }
 
 .side-nav-brand-text {
   flex: 1;
   color: var(--color-on-surface);
-  font-family: "Manrope", system-ui, sans-serif;
-  font-size: 16px;
+  font-size: 22px;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
 
 .side-nav-brand-mark {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   flex-shrink: 0;
+  padding: 3px;
   color: var(--color-primary);
+  border: 2px solid var(--color-outline);
+  background: var(--color-surface-container);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -176,17 +211,16 @@ export default {
   cursor: pointer;
   color: var(--color-on-surface-variant);
   background: transparent;
-  border: none;
-  border-right: 2px solid transparent;
+  border: 2px solid transparent;
   padding: 8px 0;
-  transition: color 0.2s ease, border-color 0.2s ease;
+  transition: color 0.1s, border-color 0.1s, background-color 0.1s;
   font-family: inherit;
 }
 
 .side-nav-toggle-expanded {
   flex-direction: row;
   gap: 12px;
-  padding: 10px 14px;
+  padding: 8px 12px;
   width: 100%;
 }
 
@@ -198,10 +232,16 @@ export default {
 
 .side-nav-toggle:hover {
   color: var(--color-primary);
+  border-color: var(--color-outline);
+  background: var(--color-outline-variant);
+}
+
+.side-nav-toggle:active {
+  transform: translate(2px, 2px);
 }
 
 .side-nav-toggle-label {
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
   line-height: 1.2;
   white-space: nowrap;
@@ -215,7 +255,7 @@ export default {
   min-width: 0;
   overflow: hidden;
   color: inherit;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
   line-height: 1.2;
   text-overflow: ellipsis;
@@ -223,9 +263,9 @@ export default {
 }
 
 .side-nav-tooltip {
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1.2;
-  letter-spacing: 0.05em;
+  letter-spacing: 0;
   font-weight: 600;
   opacity: 0;
   position: absolute;
@@ -233,10 +273,12 @@ export default {
   margin-left: 16px;
   white-space: nowrap;
   background: var(--color-surface-container);
+  color: var(--color-on-surface);
   padding: 4px 8px;
-  border-radius: 2px;
-  border: 1px solid var(--color-outline-variant);
-  transition: opacity 0.2s ease;
+  border-radius: 0;
+  border: 2px solid var(--color-outline);
+  box-shadow: 2px 2px 0 0 #101010;
+  transition: opacity 0.1s;
   pointer-events: none;
   z-index: 50;
 }

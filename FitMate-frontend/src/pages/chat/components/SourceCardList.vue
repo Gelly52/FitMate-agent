@@ -203,7 +203,7 @@ export default {
 }
 
 .source-list-label {
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--color-on-surface-variant);
@@ -214,10 +214,11 @@ export default {
 .source-list-items {
   display: flex;
   flex-wrap: nowrap;
-  gap: 4px;
+  gap: 6px;
   min-width: 0;
   flex: 1;
   overflow-x: auto;
+  padding: 2px 2px 4px 2px;
   /* 隐藏滚动条但保留横向滚动 */
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -238,37 +239,43 @@ export default {
   align-items: center;
   gap: 3px;
   padding: 2px 6px;
-  border: 1px solid var(--color-surface-container);
-  border-radius: 9999px;
+  border: 2px solid var(--color-outline);
+  border-radius: 0;
   background: var(--color-surface-container-low);
   color: var(--color-on-surface-variant);
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1.4;
   cursor: pointer;
   max-width: 160px;
-  transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
+  box-shadow: 2px 2px 0 0 #101010;
+  transition: border-color 0.1s, color 0.1s, background 0.1s;
   white-space: nowrap;
 }
 
 .source-item-btn:hover {
-  border-color: color-mix(in srgb, var(--color-primary) 40%, transparent);
+  border-color: var(--color-primary);
   color: var(--color-on-surface);
 }
 
+.source-item-btn:active {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 0 #101010;
+}
+
 .source-item.is-open .source-item-btn {
-  border-color: color-mix(in srgb, var(--color-primary) 60%, transparent);
-  background: color-mix(in srgb, var(--color-primary) 8%, var(--color-surface-container-low));
+  border-color: var(--color-primary);
+  background: var(--color-surface-container);
   color: var(--color-on-surface);
 }
 
 .source-item-index {
   flex-shrink: 0;
   font-weight: 600;
-  color: var(--color-primary-fixed-dim);
+  color: var(--color-primary);
 }
 
 .source-item.is-open .source-item-index {
-  color: var(--color-primary-fixed);
+  color: var(--color-primary);
 }
 
 .source-item-title {
@@ -290,11 +297,11 @@ export default {
   z-index: 1000;
   width: 300px;
   max-width: 80vw;
-  padding: 10px 28px 10px 12px;
-  border: 1px solid var(--color-surface-container-high);
-  border-radius: 8px;
+  padding: 10px 32px 10px 12px;
+  border: 3px solid var(--color-outline);
+  border-radius: 0;
   background: var(--color-surface-container-lowest);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.08);
+  box-shadow: 4px 4px 0 0 #101010;
 }
 
 .source-popover-close {
@@ -304,20 +311,26 @@ export default {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--color-on-surface-variant);
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--color-outline);
+  border-radius: 0;
+  background: var(--color-error);
+  color: var(--color-on-error);
   cursor: pointer;
-  transition: background 0.2s ease, color 0.2s ease;
+  box-shadow: 2px 2px 0 0 #101010;
+  transition: background 0.1s, color 0.1s;
   padding: 0;
 }
 
 .source-popover-close:hover {
-  background: var(--color-surface-container);
-  color: var(--color-on-surface);
+  background: var(--pixel-black);
+  color: var(--pixel-white);
+}
+
+.source-popover-close:active {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 0 #101010;
 }
 
 .source-popover-close .material-symbols-outlined {
@@ -325,7 +338,7 @@ export default {
 }
 
 .source-popover-title {
-  font-size: 12px;
+  font-size: 14px;
   color: var(--color-on-surface);
   margin: 0 0 4px;
   line-height: 1.4;
@@ -334,7 +347,7 @@ export default {
 }
 
 .source-popover-snippet {
-  font-size: 12px;
+  font-size: 14px;
   color: var(--color-on-surface-variant);
   margin: 0;
   line-height: 1.5;
@@ -344,11 +357,11 @@ export default {
   overflow-y: auto;
   /* Firefox */
   scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--color-on-surface) 15%, transparent) transparent;
+  scrollbar-color: var(--pixel-gray) transparent;
 }
 
 .source-popover-snippet::-webkit-scrollbar {
-  width: 5px;
+  width: 6px;
 }
 
 .source-popover-snippet::-webkit-scrollbar-track {
@@ -356,12 +369,12 @@ export default {
 }
 
 .source-popover-snippet::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--color-on-surface) 15%, transparent);
-  border-radius: 3px;
+  background: var(--pixel-gray);
+  border-radius: 0;
 }
 
 .source-popover-extra {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--color-on-surface-variant);
   margin: 6px 0 0;
   opacity: 0.8;
@@ -371,20 +384,28 @@ export default {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--color-primary-fixed-dim);
+  color: var(--color-on-primary);
+  background: var(--color-primary);
+  border: 2px solid var(--color-outline);
   text-decoration: none;
-  padding: 4px 6px;
-  margin-top: 6px;
-  border-radius: 4px;
-  transition: background 0.2s ease, color 0.2s ease;
+  padding: 3px 8px;
+  margin-top: 8px;
+  border-radius: 0;
+  box-shadow: 2px 2px 0 0 #101010;
+  transition: background 0.1s, color 0.1s;
 }
 
 .source-popover-link:hover {
-  color: var(--color-primary-fixed);
-  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  background: var(--pixel-blue);
+  color: var(--pixel-white);
+}
+
+.source-popover-link:active {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 0 #101010;
 }
 
 .source-popover-link-icon {
@@ -394,7 +415,7 @@ export default {
 /* transition */
 .source-popover-enter-active,
 .source-popover-leave-active {
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  transition: opacity 0.15s steps(3), transform 0.15s steps(3);
 }
 
 .source-popover-enter-from,

@@ -1,0 +1,4326 @@
+<script lang="ts">
+/**
+ * ChatLogicBase — logic-only base component.
+ *
+ * Holds all shared chat / SSE / agent-run / training / metrics / knowledge
+ * business logic. It is never rendered on its own; the route pages
+ * (ChatPage, TrainingPage, MetricsPage, DashboardPage, KnowledgePage) use
+ * Vue `extends` to inherit this logic and supply their own Obsidian
+ * Precision templates. Having no template of its own keeps the legacy
+ * console UI from ever rendering.
+ */
+import { marked } from "marked";
+// 启用 GFM 表格与单换行转 <br>，改善 LLM 输出渲染
+marked.setOptions({ gfm: true, breaks: true });
+import doctorApi from "../../services/doctorApi";
+import {
+  getThinking as getThinkingCache,
+  setThinking as setThinkingCache,
+  invalidateSession as invalidateThinkingCacheBySession,
+  invalidateUser as invalidateThinkingCacheByUser,
+} from "../../services/thinkingCache";
+import { clearUserSession, getUserInfo } from "../../services/http";
+import { connectSse, closeSse } from "../../services/sseService";
+import {
+  collectAgentTraceItems,
+  extractThinkingFromStepOutput,
+  isLlmAnchorStep,
+  isTerminalAgentEvent,
+  normalizeAgentRunStatus as normalizeAgentRunStatusValue,
+  normalizeAgentTraceEvent,
+  normalizeAgentTraceNode,
+  normalizeAgentTraceStatus as normalizeAgentTraceStatusValue,
+} from "../../utils/agentEventAdapter";
+import { extractSourcesFromResponse as extractSourcesFromResponseUtil } from "../../utils/sourceNormalizer";
+import { llmConfig } from "../../services/llmConfig";
+import { DEFAULT_LLM_MAX_INPUT_CONTEXT_TOKENS } from "../../types/settings";
+import { setDocumentTitle, resetDocumentTitle } from "../../router";
+
+export default {
+  name: "ChatLogicBase",
+  emits: ["logout-success"],
+  data() {
+    return {
+      currentUserName: null,
+      currentUserInfo: null,
+      isLoggingOut: false,
+      activeView: "chat",
+      chatExpanded: false,
+      chatSessionList: [],
+      activeChatSessionId: null,
+      // 会话级属性：不依赖 run 生命周期，run 结束后仍保留用于回滚重发
+      currentSessionCode: null,
+      currentSessionSceneType: null,
+      chatRecordsLoading: false,
+      chatRecordsLoaded: false,
+      chatList: [],
+      draftMessage: "",
+
+      knowledgeBaseSelected: true,
+      ragSelected: false,
+      internetSearchSelected: true,
+      imageReadSelected: false,
+      isSending: false,
+      isStreaming: false,
+      // 会话级状态：run 结束后仍保留，用于 token 用量显示与回滚重发
+      tokenUsage: null,
+      botMsgId: null,
+      isCompressing: false,
+      // 自定义确认条状态（替代 window.confirm，显示在消息列表与输入框之间）
+      confirmBar: {
+        visible: false,
+        text: "",
+        confirmText: "确认",
+        cancelText: "取消",
+        resolve: null,
+      },
+      // 居中模态确认弹窗（用于删除会话等需要强提示的二次确认，
+      // 与显示在消息列表与输入框之间的 confirmBar 区分）
+      confirmDialog: {
+        visible: false,
+        title: "",
+        text: "",
+        confirmText: "确认",
+        cancelText: "取消",
+        danger: false,
+        resolve: null,
+      },
+      showBackToBottom: false,
+      // 用户主动向上滚动标志：true 时流式输出不自动跟随，点击"回到底部"重置
+      isUserScrolledUp: false,
+      // 程序滚动标志：避免程序触发的 scroll 事件被误判为用户主动滚动
+      isProgrammaticScroll: false,
+      // scrollToBottom 节流：rAF 调度标志 + 缓存的 DOM 引用，避免每帧 getElementById
+      scrollRAFScheduled: false,
+      cachedChatMessagesEl: null as HTMLElement | null,
+      selectedUploadName: "",
+      sseState: "idle",
+      guidanceMessage: "选择任务模式后，输入指令开始执行。",
+      // 多 run 追踪表：按 runId 索引，每个 entry 自带完整 per-run 状态
+      activeAgentRuns: {} as Record<string, any>,
+      // per-run token 批处理缓冲：按 runId 索引，rAF 合并更新 UI
+      runBuffers: {} as Record<string, any>,
+      // Console-specific state
+      mobileLeftOpen: false,
+      mobileRightOpen: false,
+      todayStatus: {
+        weight: null,
+        bodyFat: null,
+        fatigue: null,
+        sleep: null,
+        lastMuscleGroup: null,
+      },
+      weekSummary: {
+        trainingDays: 0,
+        totalVolume: 0,
+        trend: "暂无数据",
+      },
+      resultSummary: {},
+      reportContent: "",
+      knowledgeSources: [],
+      isThinking: false,
+      thinkingExpanded: true,
+      docCount: 0,
+      uploadSynced: false,
+      uploadedDocs: [],
+      recentTraining: [],
+      recentMetrics: [],
+      recentCardio: [],
+      recentHeartRate: [],
+      recentDiet: [],
+      trainingSummary: null,
+      bodyMetricsSummary: null,
+      lastTtft: null,
+      lastExecTime: "",
+      taskStartTime: null,
+      currentModel: "",
+      availableModels: [] as Array<{ id: string; ownedBy: string }>,
+      thinkingEnabled: true,
+      reasoningEffort: "high" as "high" | "max",
+      _llmConfigUnsub: null as (() => void) | null,
+    };
+  },
+  computed: {
+    // 当前会话对应的 run；切换会话时自动重指向
+    currentAgentRun(): any | null {
+      if (this.activeChatSessionId == null) return null;
+      const runs = this.activeAgentRuns || {};
+      return Object.values(runs).find(
+        (r: any) => r && r.chatSessionId === this.activeChatSessionId
+      ) || null;
+    },
+    // 当前会话是否有运行中 run
+    hasPendingRunInCurrentSession(): boolean {
+      const run = this.currentAgentRun;
+      return run != null && !this.isTerminalAgentRunStatus(run.status);
+    },
+    // 任意会话是否有运行中 run（用于全局提示，不再阻止操作）
+    hasAnyPendingRun(): boolean {
+      const runs = this.activeAgentRuns || {};
+      return Object.values(runs).some(
+        (r: any) => r && !this.isTerminalAgentRunStatus(r.status)
+      );
+    },
+    // 子组件 prop 视图：聚合当前 run + UI 状态
+    currentRunView(): any | null {
+      const run = this.currentAgentRun;
+      if (!run) return null;
+      return {
+        ...run,
+        isSending: this.isSending,
+        isStreaming: this.isStreaming,
+        isThinking: this.isThinking,
+        thinkingExpanded: this.thinkingExpanded,
+      };
+    },
+    // 派生字段（替代删除的全局字段）——读取 currentAgentRun
+    agentSteps(): any[] {
+      const run = this.currentAgentRun;
+      return run ? run.steps : [];
+    },
+    thinkingSegments(): any[] {
+      const run = this.currentAgentRun;
+      return run ? run.thinkingSegments : [];
+    },
+    thinkingContent(): string {
+      const run = this.currentAgentRun;
+      return run ? run.thinkingContent : "";
+    },
+    canCompressContext() {
+      // 有活动会话且消息数 >= 8 时才允许主动压缩
+      return (
+        this.activeChatSessionId != null &&
+        Array.isArray(this.chatList) &&
+        this.chatList.filter(function (item) {
+          return item && (item.chatType === "user" || item.chatType === "bot");
+        }).length >= 8
+      );
+    },
+    recentChatSessions() {
+      var list = Array.isArray(this.chatSessionList)
+        ? this.chatSessionList
+        : [];
+      return list.slice(0, 12);
+    },
+    currentSessionTitle() {
+      if (this.activeChatSessionId == null) return null;
+      var list = Array.isArray(this.chatSessionList)
+        ? this.chatSessionList
+        : [];
+      for (var i = 0; i < list.length; i++) {
+        if (list[i].sessionId === this.activeChatSessionId) {
+          return list[i].title || "未命名会话";
+        }
+      }
+      return null;
+    },
+    activeModeLabel() {
+      var mainLabel = "Agent";
+      var parts = [];
+      if (this.knowledgeBaseSelected) {
+        parts.push("知识库 Wiki");
+      }
+      if (this.ragSelected) {
+        parts.push("原始文档");
+      }
+      if (this.internetSearchSelected) {
+        parts.push("联网补充");
+      }
+      if (parts.length === 0) {
+        return mainLabel;
+      }
+      return mainLabel + " + " + parts.join(" + ");
+    },
+    connectionBadgeText() {
+      if (this.isStreaming) {
+        return "流式处理中";
+      }
+      if (this.isSending) {
+        return "请求处理中";
+      }
+      if (this.sseState === "connected") {
+        return "SSE 已连接";
+      }
+      if (this.sseState === "connecting") {
+        return "SSE 连接中";
+      }
+      if (this.sseState === "unsupported") {
+        return "SSE 不可用";
+      }
+      if (this.sseState === "disconnected") {
+        return "SSE 已断开";
+      }
+      return "SSE 待初始化";
+    },
+    sseBadgeClass() {
+      if (this.isStreaming || this.isSending) {
+        return "sse-connected";
+      }
+      return "sse-" + this.sseState;
+    },
+    connectionStatusText() {
+      var userText = this.currentUserName
+        ? "当前会话用户：" + this.currentUserName + "。"
+        : "当前会话正在初始化。";
+      var uploadText = this.selectedUploadName
+        ? "已选文档：" + this.selectedUploadName + "。"
+        : "未选择知识库文档。";
+      var sseText = "SSE 通道尚未建立。";
+
+      if (this.sseState === "connected") {
+        sseText = "SSE 通道已连接，可接收实时回复。";
+      } else if (this.sseState === "connecting") {
+        sseText = "SSE 通道连接中，稍后即可接收实时回复。";
+      } else if (this.sseState === "unsupported") {
+        sseText = "当前环境暂不支持 SSE，回复可能无法实时展示。";
+      } else if (this.sseState === "disconnected") {
+        sseText = "SSE 通道已断开，发送新问题时会自动重连。";
+      }
+
+      return userText + sseText + uploadText;
+    },
+  },
+  created() {
+    this._sseConnection = null;
+    this._sseSource = null;
+    this._sseConnectingPromise = null;
+    // 恢复会话期间的标志：避免 activeChatSessionId 变化时 watch 反向同步 URL/storage 造成循环
+    this._isRestoringSession = false;
+    this.loadUserSessionFromCookie();
+    this.restoreActiveAgentRuns();
+    this.applyRouteView();
+    var stableUserKey = this.resolveStableUserKey();
+    if (stableUserKey) {
+      this.ensureSseConnection();
+    } else {
+      this.guidanceMessage = "请先完成手机号登录，再开始你的专属健身会话。";
+    }
+    this.currentModel = llmConfig.getConfig().model;
+    this.availableModels = llmConfig.getModels();
+    this.thinkingEnabled = llmConfig.getConfig().thinkingEnabled;
+    this.reasoningEffort = llmConfig.getConfig().reasoningEffort;
+    this._llmConfigUnsub = llmConfig.subscribe(() => {
+      this.currentModel = llmConfig.getConfig().model;
+      this.availableModels = llmConfig.getModels();
+      this.thinkingEnabled = llmConfig.getConfig().thinkingEnabled;
+      this.reasoningEffort = llmConfig.getConfig().reasoningEffort;
+    });
+    if (this.availableModels.length === 0) {
+      llmConfig.fetchModels().catch(() => {});
+    }
+  },
+  mounted() {
+    this.scrollToBottom(true);
+    this.updateTabTitle();
+  },
+  beforeUnmount() {
+    resetDocumentTitle();
+    if (this._stopTimeout) {
+      clearTimeout(this._stopTimeout);
+    }
+    if (this._chatHistoryHoverTimer) {
+      clearTimeout(this._chatHistoryHoverTimer);
+      this._chatHistoryHoverTimer = null;
+    }
+    this.teardownSSE({ clearPending: true });
+    if (this._llmConfigUnsub) {
+      this._llmConfigUnsub();
+      this._llmConfigUnsub = null;
+    }
+  },
+  watch: {
+    "$route.meta.forceView"(newView) {
+      this.applyRouteView();
+    },
+    "$route.path"() {
+      this.applyRouteView();
+      this.updateTabTitle();
+    },
+    "$route.name"() {
+      this.updateTabTitle();
+    },
+    // 会话 ID 变化时同步到 URL 路径参数与 sessionStorage，
+    // 实现切换其他页面再回来时仍能恢复原会话（类似 DeepSeek /chat/s/{id} 行为）
+    activeChatSessionId(newVal, oldVal) {
+      if (this._isRestoringSession) {
+        return;
+      }
+      if (newVal === oldVal) {
+        return;
+      }
+      this.syncChatSessionToUrlAndStorage();
+      // 切换会话：重置 UI 状态为新会话的当前 run 状态
+      const run = this.currentAgentRun;
+      if (run && !this.isTerminalAgentRunStatus(run.status)) {
+        // 切到有运行中 run 的会话：恢复 isSending/isStreaming
+        this.isSending = true;
+        this.isStreaming = true;
+        this.isThinking = false;
+      } else {
+        // 切到无活跃 run 的会话：清 UI 状态
+        this.isSending = false;
+        this.isStreaming = false;
+        this.isThinking = false;
+        this.thinkingExpanded = true;
+      }
+      this.updateTabTitle();
+    },
+    isStreaming() {
+      this.updateTabTitle();
+    },
+    isSending() {
+      this.updateTabTitle();
+    },
+    currentSessionTitle() {
+      this.updateTabTitle();
+    },
+  },
+  methods: {
+    updateTabTitle() {
+      var routeName = this.$route && this.$route.name;
+      if (routeName !== "chat") {
+        resetDocumentTitle();
+        return;
+      }
+      var sessionTitle = this.currentSessionTitle;
+      var title = sessionTitle || "对话";
+      if (this.isStreaming || this.isSending) {
+        setDocumentTitle(title, "生成中…");
+      } else {
+        setDocumentTitle(title);
+      }
+    },
+    applyRouteView() {
+      var forceView =
+        this.$route && this.$route.meta && this.$route.meta.forceView;
+      if (forceView && forceView !== this.activeView) {
+        this.activeView = forceView;
+        this.handleSwitchView(forceView);
+      } else if (!forceView && this.activeView !== "chat") {
+        this.activeView = "chat";
+      }
+    },
+    toggleMobileLeft() {
+      this.mobileLeftOpen = !this.mobileLeftOpen;
+      if (this.mobileLeftOpen) {
+        this.mobileRightOpen = false;
+      }
+    },
+    toggleMobileRight() {
+      this.mobileRightOpen = !this.mobileRightOpen;
+      if (this.mobileRightOpen) {
+        this.mobileLeftOpen = false;
+      }
+    },
+    closeMobileDrawers() {
+      this.mobileLeftOpen = false;
+      this.mobileRightOpen = false;
+    },
+    handleDirectTask(prompt) {
+      var currentPath = this.$route && this.$route.path;
+      var isOnChat = currentPath && currentPath.startsWith("/chat");
+      if (!isOnChat) {
+        window.sessionStorage.setItem("fitmate:pending-draft", prompt);
+        this.$router.push({ path: "/chat" });
+        return;
+      }
+      this.activeView = "chat";
+      this.closeMobileDrawers();
+      this.draftMessage = prompt;
+      var me = this;
+      this.$nextTick(function () {
+        me.doChat();
+      });
+    },
+    handleSwitchView(viewName) {
+      this.activeView = viewName;
+      this.closeMobileDrawers();
+      // Fetch contextual data for the target view
+      if (viewName === "training-log") {
+        this.fetchRecentTraining();
+      } else if (viewName === "body-metrics") {
+        this.fetchRecentMetrics();
+      } else if (viewName === "upload") {
+        this.fetchUploadedDocs();
+      }
+    },
+    async handleToggleChatExpand() {
+      this.activeView = "chat";
+      if (this.chatExpanded) {
+        this.chatExpanded = false;
+        return;
+      }
+
+      this.chatExpanded = true;
+      if (!this.chatRecordsLoaded && !this.chatRecordsLoading) {
+        await this.fetchChatRecords();
+      }
+    },
+    async handleChatHistoryHover(enter) {
+      if (this._chatHistoryHoverTimer) {
+        clearTimeout(this._chatHistoryHoverTimer);
+        this._chatHistoryHoverTimer = null;
+      }
+      if (enter) {
+        if (this.chatExpanded) {
+          return;
+        }
+        this.chatExpanded = true;
+        if (!this.chatRecordsLoaded && !this.chatRecordsLoading) {
+          await this.fetchChatRecords();
+        }
+      } else {
+        var me = this;
+        this._chatHistoryHoverTimer = setTimeout(function () {
+          me.chatExpanded = false;
+          me._chatHistoryHoverTimer = null;
+        }, 200);
+      }
+    },
+    handleSelectChatSession(sessionId) {
+      // 不再阻止：任务运行时也可切换会话，旧 run 在 Map 中继续追踪
+      // flush 当前 run 的 buffer（避免丢失累积的 thinking/content delta），再清理所有 buffer
+      var currentRun = this.currentAgentRun;
+      if (currentRun && currentRun.runId) {
+        this.flushRunBuffer(currentRun.runId);
+      }
+      this.clearRunBuffers();
+      this.scrollRAFScheduled = false;
+      this.cachedChatMessagesEl = null;
+      var targetSession = null;
+      for (var i = 0; i < this.chatSessionList.length; i++) {
+        if (this.chatSessionList[i].sessionId == sessionId) {
+          targetSession = this.chatSessionList[i];
+          break;
+        }
+      }
+
+      if (!targetSession) {
+        return;
+      }
+
+      var mappedChatList = this.mapSessionMessagesToChatList(
+        targetSession.messages
+      );
+
+      this.clearThinkingState();
+      this.activeView = "chat";
+      this.activeChatSessionId = targetSession.sessionId;
+      this.currentSessionCode = targetSession.sessionCode || null;
+      this.currentSessionSceneType = targetSession.sceneType || null;
+      this.applyChatMode(this.resolvePreferredModeFromSession(targetSession));
+      this.chatList = mappedChatList;
+      // 应用思考内容缓存：命中则默认展开
+      this.applyThinkingCacheToChatList(targetSession.sessionId);
+      // 恢复会话级 tokenUsage（从历史消息解析）；同时同步到活跃 run entry（若有）
+      var restoredUsage = this.resolveLastUsageFromMessages(
+        targetSession.messages
+      );
+      this.tokenUsage = restoredUsage;
+      var restoreRun = this.currentAgentRun;
+      if (restoreRun) {
+        restoreRun.tokenUsage = restoredUsage;
+      }
+      this.showBackToBottom = false;
+      this.knowledgeSources = this.resolveChatHistorySources(mappedChatList);
+      this.closeMobileDrawers();
+      this.chatExpanded = false;
+      this.activeView = "chat";
+      this.scrollToBottom(true);
+    },
+    async handleShowAllChatSessions() {
+      this.chatExpanded = false;
+      this.activeView = "chat-history";
+      if (!this.chatRecordsLoaded && !this.chatRecordsLoading) {
+        await this.fetchChatRecords();
+      }
+    },
+    handleBackToChat() {
+      this.activeView = "chat";
+    },
+    /**
+     * 删除指定会话。
+     * - 若删除的是当前活动会话：清空聊天界面回到"新建会话"状态
+     * - 同步从 chatSessionList 中移除该项
+     * - 清理 sessionStorage 中的最近会话记录（若被删的正是它）
+     */
+    async handleDeleteSession(sessionId) {
+      if (sessionId == null) {
+        return;
+      }
+      if (this.isSending || this.isStreaming || this.hasPendingAgentRun()) {
+        this.showUiMessage("error", "当前有运行中的任务，请稍后再删除会话。");
+        return;
+      }
+      var confirmed = await this.showConfirmDialog(
+        "确定要删除该会话吗？该会话及其全部消息将永久删除，不可恢复。",
+        {
+          title: "删除会话",
+          confirmText: "删除",
+          cancelText: "取消",
+          danger: true,
+        }
+      );
+      if (!confirmed) {
+        return;
+      }
+      var me = this;
+      try {
+        await doctorApi.deleteChatSession(sessionId);
+      } catch (e) {
+        console.error("删除会话失败:", e);
+        this.showUiMessage("error", "删除会话失败，请稍后重试");
+        return;
+      }
+      // 失效该会话下的思考内容缓存（无论是否为当前活动会话）
+      var delUserKey = this.resolveStableUserKey();
+      if (delUserKey) {
+        invalidateThinkingCacheBySession(String(delUserKey), String(sessionId));
+      }
+      // 从列表中移除
+      this.chatSessionList = this.chatSessionList.filter(function (s) {
+        return s && s.sessionId !== sessionId;
+      });
+      // 若删除的是当前活动会话：清空界面并回到新建会话状态
+      if (this.activeChatSessionId === sessionId) {
+        this.clearActiveAgentRun();
+        this.clearThinkingState();
+        this.activeView = "chat";
+        this.activeChatSessionId = null;
+        this.currentSessionCode = null;
+        this.currentSessionSceneType = null;
+        this.chatList = [];
+        // agentSteps/thinkingSegments 是 computed（从 currentAgentRun 派生），无需赋值
+        this.draftMessage = "";
+        this.botMsgId = null;
+        this.tokenUsage = null;
+        this.showBackToBottom = false;
+        this.knowledgeSources = [];
+        this.persistRecentChatSession(null);
+        // URL 同步：/chat/{id} → /chat
+        this.syncChatSessionToUrlAndStorage();
+        this.scrollToBottom(true);
+      }
+      this.showUiMessage("success", "会话已删除");
+    },
+    /**
+     * 重命名指定会话。弹出确认条输入新标题。
+     * 同步更新 chatSessionList 中对应项的 title。
+     */
+    async handleRenameSession(session) {
+      if (!session || session.sessionId == null) {
+        return;
+      }
+      var currentTitle = this.resolveSessionTitle(session);
+      // 用 window.prompt 简单收集新标题（避免再做一个输入框确认条组件）
+      // 确认条组件当前只支持 yes/no，不适合文本输入场景
+      var newTitle = window.prompt("请输入新的会话标题", currentTitle);
+      if (newTitle == null) {
+        // 用户点击取消
+        return;
+      }
+      newTitle = String(newTitle).trim();
+      if (!newTitle) {
+        this.showUiMessage("error", "标题不能为空");
+        return;
+      }
+      if (newTitle.length > 50) {
+        newTitle = newTitle.slice(0, 50);
+      }
+      if (newTitle === currentTitle) {
+        return;
+      }
+      var me = this;
+      try {
+        await doctorApi.renameChatSession(session.sessionId, newTitle);
+      } catch (e) {
+        console.error("重命名会话失败:", e);
+        this.showUiMessage("error", "重命名会话失败，请稍后重试");
+        return;
+      }
+      // 同步更新列表中的 title
+      this.chatSessionList = this.chatSessionList.map(function (s) {
+        if (s && s.sessionId === session.sessionId) {
+          return Object.assign({}, s, { title: newTitle });
+        }
+        return s;
+      });
+      this.showUiMessage("success", "会话已重命名");
+    },
+    handleCreateChat() {
+      // 不再阻止：任务运行时也可新建聊天，旧 run 在 Map 中继续追踪
+      // flush 当前 run 的 buffer（避免丢失累积的 thinking/content delta），再清理所有 buffer
+      var currentRun = this.currentAgentRun;
+      if (currentRun && currentRun.runId) {
+        this.flushRunBuffer(currentRun.runId);
+      }
+      this.clearRunBuffers();
+      this.scrollRAFScheduled = false;
+      this.cachedChatMessagesEl = null;
+      this.clearThinkingState();
+      this.activeView = "chat";
+      this.activeChatSessionId = null;
+      this.currentSessionCode = null;
+      this.currentSessionSceneType = null;
+      this.chatList = [];
+      this.draftMessage = "";
+      this.showBackToBottom = false;
+      this.knowledgeSources = [];
+      this.closeMobileDrawers();
+      this.scrollToBottom(true);
+    },
+    handleTrainingSubmit(formData) {
+      var me = this;
+      doctorApi
+        .logTraining(formData)
+        .then(function (res) {
+          me.showUiMessage("success", "训练记录已保存");
+          me.activeView = "chat";
+        })
+        .catch(function () {
+          // API unavailable, fallback to agent chat
+          me.activeView = "chat";
+          me.draftMessage = me.buildTrainingPrompt(formData.exercises);
+          me.$nextTick(function () {
+            me.doChat();
+          });
+        });
+    },
+    handleBodyMetricsSubmit(formData) {
+      var me = this;
+      doctorApi
+        .logBodyMetrics(formData)
+        .then(function (res) {
+          me.showUiMessage("success", "身体指标已保存");
+          me.activeView = "chat";
+          // sync todayStatus
+          if (formData.weight != null) me.todayStatus.weight = formData.weight;
+          if (formData.bodyFat != null)
+            me.todayStatus.bodyFat = formData.bodyFat;
+          if (formData.sleep != null) me.todayStatus.sleep = formData.sleep;
+          if (formData.fatigue) me.todayStatus.fatigue = formData.fatigue;
+        })
+        .catch(function () {
+          me.activeView = "chat";
+          me.draftMessage = me.buildBodyMetricsPrompt(formData);
+          me.$nextTick(function () {
+            me.doChat();
+          });
+        });
+    },
+    buildTrainingPrompt(exercises) {
+      var lines = ["记录今天训练："];
+      for (var i = 0; i < exercises.length; i++) {
+        var ex = exercises[i];
+        lines.push(
+          "- " +
+            ex.name +
+            "：" +
+            ex.sets +
+            "组 x " +
+            ex.reps +
+            "次，" +
+            ex.weight +
+            "kg"
+        );
+      }
+      return lines.join("\n");
+    },
+    buildBodyMetricsPrompt(data) {
+      var parts = ["记录今天身体指标："];
+      if (data.weight != null) parts.push("体重 " + data.weight + "kg");
+      if (data.bodyFat != null) parts.push("体脂 " + data.bodyFat + "%");
+      if (data.sleep != null) parts.push("睡眠 " + data.sleep + "小时");
+      if (data.fatigue) parts.push("疲劳度 " + data.fatigue);
+      if (data.note) parts.push("备注：" + data.note);
+      return parts.join("，");
+    },
+    focusUpload() {
+      this.activeView = "upload";
+      this.fetchUploadedDocs();
+    },
+    fetchRecentTraining() {
+      var me = this;
+      doctorApi
+        .getRecentTraining(5)
+        .then(function (res) {
+          var data = res && res.data;
+          if (Array.isArray(data)) {
+            me.recentTraining = data;
+          }
+        })
+        .catch(function () {
+          // API not available, keep empty
+        });
+    },
+    fetchRecentMetrics() {
+      var me = this;
+      doctorApi
+        .getRecentMetrics(5)
+        .then(function (res) {
+          var data = res && res.data;
+          if (Array.isArray(data)) {
+            me.recentMetrics = data;
+          }
+        })
+        .catch(function () {
+          // API not available, keep empty
+        });
+    },
+    fetchRecentCardio: function () {
+      var me = this;
+      doctorApi.getRecentCardio(10).then(function (res) {
+        me.recentCardio = (res && res.data) || [];
+      }).catch(function () { me.recentCardio = []; });
+    },
+    fetchRecentHeartRate: function () {
+      var me = this;
+      doctorApi.getRecentHeartRate(10).then(function (res) {
+        me.recentHeartRate = (res && res.data) || [];
+      }).catch(function () { me.recentHeartRate = []; });
+    },
+    fetchRecentDiet: function () {
+      var me = this;
+      doctorApi.getRecentDiet(10).then(function (res) {
+        me.recentDiet = (res && res.data) || [];
+      }).catch(function () { me.recentDiet = []; });
+    },
+    fetchTrainingSummary: function () {
+      var me = this;
+      doctorApi.getTrainingSummary().then(function (res) {
+        me.trainingSummary = (res && res.data) || null;
+      }).catch(function () { me.trainingSummary = null; });
+    },
+    fetchBodyMetricsSummary: function () {
+      var me = this;
+      doctorApi.getBodyMetricsSummary().then(function (res) {
+        me.bodyMetricsSummary = (res && res.data) || null;
+      }).catch(function () { me.bodyMetricsSummary = null; });
+    },
+    fetchUploadedDocs() {
+      var me = this;
+      doctorApi
+        .getUploadedDocs()
+        .then(function (res) {
+          var data = res && res.data;
+          if (Array.isArray(data)) {
+            me.uploadedDocs = data;
+            me.docCount = data.length;
+            me.uploadSynced = true;
+          } else {
+            me.uploadedDocs = [];
+            me.docCount = 0;
+            me.uploadSynced = false;
+          }
+        })
+        .catch(function () {
+          me.uploadSynced = false;
+          // API not available, keep empty
+        });
+    },
+    fetchChatRecords() {
+      var stableUserKey = this.resolveStableUserKey();
+      if (!stableUserKey) {
+        this.chatSessionList = [];
+        this.chatRecordsLoaded = false;
+        return Promise.resolve([]);
+      }
+
+      var me = this;
+      this.chatRecordsLoading = true;
+      return doctorApi
+        .getRecords(stableUserKey)
+        .then(function (res) {
+          var data = me.unwrapApiData(res, "加载聊天记录失败");
+          me.chatSessionList = me.normalizeChatSessions(data);
+          me.chatRecordsLoaded = true;
+          return me.chatSessionList;
+        })
+        .catch(function (error) {
+          console.error("加载聊天记录失败:", error);
+          me.chatSessionList = [];
+          me.chatRecordsLoaded = false;
+          me.showUiMessage(
+            "error",
+            error && error.message
+              ? error.message
+              : "加载聊天记录失败，请稍后重试。"
+          );
+          return [];
+        })
+        .finally(function () {
+          me.chatRecordsLoading = false;
+        });
+    },
+    normalizeChatSessions(recordData) {
+      var sessions = [];
+      if (Array.isArray(recordData)) {
+        sessions = recordData.slice();
+      } else if (recordData && Array.isArray(recordData.sessions)) {
+        sessions = recordData.sessions.slice();
+      }
+
+      var me = this;
+      return sessions
+        .map(function (session) {
+          var messages =
+            session && Array.isArray(session.messages)
+              ? session.messages.slice()
+              : [];
+          var updatedAt =
+            (session && (session.updatedAt || session.createdAt)) ||
+            (messages.length > 0
+              ? messages[messages.length - 1].createdAt || null
+              : null);
+
+          return {
+            sessionId: session ? session.sessionId : null,
+            sessionCode:
+              session && session.sessionCode
+                ? String(session.sessionCode)
+                : null,
+            sceneType:
+              session && session.sceneType
+                ? String(session.sceneType).toLowerCase()
+                : null,
+            lastBotMsgId:
+              session && session.lastBotMsgId
+                ? session.lastBotMsgId
+                : me.resolveLastSessionBotMsgId(messages),
+            title: me.buildChatSessionTitle(session, messages),
+            updatedAt: updatedAt,
+            updatedAtLabel: me.formatChatSessionTime(updatedAt),
+            messages: messages,
+          };
+        })
+        .filter(function (session) {
+          return session.sessionId != null;
+        })
+        .sort(function (a, b) {
+          var aDate = me.resolveChatSessionDate(a.updatedAt);
+          var bDate = me.resolveChatSessionDate(b.updatedAt);
+          var aTime = aDate ? aDate.getTime() : 0;
+          var bTime = bDate ? bDate.getTime() : 0;
+          return bTime - aTime;
+        });
+    },
+    buildChatSessionTitle(session, messages) {
+      var explicitTitle =
+        session && session.title ? String(session.title).trim() : "";
+      if (explicitTitle) {
+        return explicitTitle;
+      }
+
+      var safeMessages = Array.isArray(messages) ? messages : [];
+      for (var i = 0; i < safeMessages.length; i++) {
+        var message = safeMessages[i];
+        if (!message || message.role !== "user") {
+          continue;
+        }
+
+        var content =
+          message.content == null
+            ? ""
+            : String(message.content).replace(/\s+/g, " ").trim();
+        if (!content) {
+          continue;
+        }
+
+        return content.length > 18 ? content.slice(0, 18) + "..." : content;
+      }
+
+      return "未命名会话";
+    },
+    formatChatSessionTime(rawValue) {
+      var date = this.resolveChatSessionDate(rawValue);
+      if (!date) {
+        return "";
+      }
+
+      var month = String(date.getMonth() + 1).padStart(2, "0");
+      var day = String(date.getDate()).padStart(2, "0");
+      var hours = String(date.getHours()).padStart(2, "0");
+      var minutes = String(date.getMinutes()).padStart(2, "0");
+      return month + "-" + day + " " + hours + ":" + minutes;
+    },
+    resolveChatSessionDate(rawValue) {
+      if (!rawValue) {
+        return null;
+      }
+
+      var date = rawValue instanceof Date ? rawValue : new Date(rawValue);
+      if (isNaN(date.getTime())) {
+        return null;
+      }
+
+      return date;
+    },
+    resolveLastSessionBotMsgId(messages) {
+      if (!Array.isArray(messages)) {
+        return null;
+      }
+
+      for (var i = messages.length - 1; i >= 0; i--) {
+        if (messages[i] && messages[i].botMsgId) {
+          return messages[i].botMsgId;
+        }
+      }
+
+      return null;
+    },
+    resolvePreferredModeFromSession(session) {
+      var sceneType =
+        session && session.sceneType === "agent" ? "agent" : "chat";
+      var sourceType = "chat";
+
+      var messages =
+        session && Array.isArray(session.messages) ? session.messages : [];
+      for (var i = messages.length - 1; i >= 0; i--) {
+        var message = messages[i];
+        var currentSourceType =
+          message && message.sourceType
+            ? String(message.sourceType).toLowerCase()
+            : "";
+
+        if (
+          currentSourceType === "rag" ||
+          currentSourceType === "internet" ||
+          currentSourceType === "chat"
+        ) {
+          sourceType = currentSourceType;
+          break;
+        }
+      }
+
+      return {
+        sceneType: sceneType,
+        sourceType: sourceType,
+      };
+    },
+    applyChatMode(modeState) {
+      var sourceType =
+        modeState && modeState.sourceType
+          ? String(modeState.sourceType).toLowerCase()
+          : "chat";
+
+      this.imageReadSelected = false;
+      this.knowledgeBaseSelected =
+        sourceType === "rag" || sourceType === "wiki";
+      this.ragSelected = sourceType === "rag";
+      this.internetSearchSelected = sourceType === "internet";
+    },
+    resolveExpectedSessionSceneType() {
+      return "agent";
+    },
+    applyServerSessionMeta(payload, options) {
+      if (!payload || typeof payload !== "object") {
+        return;
+      }
+      options = options || {};
+      // 仅 ack/恢复路径传 updateGlobalSession:true，
+      // 避免后台 run 的 thinking/finish 事件干扰当前会话指针
+      if (options.updateGlobalSession) {
+        if (payload.chatSessionId != null) {
+          this.activeChatSessionId = payload.chatSessionId;
+        }
+        // 会话级属性：ack 路径补全（首次创建会话时后端返回 sessionCode/sceneType）
+        if (payload.sessionCode != null) {
+          this.currentSessionCode = String(payload.sessionCode);
+        }
+        if (payload.sceneType != null) {
+          this.currentSessionSceneType = payload.sceneType;
+        }
+      }
+    },
+    refreshChatRecordsIfNeeded() {
+      if (
+        (!this.chatExpanded && !this.chatRecordsLoaded) ||
+        this.chatRecordsLoading
+      ) {
+        return Promise.resolve(this.chatSessionList);
+      }
+
+      return this.fetchChatRecords();
+    },
+    showUiMessage(type, text) {
+      if (this.$message && typeof this.$message[type] === "function") {
+        this.$message[type](text);
+      }
+    },
+    /**
+     * 弹出自定义确认条，返回 Promise<boolean>（true=确认，false=取消）。
+     * 用于替代 window.confirm，UI 显示在消息列表与输入框之间。
+     */
+    showConfirmBar(text, options) {
+      var me = this;
+      return new Promise(function (resolve) {
+        me.confirmBar.text = text || "确认操作？";
+        me.confirmBar.confirmText = (options && options.confirmText) || "确认";
+        me.confirmBar.cancelText = (options && options.cancelText) || "取消";
+        me.confirmBar.resolve = resolve;
+        me.confirmBar.visible = true;
+      });
+    },
+    confirmBarAccept() {
+      var resolve = this.confirmBar.resolve;
+      this.confirmBar.visible = false;
+      this.confirmBar.resolve = null;
+      this.confirmBar.text = "";
+      if (typeof resolve === "function") {
+        resolve(true);
+      }
+    },
+    confirmBarCancel() {
+      var resolve = this.confirmBar.resolve;
+      this.confirmBar.visible = false;
+      this.confirmBar.resolve = null;
+      this.confirmBar.text = "";
+      if (typeof resolve === "function") {
+        resolve(false);
+      }
+    },
+    /**
+     * 弹出屏幕居中的模态确认弹窗，返回 Promise<boolean>（true=确认，false=取消）。
+     * 用于删除会话等需要强提示的二次确认场景，避免复用 confirmBar（条状）。
+     */
+    showConfirmDialog(text, options) {
+      var me = this;
+      return new Promise(function (resolve) {
+        me.confirmDialog.text = text || "确认操作？";
+        me.confirmDialog.title = (options && options.title) || "确认";
+        me.confirmDialog.confirmText = (options && options.confirmText) || "确认";
+        me.confirmDialog.cancelText = (options && options.cancelText) || "取消";
+        me.confirmDialog.danger = !!(options && options.danger);
+        me.confirmDialog.resolve = resolve;
+        me.confirmDialog.visible = true;
+      });
+    },
+    confirmDialogAccept() {
+      var resolve = this.confirmDialog.resolve;
+      this.confirmDialog.visible = false;
+      this.confirmDialog.resolve = null;
+      this.confirmDialog.text = "";
+      this.confirmDialog.title = "";
+      this.confirmDialog.danger = false;
+      if (typeof resolve === "function") {
+        resolve(true);
+      }
+    },
+    confirmDialogCancel() {
+      var resolve = this.confirmDialog.resolve;
+      this.confirmDialog.visible = false;
+      this.confirmDialog.resolve = null;
+      this.confirmDialog.text = "";
+      this.confirmDialog.title = "";
+      this.confirmDialog.danger = false;
+      if (typeof resolve === "function") {
+        resolve(false);
+      }
+    },
+    unwrapApiData(res, fallbackMsg) {
+      if (!res) {
+        throw new Error(fallbackMsg || "请求失败");
+      }
+      if (typeof res.status !== "undefined" && res.status !== 200) {
+        throw new Error(res.msg || fallbackMsg || "请求失败");
+      }
+      return typeof res.data === "undefined" ? res : res.data;
+    },
+    loadUserSessionFromCookie() {
+      var userInfo = getUserInfo();
+      if (!userInfo) {
+        this.currentUserInfo = null;
+        this.currentUserName = null;
+        return;
+      }
+      this.currentUserInfo = userInfo;
+      this.currentUserName = userInfo.userKey || userInfo.id || null;
+    },
+    resolveStableUserKey() {
+      if (this.currentUserInfo) {
+        return this.currentUserInfo.userKey || this.currentUserInfo.id || null;
+      }
+      return this.currentUserName || null;
+    },
+    /**
+     * 单个 run 的 sessionStorage key。
+     */
+    getRunStorageKey(runId: string): string | null {
+      const userKey = this.resolveStableUserKey();
+      if (!userKey || !runId) return null;
+      return "fitmate:active-run:" + String(userKey) + ":" + String(runId);
+    },
+    /**
+     * 当前用户的 run storage key 前缀（用于遍历清理/恢复）。
+     */
+    getRunStorageKeyPrefix(): string | null {
+      const userKey = this.resolveStableUserKey();
+      if (!userKey) return null;
+      return "fitmate:active-run:" + String(userKey) + ":";
+    },
+    normalizeAgentRunStatus(status) {
+      return normalizeAgentRunStatusValue(status);
+    },
+    normalizeAgentStepStatus(status) {
+      return normalizeAgentTraceStatusValue(status);
+    },
+    isTerminalAgentRunStatus(status: any): boolean {
+      const s = this.normalizeAgentRunStatus(status);
+      return s === "success" || s === "failed" || s === "cancelled" || s === "interrupted";
+    },
+    hasPendingAgentRun(): boolean {
+      return this.hasPendingRunInCurrentSession;
+    },
+    normalizeAgentStepItem(step, index) {
+      if (!step) {
+        return null;
+      }
+      return normalizeAgentTraceNode(step, index);
+    },
+    /**
+     * 写入单个 run 的快照；终态时自动删除 key。
+     */
+    snapshotRunState(runId: string) {
+      const key = this.getRunStorageKey(runId);
+      if (!key || typeof window === "undefined") return;
+      const run = (this.activeAgentRuns || {})[runId];
+      if (!run || this.isTerminalAgentRunStatus(run.status)) {
+        window.sessionStorage.removeItem(key);
+        return;
+      }
+      window.sessionStorage.setItem(key, JSON.stringify({ version: 3, ...run }));
+    },
+    /**
+     * per-run token 批处理缓冲：取得或创建 buffer entry。
+     * thinkingDelta / contentDelta 累积到此缓冲，由 rAF flush 统一写入 UI，
+     * 避免每个 SSE token 都触发 Vue 响应式更新与 DOM 重排。
+     */
+    getOrCreateBuffer(runId: string) {
+      if (!runId) return null;
+      if (!this.runBuffers[runId]) {
+        this.runBuffers[runId] = {
+          runId: runId,
+          thinkingDelta: "",
+          contentDelta: "",
+          pendingFlush: false,
+          lastSnapshotTime: 0,
+        };
+      }
+      return this.runBuffers[runId];
+    },
+    scheduleFlush(runId: string) {
+      var buffer = this.getOrCreateBuffer(runId);
+      if (!buffer || buffer.pendingFlush) return;
+      buffer.pendingFlush = true;
+      var me = this;
+      requestAnimationFrame(function () {
+        me.flushRunBuffer(runId);
+      });
+    },
+    flushRunBuffer(runId: string) {
+      var buffer = this.runBuffers[runId];
+      if (!buffer) return;
+      var run = this.activeAgentRuns[runId];
+      var isSubAgent = run && run.isSubAgent;
+
+      // 1. 更新 thinking（如果有增量）
+      if (buffer.thinkingDelta) {
+        if (run) {
+          run.thinkingContent = (run.thinkingContent || "") + buffer.thinkingDelta;
+          run.thinkingSegments = this.appendThinkingChunkToSegments(
+            (run.thinkingSegments || []).slice(),
+            buffer.thinkingDelta
+          );
+        }
+        // Sub-Agent 的 thinking 只写入子 run entry，不写入父 bot 消息
+        // （父 bot 消息的 thinking 是主 Agent 的，Sub-Agent 的 thinking 通过 SubAgentTraceBlock 独立渲染）
+        if (!isSubAgent) {
+          var botMsgId = run ? run.botMsgId : null;
+          var targetMsg = this.findBotMessage(botMsgId);
+          if (targetMsg) {
+            targetMsg.thinkingContent =
+              (targetMsg.thinkingContent || "") + buffer.thinkingDelta;
+            targetMsg.thinkingSegments = this.cloneThinkingSegments(
+              run ? run.thinkingSegments : []
+            );
+            targetMsg.isThinking = true;
+          }
+        }
+        buffer.thinkingDelta = "";
+      }
+
+      // 2. 更新 content（如果有增量）
+      // Sub-Agent 的 content 不写入父 bot 消息（父消息 content 是主 Agent 的最终答案），
+      // 只累积在子 run entry 中，由 SubAgentTraceBlock 独立渲染
+      if (buffer.contentDelta) {
+        if (!isSubAgent) {
+          var contentBotMsgId = run ? run.botMsgId : null;
+          var contentTarget = this.findBotMessage(contentBotMsgId);
+          if (contentTarget) {
+            contentTarget.content =
+              (contentTarget.content || "") + buffer.contentDelta;
+            contentTarget.isStreaming = true;
+          }
+        } else if (run) {
+          // Sub-Agent：content 累积到子 run entry 的 subAgentContent 字段
+          run.subAgentContent = (run.subAgentContent || "") + buffer.contentDelta;
+        }
+        buffer.contentDelta = "";
+      }
+
+      // 3. scrollToBottom（每帧最多一次，所有 run 共享）
+      this.scrollToBottomThrottled();
+
+      // 4. snapshotRunState 节流（500ms 一次）
+      if (run && Date.now() - buffer.lastSnapshotTime > 500) {
+        this.snapshotRunState(runId);
+        buffer.lastSnapshotTime = Date.now();
+      }
+
+      buffer.pendingFlush = false;
+    },
+    /**
+     * 仅查找（不创建）bot 消息：用于 flushRunBuffer 写入累积内容。
+     */
+    findBotMessage(botMsgId: string) {
+      if (!botMsgId) return null;
+      for (var i = 0; i < this.chatList.length; i++) {
+        var item = this.chatList[i];
+        if (item.botMsgId == botMsgId && item.chatType !== "user") {
+          return item;
+        }
+      }
+      return null;
+    },
+    clearRunBuffers() {
+      this.runBuffers = {};
+    },
+    normalizeMarkdown(raw) {
+      if (raw == null) return "";
+      var text = String(raw);
+      // 中文语境 Markdown 修正规则表
+      // 每条规则处理"不符合标准 Markdown 语法但符合中文表达习惯"的用法
+      var charClass = "0-9\\u4e00-\\u9fa5a-zA-Z";
+      // 中文句末标点，用于判断段落边界
+      var cnSentEnd = "\\u3002\\uff01\\uff1f\\u2026\\uff1b\\uff1a\\u300d\\u300f\\u3011\\u3015";
+      var mdFixRules = [
+        // 统一换行符：\r\n 或 \r → \n（Windows/旧 Mac 换行兼容）
+        { re: /\r\n?/g, fix: "\n" },
+        // 中文段落分隔：句末标点后单个 \n 后跟中文/英文字母开头时，补为双换行（段落分隔）
+        // 排除 Markdown 块级语法（列表-*+数字、标题#、引用>、代码`、表格|、缩进空格）
+        { re: new RegExp("([" + cnSentEnd + "!?.;:])\\n(?=[\\u4e00-\\u9fa5a-zA-Z])", "g"), fix: "$1\n\n" },
+        // # 标题：# 后无空格不是标题，补空格
+        { re: /^(#{1,6})([^\s#])/gm, fix: "$1 $2" },
+        // - * + 列表：符号后无空格不是列表，补空格
+        { re: /^(\s*)([-*+])([^\s-*+])/gm, fix: "$1$2 $3" },
+        // ~ 范围号：数字/中文/英文之间的单个 ~ 是范围符号，转义
+        { re: new RegExp("([" + charClass + "])~(?=[" + charClass + "])", "g"), fix: "$1\\~" },
+        // * 乘法：数字之间的 * 是乘法运算，转义
+        { re: new RegExp("([" + charClass + "])\\*(?=[" + charClass + "])", "g"), fix: "$1\\*" },
+        // _ 连接符：字母/中文/数字之间的 _ 是变量名/下标连接，转义
+        { re: new RegExp("([" + charClass + "])_(?=[" + charClass + "])", "g"), fix: "$1\\_" },
+        // | 分隔符：数字/中文之间的 | 是"或"分隔，转义（避免误判为 GFM 表格）
+        { re: new RegExp("([" + charClass + "])\\|(?=[" + charClass + "])", "g"), fix: "$1\\|" },
+      ];
+      mdFixRules.forEach(function (rule) {
+        text = text.replace(rule.re, rule.fix);
+      });
+      return text;
+    },
+    renderMarkdown(raw) {
+      return marked.parse(this.normalizeMarkdown(raw));
+    },
+    /**
+     * 收尾流式中的 bot 消息：flush buffer + 保存 rawContent + 渲染 markdown。
+     * 用于 SSE 断连、stopGeneration 超时等非正常 finish 路径，避免消息卡在纯文本状态。
+     */
+    finalizeStreamingChatItem(botMsgId, interrupted) {
+      if (!botMsgId) return;
+      var target = this.findBotMessage(botMsgId);
+      if (!target || !target.isStreaming) return;
+      var rawContent = target.content || "";
+      target.rawContent = rawContent;
+      target.content = this.renderMarkdown(rawContent);
+      target.isStreaming = false;
+      target.isFinished = true;
+      if (interrupted) target.interrupted = true;
+    },
+    /**
+     * 判断 run 是否为后台 run（不属于当前活跃会话）。
+     * 后台 run 的 SSE 事件只更新 run entry 状态，不操作全局 UI 状态与 chatList，
+     * 避免任务 A 的实时内容串入任务 B 的窗口。
+     */
+    isBackgroundRun(run: any): boolean {
+      if (!run || run.chatSessionId == null || this.activeChatSessionId == null) {
+        return false;
+      }
+      return String(run.chatSessionId) !== String(this.activeChatSessionId);
+    },
+    /**
+     * 按 runId 取 run entry；不存在时按需创建。
+     * @param payload SSE 事件载荷，至少含 runId
+     * @param options.createIfMissing 为 true 时，若无 runId 则降级到 currentAgentRun，若仍无则新建空骨架
+     */
+    resolveRunForEvent(payload: any, options: { createIfMissing?: boolean } = {}): any | null {
+      const runId = payload && payload.runId != null ? String(payload.runId) : null;
+      if (!runId) {
+        return this.currentAgentRun;
+      }
+      const existing = (this.activeAgentRuns || {})[runId];
+      if (existing) return existing;
+      if (options.createIfMissing) {
+        return this.createRunEntry({ runId });
+      }
+      return null;
+    },
+    /**
+     * 创建 run entry 并放入 Map。chatSessionId 创建时固定。
+     */
+    createRunEntry(init: any): any {
+      const runId = String(init.runId);
+      const run = {
+        runId: runId,
+        parentRunId: init.parentRunId != null ? String(init.parentRunId) : null,
+        chatSessionId: init.chatSessionId != null ? init.chatSessionId : this.activeChatSessionId,
+        sessionCode: init.sessionCode != null ? String(init.sessionCode) : null,
+        botMsgId: init.botMsgId != null ? String(init.botMsgId) : null,
+        status: init.status || "pending",
+        requestText: init.requestText || "",
+        sceneType: init.sceneType || "agent",
+        sourceType: init.sourceType || "chat",
+        finishReceived: false,
+        steps: [],
+        thinkingSegments: [],
+        thinkingContent: "",
+        tokenUsage: null,
+        isSubAgent: !!init.parentRunId,
+      };
+      this.activeAgentRuns[runId] = run;
+      return run;
+    },
+    /**
+     * 从 Map 移除 run entry。
+     */
+    removeRunEntry(runId: string) {
+      if (!runId) return;
+      delete this.activeAgentRuns[runId];
+    },
+    /**
+     * 清空 run 追踪。传 runId 删单个；不传清整个 Map（logout 用）。
+     */
+    clearActiveAgentRun(runId?: string) {
+      if (runId) {
+        const key = this.getRunStorageKey(runId);
+        if (key && typeof window !== "undefined") {
+          window.sessionStorage.removeItem(key);
+        }
+        delete this.activeAgentRuns[runId];
+      } else {
+        const prefix = this.getRunStorageKeyPrefix();
+        if (prefix && typeof window !== "undefined") {
+          for (let i = window.sessionStorage.length - 1; i >= 0; i--) {
+            const key = window.sessionStorage.key(i);
+            if (key && key.indexOf(prefix) === 0) {
+              window.sessionStorage.removeItem(key);
+            }
+          }
+        }
+        this.activeAgentRuns = {};
+      }
+    },
+    /**
+     * 遍历 sessionStorage 前缀重建整个 activeAgentRuns Map。
+     * 不切换 activeChatSessionId；由路由恢复流程决定。
+     */
+    restoreActiveAgentRuns() {
+      const prefix = this.getRunStorageKeyPrefix();
+      if (!prefix || typeof window === "undefined") return;
+      for (let i = window.sessionStorage.length - 1; i >= 0; i--) {
+        const key = window.sessionStorage.key(i);
+        if (!key || key.indexOf(prefix) !== 0) continue;
+        const raw = window.sessionStorage.getItem(key);
+        if (!raw) continue;
+        try {
+          const snap = JSON.parse(raw);
+          if (!snap.runId || this.isTerminalAgentRunStatus(snap.status)) {
+            window.sessionStorage.removeItem(key);
+            continue;
+          }
+          // hydrate：补全字段
+          const run = {
+            runId: String(snap.runId),
+            chatSessionId: snap.chatSessionId != null ? snap.chatSessionId : null,
+            sessionCode: snap.sessionCode || null,
+            botMsgId: snap.botMsgId || null,
+            status: snap.status,
+            requestText: snap.requestText || "",
+            sceneType: snap.sceneType || "agent",
+            sourceType: snap.sourceType || "chat",
+            finishReceived: !!snap.finishReceived,
+            steps: Array.isArray(snap.steps) ? snap.steps : (Array.isArray(snap.traceNodes) ? snap.traceNodes : []),
+            thinkingSegments: Array.isArray(snap.thinkingSegments) ? snap.thinkingSegments : [],
+            thinkingContent: snap.thinkingContent || "",
+            tokenUsage: snap.tokenUsage || null,
+          };
+          this.activeAgentRuns[run.runId] = run;
+          // 后台补拉最新详情（覆盖终态等）
+          this.silentFetchAgentRunDetail(run.runId);
+        } catch (e) {
+          window.sessionStorage.removeItem(key);
+        }
+      }
+    },
+    safeParseJson(rawValue) {
+      if (rawValue == null) {
+        return null;
+      }
+      if (typeof rawValue === "object") {
+        return rawValue;
+      }
+      try {
+        return JSON.parse(String(rawValue));
+      } catch (error) {
+        return null;
+      }
+    },
+    isAgentRunQueryUnavailable(error) {
+      var status =
+        error && error.response && error.response.status != null
+          ? error.response.status
+          : null;
+      return status === 404 || status === 405 || status === 501;
+    },
+    silentRestoreChatSession(sessionId) {
+      if (sessionId == null) {
+        return Promise.resolve(null);
+      }
+      var stableUserKey = this.resolveStableUserKey();
+      if (!stableUserKey) {
+        return Promise.resolve(null);
+      }
+      var me = this;
+      // 恢复期间设置标志，避免 activeChatSessionId 变化触发 watch 反向同步 URL/storage
+      var previousFlag = this._isRestoringSession;
+      this._isRestoringSession = true;
+      return doctorApi
+        .getRecords(stableUserKey, sessionId, 1)
+        .then(function (res) {
+          var data = me.unwrapApiData(res, "加载聊天记录失败");
+          var sessions = me.normalizeChatSessions(data);
+          if (!Array.isArray(sessions) || sessions.length === 0) {
+            return null;
+          }
+          var targetSession = sessions[0];
+          var mappedChatList = me.mapSessionMessagesToChatList(
+            targetSession.messages
+          );
+          me.activeView = "chat";
+          me.activeChatSessionId = targetSession.sessionId;
+          me.currentSessionCode = targetSession.sessionCode || null;
+          me.currentSessionSceneType = targetSession.sceneType || null;
+          me.chatList = mappedChatList;
+          // 应用思考内容缓存：命中则默认展开
+          me.applyThinkingCacheToChatList(targetSession.sessionId);
+          me.knowledgeSources = me.resolveChatHistorySources(mappedChatList);
+          // 恢复会话级 tokenUsage；同时同步到活跃 run entry（若有）
+          var restoredUsage = me.resolveLastUsageFromMessages(
+            targetSession.messages
+          );
+          me.tokenUsage = restoredUsage;
+          var restoreRun = me.currentAgentRun;
+          if (restoreRun) {
+            restoreRun.tokenUsage = restoredUsage;
+          }
+          me.scrollToBottom(true);
+          return targetSession;
+        })
+        .catch(function (error) {
+          console.warn("静默恢复聊天会话失败:", error);
+          return null;
+        })
+        .finally(function () {
+          me._isRestoringSession = previousFlag;
+        });
+    },
+    /**
+     * 当前用户在 sessionStorage 中持久化"最近活动会话 ID"用的 key。
+     * 用于：用户切换到其他页面（如 dashboard、training）再点回聊天入口时，
+     * 即使 URL 没带 sessionId，也能从 sessionStorage 兜底恢复到上次的会话。
+     */
+    getRecentChatSessionStorageKey() {
+      var stableUserKey = this.resolveStableUserKey();
+      if (!stableUserKey || typeof window === "undefined") {
+        return null;
+      }
+      return "fitmate:recent-chat-session:" + String(stableUserKey);
+    },
+    /**
+     * 将当前会话 ID 写入/移出 sessionStorage（持久化最近活动会话）。
+     * sessionId 为 null 时移除记录，对应"新建会话"场景。
+     */
+    persistRecentChatSession(sessionId) {
+      var key = this.getRecentChatSessionStorageKey();
+      if (!key || typeof window === "undefined") {
+        return;
+      }
+      try {
+        if (sessionId == null) {
+          window.sessionStorage.removeItem(key);
+        } else {
+          window.sessionStorage.setItem(key, String(sessionId));
+        }
+      } catch (e) {
+        // sessionStorage 不可用时静默忽略
+      }
+    },
+    /**
+     * 解析可恢复的会话 ID。优先级：
+     *   1) URL 路径参数 sessionId（直接访问 /chat/123 或从其他页面 router-link 回到该 URL）
+     *   2) sessionStorage 中持久化的最近会话 ID（兜底，覆盖侧栏点击 /chat 入口的场景）
+     *   3) 都没有则返回 null（呈现"新建会话"页）
+     */
+    resolveRestorableSessionId() {
+      var urlSessionId =
+        this.$route &&
+        this.$route.params &&
+        this.$route.params.sessionId;
+      if (urlSessionId != null && urlSessionId !== "") {
+        return { sessionId: urlSessionId, source: "url" };
+      }
+      var key = this.getRecentChatSessionStorageKey();
+      if (key && typeof window !== "undefined") {
+        var storedSessionId = null;
+        try {
+          storedSessionId = window.sessionStorage.getItem(key);
+        } catch (e) {
+          storedSessionId = null;
+        }
+        if (storedSessionId != null && storedSessionId !== "") {
+          return { sessionId: storedSessionId, source: "storage" };
+        }
+      }
+      return { sessionId: null, source: "none" };
+    },
+    /**
+     * 在 ChatPage mounted 阶段触发：从 URL/sessionStorage 恢复上次会话。
+     * 跳过条件：
+     *   - 已有活动 Agent run（restoreActiveAgentRuns 已处理）
+     *   - chatList 已非空（已处于会话中，如刚发完消息）
+     *   - 已有 activeChatSessionId（doChat 已建立会话）
+     */
+    restoreChatSessionFromRoute() {
+      if (this.hasPendingAgentRun()) {
+        return Promise.resolve(null);
+      }
+      if (Array.isArray(this.chatList) && this.chatList.length > 0) {
+        return Promise.resolve(null);
+      }
+      if (this.activeChatSessionId != null) {
+        return Promise.resolve(null);
+      }
+      var restorable = this.resolveRestorableSessionId();
+      if (restorable.sessionId == null) {
+        return Promise.resolve(null);
+      }
+      var me = this;
+      // silentRestoreChatSession 内部用 _isRestoringSession 跳过 watch 反向同步，
+      // 恢复完成后这里主动同步一次 URL，让 /chat 替换为 /chat/{sessionId}
+      return this.silentRestoreChatSession(restorable.sessionId).then(
+        function () {
+          me.syncChatSessionToUrlAndStorage();
+        }
+      );
+    },
+    /**
+     * 将当前 activeChatSessionId 同步到 URL 路径参数与 sessionStorage。
+     * 仅在当前路由为 /chat 时才更新 URL，避免在 training/dashboard 等页面误改 URL。
+     */
+    syncChatSessionToUrlAndStorage() {
+      var sessionId = this.activeChatSessionId;
+      // 同步到 sessionStorage（兜底恢复来源）
+      this.persistRecentChatSession(sessionId);
+      // 同步到 URL 路径参数
+      if (!this.$route || !/^\/chat(\/|$)/.test(this.$route.path || "")) {
+        return;
+      }
+      var currentUrlSessionId =
+        this.$route.params && this.$route.params.sessionId;
+      var nextUrlSessionId =
+        sessionId != null ? String(sessionId) : null;
+      if (
+        String(currentUrlSessionId || "") ===
+        String(nextUrlSessionId || "")
+      ) {
+        return;
+      }
+      var nextPath =
+        nextUrlSessionId != null
+          ? "/chat/" + nextUrlSessionId
+          : "/chat";
+      var me = this;
+      // 用 replace 避免污染浏览历史（每次会话变化都堆历史会让后退按钮体验糟糕）
+      this.$router.replace(nextPath).catch(function () {
+        // 忽略重复路由/导航取消等错误
+      });
+    },
+    applyAgentRunDetail(detail, run) {
+      if (!detail || typeof detail !== "object") {
+        return;
+      }
+      var normalizedStatus = this.normalizeAgentRunStatus(detail.status);
+      // 若 detail 为终态且 run 已被 removeRunEntry 移除，不 re-create
+      // （避免 silentFetchAgentRunDetail 异步回调复活已结束的 run）
+      if (
+        !run &&
+        this.isTerminalAgentRunStatus(normalizedStatus) &&
+        !(this.activeAgentRuns || {})[String(detail.runId)]
+      ) {
+        return;
+      }
+      if (!run) {
+        run = this.resolveRunForEvent(
+          { runId: detail.runId },
+          { createIfMissing: true }
+        );
+      }
+      if (!run) return;
+      // 用 detail 补全 run 字段
+      if (detail.runId != null) {
+        run.runId = String(detail.runId);
+      }
+      if (run.chatSessionId == null && detail.chatSessionId != null) {
+        run.chatSessionId = detail.chatSessionId;
+      }
+      run.sessionCode = detail.sessionCode
+        ? String(detail.sessionCode)
+        : run.sessionCode;
+      run.botMsgId = detail.botMsgId ? String(detail.botMsgId) : run.botMsgId;
+      run.requestText = detail.requestText || run.requestText;
+      run.status = normalizedStatus;
+      // Sub-Agent run 保持 sceneType="subagent"，主 Agent run 设为 "agent"
+      if (!run.isSubAgent) {
+        run.sceneType = "agent";
+      }
+      if (detail.sourceType) {
+        run.sourceType = String(detail.sourceType).toLowerCase();
+      }
+
+      var traceItems = collectAgentTraceItems(detail);
+      var hasServerTrace =
+        Array.isArray(detail.steps) ||
+        Array.isArray(detail.trace) ||
+        Array.isArray(detail.events) ||
+        Array.isArray(detail.nodes) ||
+        Array.isArray(detail.timeline);
+      var steps = [];
+      if (traceItems.length > 0) {
+        for (var i = 0; i < traceItems.length; i++) {
+          var normalizedStep = this.normalizeAgentStepItem(traceItems[i], i);
+          if (normalizedStep) {
+            steps.push(normalizedStep);
+          }
+        }
+      }
+      if (steps.length > 0) {
+        run.steps = steps;
+      } else if (hasServerTrace) {
+        run.steps = [];
+      }
+
+      // silentFetchAgentRunDetail 后台补拉详情，不更新当前会话指针
+      this.applyServerSessionMeta(detail);
+      this.snapshotRunState(run.runId);
+      if (this.isTerminalAgentRunStatus(normalizedStatus)) {
+        this.guidanceMessage =
+          normalizedStatus === "success"
+            ? "本轮任务已完成，可继续发起新任务。"
+            : "任务执行失败，请调整后重试。";
+      }
+
+      // 历史加载：处理 Sub-Agent run 列表，注册到 activeAgentRuns 供嵌套渲染
+      this.applySubRunsFromDetail(detail, run);
+    },
+
+    /**
+     * 历史加载时把 detail.subRuns 注册为子 run entry，供 SubAgentTraceBlock 渲染。
+     * 仅在父 run 为主 Agent（parentRunId 为空）时处理。
+     */
+    applySubRunsFromDetail(detail, parentRun) {
+      console.log("[SUB-HIST-DEBUG] applySubRunsFromDetail 入口", {
+        hasDetail: !!detail,
+        hasSubRuns: !!(detail && Array.isArray(detail.subRuns)),
+        subRunsLength: detail && Array.isArray(detail.subRuns) ? detail.subRuns.length : 0,
+        hasParentRun: !!parentRun,
+        parentRunId: parentRun ? parentRun.runId : null,
+        parentRunParentRunId: parentRun ? parentRun.parentRunId : null,
+      });
+      if (!detail || !Array.isArray(detail.subRuns) || detail.subRuns.length === 0) {
+        return;
+      }
+      if (!parentRun || parentRun.parentRunId != null) {
+        // 父 run 本身就是 Sub-Agent，不再递归（后端已限制只返回一层）
+        return;
+      }
+      for (var i = 0; i < detail.subRuns.length; i++) {
+        var subDetail = detail.subRuns[i];
+        if (!subDetail || subDetail.runId == null) continue;
+        var subRunId = String(subDetail.runId);
+        var existing = (this.activeAgentRuns || {})[subRunId];
+        if (existing && this.isTerminalAgentRunStatus(existing.status) && existing.steps && existing.steps.length > 0) {
+          // 已结束且已有 steps 的子 run 不重复加载
+          continue;
+        }
+        // 创建或复用子 run entry
+        if (!existing) {
+          this.createRunEntry({
+            runId: subRunId,
+            parentRunId: parentRun.runId,
+            chatSessionId: parentRun.chatSessionId,
+            sessionCode: parentRun.sessionCode,
+            botMsgId: parentRun.botMsgId,
+            status: "running",
+            sceneType: "subagent",
+            sourceType: parentRun.sourceType,
+          });
+        }
+        var subRun = this.activeAgentRuns[subRunId];
+        // 递归复用 applyAgentRunDetail 填充子 run 字段（steps/status 等）
+        this.applyAgentRunDetail(subDetail, subRun);
+        // 从子 run 的 steps 中构建 thinkingSegments（applyAgentRunDetail 不做此操作，
+        // 因为实时路径通过 SSE chunk 累积；历史加载路径需从 steps 的 llm_finished outputJson 提取）
+        if (Array.isArray(subRun.steps) && subRun.steps.length > 0) {
+          var subSegments = this.buildThinkingSegmentsFromSteps(subRun.steps);
+          if (subSegments && subSegments.length > 0) {
+            subRun.thinkingSegments = subSegments;
+          }
+          // 从 final_answer step 提取 Sub-Agent 输出内容
+          for (var si = 0; si < subRun.steps.length; si++) {
+            var sstep = subRun.steps[si];
+            if (sstep && String(sstep.eventType || "").toLowerCase() === "final_answer") {
+              var outJson = sstep.outputJson;
+              if (outJson) {
+                try {
+                  var parsed = typeof outJson === "string" ? JSON.parse(outJson) : outJson;
+                  if (parsed) {
+                    var fa = parsed.finalAnswer || parsed.final_answer;
+                    if (fa) {
+                      subRun.subAgentContent = fa;
+                    }
+                  }
+                } catch (e) {
+                  // outputJson 解析失败则跳过
+                }
+              }
+              break;
+            }
+          }
+        }
+      }
+    },
+    /**
+     * 序列化父 run 的所有子 run 数据，用于写入 thinkingCache。
+     * 返回数组中每个元素是子 run 的关键字段快照。
+     */
+    collectSubRunsForCache(parentRunId) {
+      if (!parentRunId) return [];
+      var runs = this.activeAgentRuns || {};
+      var keys = Object.keys(runs);
+      var result = [];
+      var parentIdStr = String(parentRunId);
+      for (var i = 0; i < keys.length; i++) {
+        var sub = runs[keys[i]];
+        if (!sub || !sub.isSubAgent) continue;
+        if (String(sub.parentRunId) !== parentIdStr) continue;
+        result.push({
+          runId: String(sub.runId),
+          parentRunId: String(sub.parentRunId),
+          status: sub.status || "success",
+          sceneType: sub.sceneType || "subagent",
+          steps: Array.isArray(sub.steps) ? sub.steps : [],
+          thinkingSegments: Array.isArray(sub.thinkingSegments) ? sub.thinkingSegments : [],
+          thinkingContent: sub.thinkingContent || "",
+          subAgentContent: sub.subAgentContent || "",
+        });
+      }
+      return result;
+    },
+    /**
+     * 从缓存的 subRuns 数组重建子 run entry 到 activeAgentRuns。
+     */
+    hydrateSubRunsFromCache(parentRunId, parentBotMsgId, cachedSubRuns) {
+      if (!parentRunId || !Array.isArray(cachedSubRuns) || cachedSubRuns.length === 0) return;
+      var runs = this.activeAgentRuns || (this.activeAgentRuns = {});
+      var parentIdStr = String(parentRunId);
+      for (var i = 0; i < cachedSubRuns.length; i++) {
+        var cs = cachedSubRuns[i];
+        if (!cs || !cs.runId) continue;
+        var subId = String(cs.runId);
+        if (runs[subId] && this.isTerminalAgentRunStatus(runs[subId].status) && runs[subId].steps && runs[subId].steps.length > 0) {
+          continue;
+        }
+        if (!runs[subId]) {
+          this.createRunEntry({
+            runId: subId,
+            parentRunId: parentIdStr,
+            chatSessionId: this.activeChatSessionId,
+            botMsgId: parentBotMsgId,
+            status: cs.status || "success",
+            sceneType: cs.sceneType || "subagent",
+            sourceType: "chat",
+          });
+        }
+        var target = runs[subId];
+        target.status = cs.status || "success";
+        target.steps = Array.isArray(cs.steps) ? cs.steps : [];
+        target.thinkingSegments = Array.isArray(cs.thinkingSegments) ? cs.thinkingSegments : [];
+        target.thinkingContent = cs.thinkingContent || "";
+        target.subAgentContent = cs.subAgentContent || "";
+      }
+    },
+    silentFetchAgentRunDetail(runId) {
+      if (runId == null) {
+        return Promise.resolve(null);
+      }
+      var me = this;
+      return doctorApi
+        .getAgentRunDetail(runId)
+        .then(function (res) {
+          var data = me.unwrapApiData(res, "加载运行详情失败");
+          me.applyAgentRunDetail(data);
+          return data;
+        })
+        .catch(function (error) {
+          if (me.isAgentRunQueryUnavailable(error)) {
+            return null;
+          }
+          console.warn("静默加载Agent运行详情失败:", error);
+          return null;
+        });
+    },
+    applyAgentExecuteAck(
+      payload,
+      requestPayload,
+      expectedSceneType,
+      sourceType,
+      run
+    ) {
+      if (!payload || payload.runId == null) {
+        return false;
+      }
+      if (!run) {
+        run = this.resolveRunForEvent(payload, { createIfMissing: true });
+      }
+      if (!run) return false;
+      // 用 ack 字段补全 run entry（chatSessionId 若 run 已有则不覆盖）
+      if (run.chatSessionId == null && payload.chatSessionId != null) {
+        run.chatSessionId = payload.chatSessionId;
+        // 若与当前 activeChatSessionId 不一致，以 ack 为准
+        if (this.activeChatSessionId !== run.chatSessionId) {
+          this.activeChatSessionId = run.chatSessionId;
+        }
+      }
+      run.sessionCode = payload.sessionCode
+        ? String(payload.sessionCode)
+        : run.sessionCode;
+      run.botMsgId = payload.botMsgId
+        ? String(payload.botMsgId)
+        : requestPayload && requestPayload.botMsgId
+        ? String(requestPayload.botMsgId)
+        : run.botMsgId;
+      // botMsgId 双写：会话级 data 字段，用于回滚重发与 stopGeneration
+      this.botMsgId = run.botMsgId;
+      run.status = "running";
+      run.sceneType = expectedSceneType || "agent";
+      run.sourceType = sourceType || "chat";
+      run.requestText =
+        requestPayload && requestPayload.message
+          ? requestPayload.message
+          : run.requestText;
+      // Agent run：预初始化第1轮 thinking segment，
+      // 确保首个 thinking delta 到达时已有 active 段可追加，
+      // 避免因 llm_started 事件晚于 delta 到达导致内容落入兜底段
+      if ((expectedSceneType || "agent") === "agent") {
+        if (!Array.isArray(run.thinkingSegments) || run.thinkingSegments.length === 0) {
+          run.thinkingSegments = [{ iteration: 1, content: "", isStreaming: true }];
+        }
+      }
+      // ack 路径：允许更新当前会话指针
+      this.applyServerSessionMeta(payload, { updateGlobalSession: true });
+      this.snapshotRunState(run.runId);
+      this.silentFetchAgentRunDetail(payload.runId);
+      return true;
+    },
+    normalizeAddPayload(rawValue) {
+      var parsed = this.safeParseJson(rawValue);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        var chunkText = parsed.contentChunk;
+        if (chunkText == null) {
+          chunkText = parsed.delta;
+        }
+        if (chunkText == null) {
+          chunkText = parsed.content;
+        }
+        if (chunkText == null) {
+          chunkText = parsed.thinkingContent;
+        }
+        if (chunkText == null) {
+          chunkText = parsed.reasoningContent;
+        }
+        if (chunkText == null) {
+          chunkText = parsed.reasoningText;
+        }
+        if (chunkText == null) {
+          chunkText = parsed.reasoning;
+        }
+        if (chunkText == null) {
+          chunkText = parsed.message;
+        }
+        if (chunkText == null) {
+          chunkText = parsed.text;
+        }
+        return {
+          chunkText: chunkText == null ? "" : String(chunkText),
+          botMsgId: parsed.botMsgId ? String(parsed.botMsgId) : null,
+          runId: parsed.runId != null ? parsed.runId : null,
+          chatSessionId:
+            parsed.chatSessionId != null ? parsed.chatSessionId : null,
+          sessionCode: parsed.sessionCode ? String(parsed.sessionCode) : null,
+          sceneType: parsed.sceneType
+            ? String(parsed.sceneType).toLowerCase()
+            : null,
+          sourceType: parsed.sourceType
+            ? String(parsed.sourceType).toLowerCase()
+            : null,
+          chunkType: parsed.chunkType
+            ? String(parsed.chunkType).toLowerCase()
+            : parsed.type
+            ? String(parsed.type).toLowerCase()
+            : null,
+        };
+      }
+      return {
+        chunkText: rawValue == null ? "" : String(rawValue),
+        botMsgId: null,
+        runId: null,
+        chatSessionId: null,
+        sessionCode: null,
+        sceneType: null,
+        sourceType: null,
+        chunkType: null,
+      };
+    },
+    handleThinkingEvent(rawValue) {
+      var payload = this.normalizeAddPayload(rawValue);
+      if (!payload) {
+        return;
+      }
+      const run = this.resolveRunForEvent(payload);
+      if (!run) return;
+      if (
+        payload.chunkType &&
+        payload.chunkType !== "thinking" &&
+        payload.chunkType !== "reasoning"
+      ) {
+        return;
+      }
+      var thinkingText =
+        payload.chunkText == null ? "" : String(payload.chunkText);
+      if (!thinkingText) {
+        return;
+      }
+      if (payload.botMsgId) {
+        run.botMsgId = payload.botMsgId;
+      }
+
+      // Sub-Agent run：累积到子 run buffer（由 flushRunBuffer 写入 run.thinkingContent），
+      // 但不更新全局 UI 状态（isThinking/botMsgId）和父 bot 消息
+      if (run.isSubAgent) {
+        var subBuffer = this.getOrCreateBuffer(run.runId);
+        if (!subBuffer) return;
+        subBuffer.thinkingDelta += thinkingText;
+        this.scheduleFlush(run.runId);
+        return;
+      }
+
+      // 后台 run：直接更新 run entry（不进 UI buffer），仅节流持久化
+      if (this.isBackgroundRun(run)) {
+        run.thinkingContent = (run.thinkingContent || "") + thinkingText;
+        run.thinkingSegments = this.appendThinkingChunkToSegments(
+          (run.thinkingSegments || []).slice(),
+          thinkingText
+        );
+        var bgBuffer = this.getOrCreateBuffer(run.runId);
+        if (bgBuffer && Date.now() - bgBuffer.lastSnapshotTime > 500) {
+          this.snapshotRunState(run.runId);
+          bgBuffer.lastSnapshotTime = Date.now();
+        }
+        return;
+      }
+
+      // 当前 run：累积到 buffer，由 rAF flush 统一更新 UI
+      this.isThinking = true;
+      var botMsgId =
+        payload.botMsgId || run.botMsgId || this.botMsgId;
+      if (botMsgId) {
+        this.botMsgId = botMsgId;
+      }
+      // 首次 ADD 立即创建 bot 消息（保证 UI 响应），后续由 flush 写入累积内容
+      if (botMsgId) {
+        var targetMsg = this.findOrCreateBotMessage(botMsgId, payload);
+        if (targetMsg) {
+          if (payload.runId != null) {
+            targetMsg.runId = payload.runId;
+          }
+          if (targetMsg.thinkingExpanded === undefined) {
+            targetMsg.thinkingExpanded = true;
+          }
+        }
+      }
+
+      this.applyServerSessionMeta({
+        chatSessionId: payload.chatSessionId,
+        sessionCode: payload.sessionCode,
+        sceneType:
+          payload.sceneType ||
+          this.currentSessionSceneType ||
+          this.resolveExpectedSessionSceneType(),
+      });
+
+      var buffer = this.getOrCreateBuffer(run.runId);
+      if (!buffer) return;
+      buffer.thinkingDelta += thinkingText;
+      this.scheduleFlush(run.runId);
+    },
+    clearThinkingState() {
+      this.isThinking = false;
+      this.thinkingExpanded = true;
+    },
+    // 找到当前正在流式输出（isStreaming=true）的最新 thinking segment
+    // 用于把 thinking chunk 追加到正确的轮次桶里
+    findActiveThinkingSegment(segments) {
+      if (!Array.isArray(segments) || segments.length === 0) {
+        return -1;
+      }
+      for (var i = segments.length - 1; i >= 0; i--) {
+        if (segments[i] && segments[i].isStreaming) {
+          return i;
+        }
+      }
+      return -1;
+    },
+    // 把 thinking chunk 追加到 segments 的最新 active 段；
+    // 若没有 active 段（异常情况或历史消息恢复后），创建一个 iteration=0 的兜底段
+    appendThinkingChunkToSegments(segments, text, iteration) {
+      if (!Array.isArray(segments)) {
+        var iter0 = iteration != null ? iteration : 1;
+        return [{ iteration: iter0, content: text, isStreaming: true }];
+      }
+      var activeIdx = this.findActiveThinkingSegment(segments);
+      if (activeIdx >= 0) {
+        var oldSeg = segments[activeIdx];
+        var newSeg = {
+          iteration: oldSeg.iteration,
+          content: (oldSeg.content || "") + text,
+          isStreaming: true,
+        };
+        var newSegments = segments.slice();
+        newSegments[activeIdx] = newSeg;
+        return newSegments;
+      }
+      if (segments.length > 0) {
+        var lastIdx = segments.length - 1;
+        var lastSeg = segments[lastIdx];
+        var mergedSeg = {
+          iteration: lastSeg.iteration,
+          content: (lastSeg.content || "") + text,
+          isStreaming: lastSeg.isStreaming,
+        };
+        var mergedSegments = segments.slice();
+        mergedSegments[lastIdx] = mergedSeg;
+        return mergedSegments;
+      }
+      var nextIter = iteration != null ? iteration : 1;
+      return [{ iteration: nextIter, content: text, isStreaming: true }];
+    },
+    // 深拷贝 thinkingSegments 数组（含 segment 对象），避免引用共享导致重复追加
+    cloneThinkingSegments(segments) {
+      if (!Array.isArray(segments)) {
+        return [];
+      }
+      return segments.map(function (s) {
+        return {
+          iteration: s.iteration,
+          content: s.content,
+          isStreaming: s.isStreaming,
+        };
+      });
+    },
+    // 历史消息 thinking 整段切分：按 steps 里 llm_started 的数量均匀切分成多个 segment
+    // 这样 mergedTimeline 能按顺序匹配（第 N 个 llm_started → 第 N 个 segment）产生交错效果
+    // 若没有 steps 或没有 llm_started，降级为单个 segment
+    splitThinkingIntoSegments(thinkingText, steps) {
+      var text = thinkingText || "";
+      if (!text) {
+        return [];
+      }
+      var uniqueIters = {};
+      var llmAnchorCount = 0;
+      if (Array.isArray(steps)) {
+        for (var i = 0; i < steps.length; i++) {
+          var step = steps[i];
+          if (step && step.eventType) {
+            var et = String(step.eventType).toLowerCase();
+            if (et === "llm_started" || et === "llm_finished") {
+              var sIter = step.iterationNo != null ? Number(step.iterationNo) : 0;
+              var key3 = sIter > 0 ? ("iter-" + sIter) : ("idx-" + llmAnchorCount);
+              if (!uniqueIters[key3]) {
+                uniqueIters[key3] = true;
+                llmAnchorCount++;
+              }
+            }
+          }
+        }
+      }
+      if (llmAnchorCount <= 1) {
+        return [{ iteration: 1, content: text, isStreaming: false }];
+      }
+      var segments = [];
+      var totalLen = text.length;
+      var segLen = Math.floor(totalLen / llmAnchorCount);
+      for (var j = 0; j < llmAnchorCount; j++) {
+        var start = j * segLen;
+        var end = j === llmAnchorCount - 1 ? totalLen : (j + 1) * segLen;
+        segments.push({
+          iteration: j + 1,
+          content: text.substring(start, end),
+          isStreaming: false,
+        });
+      }
+      return segments;
+    },
+    // 历史消息：从 steps 的 LLM 锚点 outputJson 直接提取每轮 thinking，构造 segments
+    // 与实时流式保持一致（第 N 个 LLM 锚点 → 第 N 个 segment），不再按字符切分
+    // 返回 null 表示无法从 steps 提取（调用方降级到 splitThinkingIntoSegments）
+    buildThinkingSegmentsFromSteps(steps) {
+      if (!Array.isArray(steps) || steps.length === 0) {
+        return null;
+      }
+      var segments = [];
+      var seenIters = {};
+      for (var i = 0; i < steps.length; i++) {
+        var step = steps[i];
+        if (!isLlmAnchorStep(step)) {
+          continue;
+        }
+        var stepIter = step.iterationNo != null ? Number(step.iterationNo) : 0;
+        if (stepIter > 0) {
+          var dedupKey2 = "iter-" + stepIter;
+          if (seenIters[dedupKey2]) continue;
+          seenIters[dedupKey2] = true;
+        }
+        var content = extractThinkingFromStepOutput(step);
+        var segIter = stepIter > 0 ? stepIter : (segments.length + 1);
+        segments.push({
+          iteration: segIter,
+          content: content || "",
+          isStreaming: false,
+        });
+      }
+      if (segments.length === 0) {
+        return null;
+      }
+      var hasAnyContent = false;
+      for (var j = 0; j < segments.length; j++) {
+        if (segments[j].content) {
+          hasAnyContent = true;
+          break;
+        }
+      }
+      return hasAnyContent ? segments : null;
+    },
+    startThinkingSegment(iteration, run) {
+      if (!run) return;
+      var iterNo =
+        iteration != null && !isNaN(Number(iteration))
+          ? Number(iteration)
+          : 0;
+      var segments = run.thinkingSegments || [];
+      // 若最新 segment 已是该 iteration 且仍是 streaming，直接复用，避免重复开段
+      var lastSeg = segments[segments.length - 1];
+      if (
+        lastSeg &&
+        lastSeg.iteration === iterNo &&
+        lastSeg.isStreaming
+      ) {
+        return;
+      }
+      // 不可变更新：创建新数组，确保 Vue 响应式触发
+      run.thinkingSegments = segments.concat([
+        {
+          iteration: iterNo,
+          content: "",
+          isStreaming: true,
+        },
+      ]);
+    },
+    // llm_finished 事件：结束对应 iteration 的 thinking segment
+    finishThinkingSegment(iteration, run) {
+      if (!run) return;
+      var segments = run.thinkingSegments || [];
+      var iterNo =
+        iteration != null && !isNaN(Number(iteration))
+          ? Number(iteration)
+          : null;
+      // 不可变更新：创建新数组和新 segment 对象
+      run.thinkingSegments = segments.map(function (seg) {
+        if (seg && seg.isStreaming) {
+          if (iterNo == null || seg.iteration === iterNo) {
+            return {
+              iteration: seg.iteration,
+              content: seg.content,
+              isStreaming: false,
+            };
+          }
+        }
+        return seg;
+      });
+    },
+    finalizeAllThinkingSegments(run) {
+      if (!run) return;
+      var segments = run.thinkingSegments || [];
+      var hasStreaming = false;
+      for (var i = 0; i < segments.length; i++) {
+        if (segments[i] && segments[i].isStreaming) {
+          hasStreaming = true;
+          break;
+        }
+      }
+      if (!hasStreaming) return;
+      run.thinkingSegments = segments.map(function (seg) {
+        if (seg && seg.isStreaming) {
+          return {
+            iteration: seg.iteration,
+            content: seg.content,
+            isStreaming: false,
+          };
+        }
+        return seg;
+      });
+    },
+    async toggleThinkingExpanded(message) {
+      // 全局思考卡片（无 message 对象）切换
+      if (!message || typeof message !== "object" || !message.botMsgId) {
+        this.thinkingExpanded = !this.thinkingExpanded;
+        return;
+      }
+
+      // 折叠 → 直接切换
+      if (message.thinkingExpanded) {
+        message.thinkingExpanded = false;
+        return;
+      }
+
+      // 展开：先查 sessionStorage 缓存，命中则直接填充并展开，跳过接口
+      if (
+        !message.thinkingLoaded &&
+        !message.thinkingLoading &&
+        message.botMsgId
+      ) {
+        var userKey = this.resolveStableUserKey();
+        var sessionId = this.activeChatSessionId;
+        if (userKey && sessionId != null) {
+          var cached = getThinkingCache(
+            String(userKey),
+            String(sessionId),
+            String(message.botMsgId)
+          );
+          if (cached) {
+            var toggleCachedSteps = cached.agentSteps;
+            var toggleHasSubAgentStep = false;
+            if (Array.isArray(toggleCachedSteps)) {
+              for (var tci = 0; tci < toggleCachedSteps.length; tci++) {
+                var tcet = toggleCachedSteps[tci] && toggleCachedSteps[tci].eventType;
+                if (tcet === "subagent_started" || tcet === "subagent_finished") {
+                  toggleHasSubAgentStep = true;
+                  break;
+                }
+              }
+            }
+            var toggleHasCachedSubRuns = Array.isArray(cached.subRuns) && cached.subRuns.length > 0;
+            // 有 subagent step 但缓存中没有 subRuns 数据（旧 v=1 缓存），跳过缓存走 API
+            if (toggleHasSubAgentStep && !toggleHasCachedSubRuns) {
+              // fall through to API path
+            } else {
+              message.thinkingContent = cached.thinkingContent;
+              message.thinkingSegments = cached.thinkingSegments;
+              message.agentSteps = cached.agentSteps;
+              // 水合子 run 数据到 activeAgentRuns
+              if (toggleHasCachedSubRuns) {
+                var toggleParentRunId = null;
+                for (var tsi = 0; tsi < cached.subRuns.length; tsi++) {
+                  if (cached.subRuns[tsi] && cached.subRuns[tsi].parentRunId) {
+                    toggleParentRunId = cached.subRuns[tsi].parentRunId;
+                    break;
+                  }
+                }
+                if (toggleParentRunId) {
+                  this.hydrateSubRunsFromCache(toggleParentRunId, message.botMsgId, cached.subRuns);
+                }
+              }
+              message.thinkingLoaded = true;
+              message.thinkingExpanded = true;
+              return;
+            }
+          }
+        }
+      }
+
+      // 展开：历史消息且 thinking 未加载过，先调接口加载
+      if (
+        !message.thinkingLoaded &&
+        !message.thinkingLoading &&
+        message.messageId &&
+        !message.thinkingContent
+      ) {
+        message.thinkingLoading = true;
+        try {
+          // 分别加载 thinking 和 steps，任一失败不影响另一个
+          var thinkingText = "";
+          var normalizedSteps = [];
+
+          // 1. 加载执行轨迹 steps（按 botMsgId）—— 主路径：从 step.outputJson 提取每轮 thinking
+          if (message.botMsgId) {
+            try {
+              var runRes = await doctorApi.getAgentRunDetailByBotMsgId(
+                message.botMsgId
+              );
+              if (runRes && runRes.data) {
+                var rawSteps = collectAgentTraceItems(runRes.data);
+                for (var i = 0; i < rawSteps.length; i++) {
+                  var node = normalizeAgentTraceNode(rawSteps[i], i);
+                  if (node) {
+                    normalizedSteps.push(node);
+                  }
+                }
+                message.agentSteps = normalizedSteps;
+
+                // 历史加载：处理 Sub-Agent run 列表，注册到 activeAgentRuns 供嵌套渲染
+                // 需要先确保父 run entry 存在（SubAgentTraceBlock 通过 activeAgentRuns 查找子 run）
+                var histDetail = runRes.data;
+                var histRunId = histDetail.runId != null ? String(histDetail.runId) : null;
+                console.log("[SUB-HIST-DEBUG] 历史加载 runRes.data", {
+                  histRunId: histDetail.runId,
+                  histBotMsgId: histDetail.botMsgId,
+                  histStatus: histDetail.status,
+                  hasSubRuns: Array.isArray(histDetail.subRuns),
+                  subRunsLength: Array.isArray(histDetail.subRuns) ? histDetail.subRuns.length : 0,
+                  stepsLength: Array.isArray(histDetail.steps) ? histDetail.steps.length : 0,
+                  rawKeys: Object.keys(histDetail),
+                });
+                if (histRunId) {
+                  if (!this.activeAgentRuns[histRunId]) {
+                    this.createRunEntry({
+                      runId: histRunId,
+                      chatSessionId: histDetail.chatSessionId,
+                      sessionCode: histDetail.sessionCode,
+                      botMsgId: histDetail.botMsgId || message.botMsgId,
+                      status: histDetail.status || "success",
+                      sceneType: "agent",
+                      sourceType: "chat",
+                    });
+                  }
+                  var histParentRun = this.activeAgentRuns[histRunId];
+                  // 同步 steps 到父 run entry（applySubRunsFromDetail 需要父 run 的 botMsgId 等字段）
+                  histParentRun.steps = normalizedSteps;
+                  this.applySubRunsFromDetail(histDetail, histParentRun);
+                }
+              }
+            } catch (se) {
+              console.warn("加载执行轨迹失败:", se);
+            }
+          }
+
+          // 2. 加载思考内容（按 messageId）—— 用于折叠态摘要 + 降级兜底
+          try {
+            var thinkingRes = await doctorApi.getThinkingByMessageId(
+              message.messageId
+            );
+            thinkingText =
+              (thinkingRes && thinkingRes.data != null ? thinkingRes.data : "") ||
+              "";
+          } catch (te) {
+            console.warn("加载思考内容失败:", te);
+            thinkingText = "";
+          }
+
+          message.thinkingContent = String(thinkingText);
+          // 主路径：从 steps 的 LLM 锚点 outputJson 直接提取每轮 reasoningContent，
+          // 与实时流式"第 N 个 llm_started → 第 N 个 segment"完全对齐
+          var segmentsFromSteps = this.buildThinkingSegmentsFromSteps(normalizedSteps);
+          if (segmentsFromSteps) {
+            message.thinkingSegments = segmentsFromSteps;
+          } else {
+            // 降级：steps 无 LLM 锚点或 outputJson 无 reasoningContent（旧数据），
+            // 用整段 thinkingText 按字符均匀切分
+            message.thinkingSegments = this.splitThinkingIntoSegments(
+              String(thinkingText),
+              normalizedSteps
+            );
+          }
+          // 写入 sessionStorage 缓存，便于下次会话加载时默认展开
+          var writeUserKey = this.resolveStableUserKey();
+          var writeSessionId = this.activeChatSessionId;
+          if (writeUserKey && writeSessionId != null && message.botMsgId) {
+            var apiCachedSubRuns = histRunId ? this.collectSubRunsForCache(histRunId) : [];
+            setThinkingCache(
+              String(writeUserKey),
+              String(writeSessionId),
+              String(message.botMsgId),
+              {
+                thinkingContent: String(thinkingText),
+                thinkingSegments: message.thinkingSegments,
+                agentSteps: message.agentSteps,
+                subRuns: apiCachedSubRuns,
+              }
+            );
+          }
+          message.thinkingLoaded = true;
+        } finally {
+          message.thinkingLoading = false;
+        }
+      }
+      message.thinkingExpanded = true;
+    },
+    findOrCreateBotMessage(botMsgId, payload) {
+      var payloadRunId =
+        payload && payload.runId != null ? String(payload.runId) : null;
+      if (!botMsgId) {
+        var currentRun = this.currentAgentRun;
+        botMsgId =
+          (currentRun && currentRun.botMsgId) || this.botMsgId;
+      }
+      for (var i = 0; i < this.chatList.length; i++) {
+        // 跳过 user 消息：user 消息也携带 botMsgId（用于回滚定位），
+        // 但 THINKING/ADD/FINISH 事件只应匹配 bot 消息，否则会把回答覆盖到用户消息上
+        if (
+          botMsgId &&
+          this.chatList[i].botMsgId == botMsgId &&
+          this.chatList[i].chatType !== "user"
+        ) {
+          return this.chatList[i];
+        }
+        if (
+          payloadRunId &&
+          this.chatList[i].runId != null &&
+          String(this.chatList[i].runId) === payloadRunId
+        ) {
+          return this.chatList[i];
+        }
+      }
+      if (!botMsgId) {
+        return null;
+      }
+      var sessionMeta = {
+        sessionCode:
+          (payload && payload.sessionCode) || this.currentSessionCode || null,
+        sceneType:
+          (payload && payload.sceneType) ||
+          this.currentSessionSceneType ||
+          this.resolveExpectedSessionSceneType(),
+      };
+      var newMsg = {
+        id: "temp-" + this.generateRandomId(8),
+        content: "",
+        userName: "bot",
+        chatType: "bot",
+        botMsgId: botMsgId,
+        runId: payloadRunId,
+        createdAt: new Date().toISOString(),
+        sources: [],
+        sourceType: (payload && payload.sourceType) || null,
+        sessionCode: sessionMeta.sessionCode,
+        sceneType: sessionMeta.sceneType,
+        thinkingContent: "",
+        thinkingSegments: [],
+        isThinking: false,
+        thinkingExpanded: true,
+        agentSteps: [],
+      };
+      this.chatList.push(newMsg);
+      return newMsg;
+    },
+    upsertStreamingBotMessage(payload) {
+      if (!payload) {
+        return;
+      }
+      if (payload.chunkType && payload.chunkType !== "content") {
+        return;
+      }
+      const run = this.resolveRunForEvent(payload);
+      if (!run) return;
+      var receiveMsg =
+        payload.chunkText == null ? "" : String(payload.chunkText);
+      if (!receiveMsg) {
+        return;
+      }
+      var botMsgId =
+        payload.botMsgId ||
+        run.botMsgId ||
+        this.botMsgId;
+      if (!botMsgId) {
+        return;
+      }
+      // run entry 更新（后台 run 也需要持久化）
+      run.botMsgId = botMsgId;
+      if (payload.sessionCode) {
+        run.sessionCode = payload.sessionCode;
+      }
+      if (payload.runId != null) {
+        run.runId = payload.runId;
+      }
+      if (!this.isTerminalAgentRunStatus(run.status)) {
+        run.status = "running";
+      }
+
+      // Sub-Agent run：累积到子 run buffer（由 flushRunBuffer 写入 run.subAgentContent），
+      // 但不更新全局 UI 状态（isStreaming/guidanceMessage）和父 bot 消息
+      if (run.isSubAgent) {
+        var subBuffer = this.getOrCreateBuffer(run.runId);
+        if (!subBuffer) return;
+        subBuffer.contentDelta += receiveMsg;
+        this.scheduleFlush(run.runId);
+        return;
+      }
+
+      // 后台 run：仅节流持久化，跳过 UI 状态与 chatList 操作
+      if (this.isBackgroundRun(run)) {
+        var bgBuffer = this.getOrCreateBuffer(run.runId);
+        if (bgBuffer && Date.now() - bgBuffer.lastSnapshotTime > 500) {
+          this.snapshotRunState(run.runId);
+          bgBuffer.lastSnapshotTime = Date.now();
+        }
+        return;
+      }
+
+      // 当前 run：更新 UI 状态
+      if (this.taskStartTime && !this.lastTtft) {
+        this.lastTtft = Date.now() - this.taskStartTime;
+      }
+      this.isSending = false;
+      this.isStreaming = true;
+      this.guidanceMessage = "正在生成回答，请稍候。";
+
+      var sessionMeta = {
+        chatSessionId:
+          payload.chatSessionId != null
+            ? payload.chatSessionId
+            : run.chatSessionId != null
+            ? run.chatSessionId
+            : null,
+        sessionCode:
+          payload.sessionCode ||
+          run.sessionCode ||
+          this.currentSessionCode ||
+          null,
+        sceneType:
+          payload.sceneType ||
+          this.currentSessionSceneType ||
+          this.resolveExpectedSessionSceneType(),
+      };
+      this.applyServerSessionMeta(sessionMeta);
+
+      // 首次 ADD 立即创建 bot 消息（保证 UI 响应）；后续由 flush 写入累积内容
+      var targetChatItem = this.findBotMessage(botMsgId);
+      if (!targetChatItem) {
+        this.chatList.push({
+          id: "temp-" + this.generateRandomId(8),
+          content: "",
+          userName: "bot",
+          chatType: "bot",
+          botMsgId: botMsgId,
+          runId:
+            payload.runId != null
+              ? payload.runId
+              : run.runId != null
+              ? run.runId
+              : null,
+          createdAt: new Date().toISOString(),
+          sources: [],
+          sourceType: payload.sourceType || null,
+          sessionCode: sessionMeta.sessionCode,
+          sceneType: sessionMeta.sceneType,
+          isStreaming: true,
+        });
+      } else {
+        targetChatItem.sessionCode =
+          targetChatItem.sessionCode || sessionMeta.sessionCode || null;
+        targetChatItem.sceneType =
+          targetChatItem.sceneType || sessionMeta.sceneType || null;
+        targetChatItem.sourceType =
+          targetChatItem.sourceType || payload.sourceType || null;
+        targetChatItem.runId =
+          targetChatItem.runId != null
+            ? targetChatItem.runId
+            : payload.runId != null
+            ? payload.runId
+            : run.runId != null
+            ? run.runId
+            : null;
+      }
+
+      // 累积到 buffer，由 rAF flush 统一更新 UI
+      var buffer = this.getOrCreateBuffer(run.runId);
+      if (!buffer) return;
+      buffer.contentDelta += receiveMsg;
+      this.scheduleFlush(run.runId);
+    },
+    handleAgentCustomEvent(rawValue) {
+      // 优先识别上下文压缩事件（context_compressing / context_compressed / context_compress_failed）
+      if (this.handleCompressEvent(rawValue)) {
+        return;
+      }
+      this.handleAgentEvent(rawValue);
+    },
+    handleCompressEvent(rawValue) {
+      var payload = null;
+      if (rawValue && typeof rawValue === "object") {
+        payload = rawValue;
+      } else if (typeof rawValue === "string") {
+        try {
+          payload = JSON.parse(rawValue);
+        } catch (e) {
+          payload = null;
+        }
+      }
+      if (!payload || typeof payload !== "object") return false;
+      var evt = payload.event;
+      const compressRun = this.resolveRunForEvent(payload);
+      const isBackground = this.isBackgroundRun(compressRun);
+      if (evt === "context_compressing") {
+        if (!isBackground) this.isCompressing = true;
+        return true;
+      }
+      if (evt === "context_compressed") {
+        if (!isBackground) this.isCompressing = false;
+        // 更新 run.tokenUsage（后台 run 也需要）
+        if (payload.tokenAfter != null) {
+          const prevUsage = compressRun
+            ? compressRun.tokenUsage
+            : this.tokenUsage;
+          const nextUsage = {
+            promptTokens: payload.tokenAfter,
+            completionTokens: 0,
+            totalTokens: payload.tokenAfter,
+            cumulativeTotalTokens:
+              prevUsage && prevUsage.cumulativeTotalTokens != null
+                ? prevUsage.cumulativeTotalTokens
+                : payload.tokenAfter,
+            contextWindow:
+              payload.contextWindow != null
+                ? payload.contextWindow
+                : (prevUsage && prevUsage.contextWindow) ||
+                  llmConfig.getConfig().maxInputContextTokens ||
+                  DEFAULT_LLM_MAX_INPUT_CONTEXT_TOKENS,
+            cacheHitTokens: null,
+            cacheMissTokens: null,
+            reasoningTokens: null,
+          };
+          if (compressRun) {
+            compressRun.tokenUsage = nextUsage;
+          } else {
+            this.tokenUsage = nextUsage;
+          }
+        }
+
+        if (!isBackground) {
+          this.chatList.push({
+            id: "compress-" + Date.now(),
+            chatType: "system",
+            compressCount: payload.compressedCount || 0,
+            summaryContent: "",
+            createdAt: new Date().toISOString(),
+          });
+          this.scrollToBottom();
+        }
+        return true;
+      }
+      if (evt === "context_compress_failed") {
+        if (!isBackground) {
+          this.isCompressing = false;
+          if (this.toast && typeof this.toast.info === "function") {
+            this.toast.info(
+              "上下文压缩失败" + (payload.reason ? "：" + payload.reason : "")
+            );
+          }
+        }
+        return true;
+      }
+      return false;
+    },
+    handleAgentEvent(rawValue) {
+      var event = normalizeAgentTraceEvent(rawValue);
+      if (!event) {
+        return;
+      }
+      // subagent_started 事件：主 Agent runId + subagentRunId 同时出现
+      // 此时需要用 subagentRunId 创建子 run entry，继承父 run 的 chatSessionId 和 botMsgId
+      var eventType = (event.eventType || "").toLowerCase();
+      if (eventType === "subagent_started" && event.subagentRunId != null) {
+        var parentRun = this.resolveRunForEvent(event);
+        if (parentRun) {
+          var subRunId = String(event.subagentRunId);
+          if (!this.activeAgentRuns[subRunId]) {
+            this.createRunEntry({
+              runId: subRunId,
+              parentRunId: parentRun.runId,
+              chatSessionId: parentRun.chatSessionId,
+              sessionCode: parentRun.sessionCode,
+              botMsgId: parentRun.botMsgId,
+              status: "running",
+              sceneType: "subagent",
+              sourceType: parentRun.sourceType,
+            });
+          }
+        }
+      }
+      const run = this.resolveRunForEvent(event, { createIfMissing: true });
+      if (!run) return;
+      var normalizedStep = this.normalizeAgentStepItem(
+        event,
+        (run.steps || []).length
+      );
+      if (!normalizedStep) {
+        return;
+      }
+      this.applyAgentStepEvent(normalizedStep, event, run);
+    },
+    applyAgentStepEvent(stepEvent, eventPayload, run) {
+      if (!stepEvent) {
+        return;
+      }
+      if (!run) {
+        run = this.resolveRunForEvent(eventPayload || {}, {
+          createIfMissing: true,
+        });
+      }
+      if (!run) return;
+      // 补全 run 字段（不覆盖已有值）
+      if (run.botMsgId == null && eventPayload && eventPayload.botMsgId) {
+        run.botMsgId = String(eventPayload.botMsgId);
+      }
+      if (run.sessionCode == null && eventPayload && eventPayload.sessionCode) {
+        run.sessionCode = String(eventPayload.sessionCode);
+      }
+      var matchedIndex = -1;
+      for (var i = 0; i < run.steps.length; i++) {
+        var currentStep = run.steps[i];
+        var currentId =
+          currentStep && currentStep.id ? String(currentStep.id) : null;
+        var nextId = stepEvent && stepEvent.id ? String(stepEvent.id) : null;
+        var sameStableId = currentId && nextId && currentId === nextId;
+        var sameLegacyStep =
+          !sameStableId &&
+          currentStep &&
+          currentStep.stepNo != null &&
+          stepEvent.stepNo != null &&
+          currentStep.iterationNo == stepEvent.iterationNo &&
+          Number(currentStep.stepNo) === Number(stepEvent.stepNo);
+        if (sameStableId || sameLegacyStep) {
+          matchedIndex = i;
+          break;
+        }
+      }
+      if (matchedIndex >= 0) {
+        run.steps[matchedIndex] = Object.assign(
+          {},
+          run.steps[matchedIndex],
+          stepEvent
+        );
+      } else {
+        run.steps.push(stepEvent);
+      }
+      run.steps = run.steps
+        .slice()
+        .sort(function (a, b) {
+          var aSeq = a && a.sequence != null ? Number(a.sequence) : NaN;
+          var bSeq = b && b.sequence != null ? Number(b.sequence) : NaN;
+          if (!isNaN(aSeq) && !isNaN(bSeq) && aSeq !== bSeq) {
+            return aSeq - bSeq;
+          }
+          var aStepNo = a && a.stepNo != null ? Number(a.stepNo) : NaN;
+          var bStepNo = b && b.stepNo != null ? Number(b.stepNo) : NaN;
+          if (!isNaN(aStepNo) && !isNaN(bStepNo) && aStepNo !== bStepNo) {
+            return aStepNo - bStepNo;
+          }
+          var aTime = a && a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          var bTime = b && b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return aTime - bTime;
+        })
+        .map(
+          function (item, index) {
+            return this.normalizeAgentStepItem(item, index);
+          }.bind(this)
+        )
+        .filter(function (item) {
+          return !!item;
+        });
+
+      // 预解析 eventType / iterationNo：用于驱动 thinking segment 生命周期
+      var preNormalizedEvent = normalizeAgentTraceEvent(eventPayload || stepEvent);
+      var preEventType =
+        preNormalizedEvent && preNormalizedEvent.eventType
+          ? String(preNormalizedEvent.eventType).toLowerCase()
+          : "";
+      var preIteration =
+        stepEvent && stepEvent.iterationNo != null
+          ? stepEvent.iterationNo
+          : preNormalizedEvent && preNormalizedEvent.iterationNo != null
+          ? preNormalizedEvent.iterationNo
+          : null;
+      // llm_started/llm_finished 会切换 thinking segment，必须先 flush buffer
+      // 确保累积的 thinking delta 追加到当前 active segment（正确 iteration 的段）
+      // 否则 delta 会被追加到下一轮的新段，导致轮次分隔失效
+      if (
+        preEventType === "llm_started" ||
+        preEventType === "llm_finished"
+      ) {
+        this.flushRunBuffer(run.runId);
+      }
+      // llm_started → 开启新 thinking segment（这一轮的思考内容将追加到此段）
+      if (preEventType === "llm_started") {
+        this.startThinkingSegment(preIteration, run);
+      }
+      // llm_finished → 结束对应 iteration 的 thinking segment
+      if (preEventType === "llm_finished") {
+        this.finishThinkingSegment(preIteration, run);
+      }
+
+      // run 状态更新（后台 run 也需要持久化）
+      var normalizedEvent = preNormalizedEvent;
+      var eventType = preEventType;
+      var runStatus =
+        normalizedEvent && normalizedEvent.runStatus
+          ? this.normalizeAgentRunStatus(normalizedEvent.runStatus)
+          : null;
+      var nextGuidance = null;
+      if (
+        eventType === "run_failed" ||
+        runStatus === "failed" ||
+        (!eventType && stepEvent.status === "failed")
+      ) {
+        run.status = "failed";
+        nextGuidance =
+          stepEvent.errorMessage ||
+          stepEvent.message ||
+          "任务执行失败，请调整后重试。";
+      } else if (runStatus === "cancelled" || runStatus === "interrupted") {
+        // 中断/取消：保留具体终态，避免被下方 success 分支吞掉
+        run.status = runStatus;
+        nextGuidance = "任务已中断，可继续发起新任务。";
+      } else if (
+        eventType === "final_answer" ||
+        eventType === "run_finished" ||
+        runStatus === "success" ||
+        isTerminalAgentEvent(normalizedEvent)
+      ) {
+        run.status = "success";
+        nextGuidance = "本轮任务已完成，可继续发起新任务。";
+      } else if (!this.isTerminalAgentRunStatus(run.status)) {
+        run.status = "running";
+      }
+      // 终态路径：确保所有 streaming thinking segments 被关闭
+      if (nextGuidance != null) {
+        this.finalizeAllThinkingSegments(run);
+        // flush buffer 确保残留 delta 写入
+        if (run.runId) this.flushRunBuffer(run.runId);
+      }
+      this.snapshotRunState(run.runId);
+
+      // 后台 run：跳过 UI 状态与 chatList 操作，避免串入当前窗口
+      if (this.isBackgroundRun(run)) return;
+
+      // Sub-Agent run：数据只保留在子 run entry，通过 SubAgentTraceBlock 独立渲染，
+      // 不污染父 bot 消息的 agentSteps/thinkingSegments，也不重置全局 UI 状态
+      // （Sub-Agent 终态不应影响主 Agent 的 isSending/isStreaming/isThinking）
+      if (run && run.isSubAgent) {
+        this.scrollToBottom();
+        return;
+      }
+
+      // 当前 run：更新 UI 状态与 chatList
+      if (nextGuidance != null) {
+        this.guidanceMessage = nextGuidance;
+        this.isSending = false;
+        this.isStreaming = false;
+        this.isThinking = false;
+      }
+      var agentBotMsgId =
+        (eventPayload && eventPayload.botMsgId) ||
+        (run && run.botMsgId) ||
+        this.botMsgId;
+      if (agentBotMsgId) {
+        var targetMsg = this.findOrCreateBotMessage(
+          agentBotMsgId,
+          eventPayload
+        );
+        if (targetMsg) {
+          targetMsg.agentSteps = run.steps.slice();
+          targetMsg.thinkingSegments = this.cloneThinkingSegments(
+            run.thinkingSegments || this.thinkingSegments
+          );
+          targetMsg.thinkingContent = (run.thinkingSegments || [])
+            .map(function (s) { return (s && s.content) || ""; })
+            .join("\n");
+          targetMsg.isThinking = !(nextGuidance != null);
+        }
+      }
+      // 决策轨迹新增/更新时也触发自动滚动，与思考内容流式输出一致
+      this.scrollToBottom();
+    },
+    applyFinishPayload(chatResponse, run) {
+      var payload =
+        chatResponse && typeof chatResponse === "object"
+          ? chatResponse
+          : { message: chatResponse == null ? "" : String(chatResponse) };
+      var isInterrupted = payload && payload.status === "interrupted";
+
+      // 清理停止超时（stopGeneration 设置的 5 秒兜底）
+      if (this._stopTimeout) {
+        clearTimeout(this._stopTimeout);
+        this._stopTimeout = null;
+      }
+      var message = payload.message == null ? "" : String(payload.message);
+      // run 解析（run 可能为 null：finish 来自非追踪 run）
+      if (!run) {
+        run = this.resolveRunForEvent(payload);
+      }
+      var runId = run
+        ? run.runId
+        : payload.runId != null
+        ? String(payload.runId)
+        : null;
+      var botMsgId =
+        payload.botMsgId ||
+        (run && run.botMsgId) ||
+        this.botMsgId;
+      var normalizedSources = this.extractSourcesFromResponse(payload);
+
+      // 解析 token 用量快照（Agent FINISH 载荷携带）——写入 run.tokenUsage
+      if (payload.usage && typeof payload.usage === "object" && run) {
+        run.tokenUsage = payload.usage;
+      }
+
+      // run entry 更新 + 终态（后台 run 也需要持久化）
+      var nextGuidance = null;
+      if (run) {
+        if (run.botMsgId == null && payload.botMsgId) {
+          run.botMsgId = String(payload.botMsgId);
+        }
+        if (run.sessionCode == null && payload.sessionCode) {
+          run.sessionCode = String(payload.sessionCode);
+        }
+        if (payload.chatSessionId != null && run.chatSessionId == null) {
+          run.chatSessionId = payload.chatSessionId;
+        }
+        var normalized = this.normalizeAgentRunStatus(payload.status);
+        if (normalized === "failed") {
+          run.status = "failed";
+          nextGuidance = "任务执行失败，请稍后重试。";
+        } else if (normalized === "interrupted" || normalized === "cancelled") {
+          run.status = normalized;
+          nextGuidance = "任务已中断，可继续发起新任务。";
+        } else {
+          run.status = "success";
+          nextGuidance = "本轮任务已完成，可继续发起新任务。";
+        }
+        run.finishReceived = true;
+        // 关键顺序：先 flush buffer（run 仍在 Map 中，botMsgId 可获取），
+        // 再 finalize thinking segments，最后 snapshot + 后台详情拉取 + 移除 entry
+        if (runId) this.flushRunBuffer(runId);
+        this.finalizeAllThinkingSegments(run);
+        this.snapshotRunState(run.runId);
+        this.silentFetchAgentRunDetail(
+          payload.runId != null ? payload.runId : run.runId
+        );
+        if (runId && this.isTerminalAgentRunStatus(run.status)) {
+          this.removeRunEntry(runId);
+        }
+      } else {
+        nextGuidance = "本轮任务已完成，可继续发起新任务。";
+        if (runId) this.flushRunBuffer(runId);
+      }
+
+      // 后台 run：跳过 UI 状态与 chatList 操作，避免串入当前窗口
+      if (this.isBackgroundRun(run)) return;
+
+      // 当前 run：更新 chatList + UI 状态
+      this.guidanceMessage = nextGuidance;
+      if (run && run.tokenUsage) {
+        this.tokenUsage = run.tokenUsage;
+      }
+      if (botMsgId) {
+        this.botMsgId = botMsgId;
+      }
+      this.applyServerSessionMeta(payload);
+
+      var matched = false;
+      var finalThinkingSegments = run
+        ? this.cloneThinkingSegments(run.thinkingSegments || [])
+        : [];
+      for (var i = 0; i < this.chatList.length; i++) {
+        var chatItem = this.chatList[i];
+        if (chatItem.botMsgId == botMsgId && chatItem.chatType !== "user") {
+          var streamedContent = chatItem.content || "";
+          var finalMessage = message || "";
+          var rawContent;
+          if (chatItem.isStreaming) {
+            rawContent = streamedContent.length >= finalMessage.length
+              ? streamedContent
+              : finalMessage;
+            if (!rawContent) rawContent = finalMessage || streamedContent;
+          } else {
+            rawContent = finalMessage || streamedContent;
+          }
+          chatItem.rawContent = rawContent;
+          chatItem.content = this.renderMarkdown(rawContent);
+          chatItem.isStreaming = false;
+          chatItem.isFinished = true;
+          chatItem.isThinking = false;
+          chatItem.interrupted = isInterrupted;
+          chatItem.sources = normalizedSources;
+          chatItem.thinkingSegments = finalThinkingSegments;
+          chatItem.thinkingContent = finalThinkingSegments
+            .map(function (s) { return (s && s.content) || ""; })
+            .join("\n");
+          chatItem.sourceType =
+            payload.sourceType || chatItem.sourceType || null;
+          chatItem.sessionCode =
+            payload.sessionCode || chatItem.sessionCode || null;
+          chatItem.sceneType = payload.sceneType || chatItem.sceneType || null;
+          matched = true;
+        }
+      }
+
+      if (!matched && botMsgId) {
+        this.chatList.push({
+          id: "temp-" + this.generateRandomId(8),
+          content: this.renderMarkdown(message || ""),
+          rawContent: message || "",
+          isStreaming: false,
+          isFinished: true,
+          userName: "bot",
+          chatType: "bot",
+          botMsgId: botMsgId,
+          createdAt: new Date().toISOString(),
+          sources: normalizedSources,
+          sourceType: payload.sourceType || null,
+          sessionCode: payload.sessionCode || this.currentSessionCode || null,
+          sceneType: payload.sceneType || this.currentSessionSceneType || null,
+        });
+      }
+
+      this.knowledgeSources =
+        normalizedSources && normalizedSources.length > 0
+          ? normalizedSources
+          : [];
+
+      this.refreshChatRecordsIfNeeded();
+      for (var fi = 0; fi < this.chatList.length; fi++) {
+        if (this.chatList[fi].botMsgId == botMsgId) {
+          this.chatList[fi].isThinking = false;
+          break;
+        }
+      }
+      this.isSending = false;
+      this.isStreaming = false;
+      this.isThinking = false;
+      // 写入思考内容缓存：终态后 run.thinkingSegments 与 run.steps 已最终化
+      if (run && botMsgId) {
+        var finishUserKey = this.resolveStableUserKey();
+        var finishSessionId =
+          (run.chatSessionId != null ? run.chatSessionId : this.activeChatSessionId);
+        if (finishUserKey && finishSessionId != null) {
+          // 终态且非中断时才缓存；interrupted/cancelled 不写入，避免缓存半截内容
+          var finishStatus = this.normalizeAgentRunStatus(run.status);
+          if (finishStatus === "success") {
+            var cachedSubRuns = this.collectSubRunsForCache(run.runId);
+            setThinkingCache(
+              String(finishUserKey),
+              String(finishSessionId),
+              String(botMsgId),
+              {
+                // thinkingContent 在流式路径下没有显式累积，这里用 segments.content 拼接做兜底
+                thinkingContent: (run.thinkingSegments || [])
+                  .map(function (s) {
+                    return (s && s.content) || "";
+                  })
+                  .join("\n"),
+                thinkingSegments: run.thinkingSegments || [],
+                agentSteps: run.steps || [],
+                subRuns: cachedSubRuns,
+              }
+            );
+          }
+        }
+      }
+      this.scrollToBottom();
+    },
+    handleLogout() {
+      if (this.isLoggingOut) {
+        return;
+      }
+
+      this.isLoggingOut = true;
+      doctorApi
+        .userLogout()
+        .then(
+          function (res) {
+            this.unwrapApiData(res, "退出登录失败");
+            this.showUiMessage("success", "已退出登录");
+          }.bind(this)
+        )
+        .catch(
+          function (error) {
+            this.showUiMessage(
+              "error",
+              error && error.message
+                ? error.message
+                : "退出登录失败，已清理本地登录态"
+            );
+          }.bind(this)
+        )
+        .finally(
+          function () {
+            this.teardownSSE({ clearPending: true });
+            // 失效当前用户的所有思考内容缓存，避免账号间泄露
+            var logoutUserKey = this.resolveStableUserKey();
+            if (logoutUserKey) {
+              invalidateThinkingCacheByUser(String(logoutUserKey));
+            }
+            this.clearActiveAgentRun();
+            clearUserSession();
+            this.currentUserInfo = null;
+            this.currentUserName = null;
+            this.isLoggingOut = false;
+            this.$emit("logout-success");
+          }.bind(this)
+        );
+    },
+    teardownSSE(options) {
+      closeSse(this._sseConnection || this._sseSource);
+      this._sseConnection = null;
+      this._sseSource = null;
+      if (options && options.clearPending === true) {
+        this._sseConnectingPromise = null;
+      }
+    },
+    async ensureSseConnection() {
+      if (
+        this._sseConnection &&
+        (this._sseSource || this._sseConnection.isSupported === false)
+      ) {
+        return this._sseConnection;
+      }
+
+      var stableUserKey = this.resolveStableUserKey();
+      if (!stableUserKey) {
+        return null;
+      }
+
+      if (this._sseConnectingPromise) {
+        return this._sseConnectingPromise;
+      }
+
+      this._sseConnectingPromise = this.initSSE();
+
+      try {
+        return await this._sseConnectingPromise;
+      } finally {
+        this._sseConnectingPromise = null;
+      }
+    },
+    async initSSE() {
+      var me = this;
+      var resolvedUserKey = this.resolveStableUserKey();
+      if (!resolvedUserKey) {
+        this.sseState = "idle";
+        this.guidanceMessage = "请先完成手机号登录，再建立实时会话通道。";
+        return null;
+      }
+      var handleCustomEvent = function (event, context) {
+        me.handleAgentCustomEvent(event && event.data);
+      };
+
+      this.currentUserName = resolvedUserKey;
+      this.teardownSSE();
+      this.sseState = "connecting";
+      this.guidanceMessage = "正在连接 SSE 实时通道，请稍候。";
+
+      try {
+        var ticketResponse = await doctorApi.createSseTicket();
+        var ticketData = this.unwrapApiData(
+          ticketResponse,
+          "获取 SSE 连接票据失败"
+        );
+        var ticket =
+          ticketData && ticketData.ticket != null
+            ? String(ticketData.ticket)
+            : "";
+
+        if (!ticket) {
+          throw new Error("SSE 连接票据为空");
+        }
+
+        return await new Promise(function (resolve) {
+          var settled = false;
+          var connection = null;
+          var connectTimeout = null;
+          var settle = function (value) {
+            if (settled) {
+              return;
+            }
+            settled = true;
+            if (connectTimeout) {
+              clearTimeout(connectTimeout);
+            }
+            resolve(value);
+          };
+
+          connection = connectSse({
+            ticket: ticket,
+            onOpen: function () {
+              me.sseState = "connected";
+              me.guidanceMessage = "SSE 已连接，可开始执行任务。";
+              settle(connection);
+            },
+            onThinking: function (event) {
+              me.handleThinkingEvent(event && event.data);
+            },
+            onAdd: function (event) {
+              var payload = me.normalizeAddPayload(
+                event && event.data != null ? event.data : ""
+              );
+              if (
+                payload &&
+                payload.chunkType &&
+                payload.chunkType !== "content"
+              ) {
+                return;
+              }
+              me.upsertStreamingBotMessage(payload);
+            },
+            onFinish: function (event) {
+              if (me.taskStartTime) {
+                var elapsed = Date.now() - me.taskStartTime;
+                if (elapsed < 1000) {
+                  me.lastExecTime = elapsed + "ms";
+                } else {
+                  me.lastExecTime = (elapsed / 1000).toFixed(1) + "s";
+                }
+                me.taskStartTime = null;
+              }
+
+              try {
+                var payload =
+                  me.safeParseJson((event && event.data) || "") ||
+                  (event && event.data) ||
+                  "";
+                me.applyFinishPayload(payload);
+              } catch (error) {
+                console.error("解析finish事件失败:", error);
+                me.guidanceMessage = "任务已结束，但结果解析失败，请稍后重试。";
+                me.isSending = false;
+                me.isStreaming = false;
+                me.isThinking = false;
+                var catchBotMsgId = me.botMsgId;
+                if (catchBotMsgId) {
+                  if (me.currentAgentRun && me.currentAgentRun.runId) {
+                    me.flushRunBuffer(me.currentAgentRun.runId);
+                  }
+                  me.finalizeStreamingChatItem(catchBotMsgId, true);
+                }
+                for (var cfi = 0; cfi < me.chatList.length; cfi++) {
+                  if (me.chatList[cfi].botMsgId == catchBotMsgId) {
+                    me.chatList[cfi].isThinking = false;
+                    break;
+                  }
+                }
+              }
+
+              me.isThinking = false;
+              me.scrollToBottom();
+            },
+            onError: function (event, context) {
+              var source =
+                context && context.source ? context.source : me._sseSource;
+              var readyState =
+                source && typeof source.readyState !== "undefined"
+                  ? source.readyState
+                  : "unknown";
+
+              console.log("error事件...");
+              console.log("e.readyState: " + readyState);
+
+              if (
+                typeof EventSource !== "undefined" &&
+                source &&
+                source.readyState === EventSource.CLOSED
+              ) {
+                console.log("connection is closed");
+              } else {
+                console.log("Error occurred", event);
+              }
+
+              if (me.isSending || me.isStreaming) {
+                me.showUiMessage("error", "响应中断，请稍后重试！");
+              }
+
+              if (
+                me.activeAgentRuns &&
+                typeof me.activeAgentRuns === "object"
+              ) {
+                var failingRunIds = Object.keys(me.activeAgentRuns);
+                for (var fri = 0; fri < failingRunIds.length; fri++) {
+                  var failingRun = me.activeAgentRuns[failingRunIds[fri]];
+                  if (
+                    failingRun &&
+                    !me.isTerminalAgentRunStatus(failingRun.status)
+                  ) {
+                    // flush 残留 buffer + 收尾流式消息（渲染 markdown）
+                    if (failingRun.runId) me.flushRunBuffer(failingRun.runId);
+                    if (failingRun.botMsgId) {
+                      me.finalizeStreamingChatItem(failingRun.botMsgId, true);
+                    }
+                    failingRun.status = "failed";
+                    me.snapshotRunState(failingRun.runId);
+                  }
+                }
+              }
+
+              me.clearThinkingState();
+              // activeAgentRun 已删除，botMsgId 由 computed 派生（取 currentAgentRun.botMsgId）
+              var errBotMsgId = me.botMsgId;
+              if (errBotMsgId) {
+                for (var ei = 0; ei < me.chatList.length; ei++) {
+                  if (me.chatList[ei].botMsgId == errBotMsgId) {
+                    me.chatList[ei].isThinking = false;
+                    break;
+                  }
+                }
+              }
+              // botMsgId 已是 computed，无需手动清空
+              me.isSending = false;
+              me.isStreaming = false;
+              me.sseState = "disconnected";
+              me.guidanceMessage = "SSE 通道已断开，发送新任务时会自动重连。";
+              me.teardownSSE();
+              settle(null);
+            },
+            onCustomEvent: handleCustomEvent,
+            onCustomEventSnake: handleCustomEvent,
+            onAgentEvent: handleCustomEvent,
+            onTraceEvent: handleCustomEvent,
+          });
+
+          me._sseConnection = connection;
+          me._sseSource =
+            connection && connection.source ? connection.source : null;
+
+          if (!connection || connection.isSupported === false) {
+            console.log("浏览器不支持SSE");
+            me.sseState = "unsupported";
+            me.guidanceMessage =
+              "当前环境暂不支持 SSE 实时通道，回复可能无法实时展示。";
+            settle(connection);
+            return;
+          }
+
+          connectTimeout = setTimeout(function () {
+            settle(connection);
+          }, 3000);
+        });
+      } catch (error) {
+        console.error("建立SSE连接失败:", error);
+        this.sseState = "disconnected";
+        this.guidanceMessage =
+          "SSE 通道初始化失败，发送新任务时会自动重试连接。";
+        this._sseConnection = null;
+        this._sseSource = null;
+        return null;
+      }
+    },
+    uploadDoc(params) {
+      var file = params && params.file ? params.file : null;
+      if (!file) {
+        return;
+      }
+
+      this.selectedUploadName = file.name || "";
+      this.guidanceMessage = "正在上传知识库文档，请稍候。";
+
+      var formData = new FormData();
+      formData.append("file", file);
+
+      return doctorApi
+        .uploadRagDoc(formData)
+        .then(
+          function (response) {
+            console.log(response);
+            if (response.status == 200) {
+              this.guidanceMessage =
+                "知识库文档上传成功，可切换到知识库增强模式继续提问。";
+              this.showUiMessage("success", "上传知识库文档成功！");
+              this.uploadSynced = false;
+              this.fetchUploadedDocs();
+              if (params && typeof params.onSuccess === "function") {
+                params.onSuccess(response, file);
+              }
+            } else {
+              var uploadError = new Error("上传知识库文档失败！");
+              this.guidanceMessage =
+                "文档已提交，但服务器返回异常，请稍后重试。";
+              this.showUiMessage("error", "上传知识库文档失败！");
+              if (params && typeof params.onError === "function") {
+                params.onError(uploadError);
+              }
+            }
+          }.bind(this)
+        )
+        .catch(
+          function (error) {
+            console.error("上传知识库文档请求失败:", error);
+            this.guidanceMessage = "知识库文档上传失败，请稍后重试。";
+            this.showUiMessage("error", "上传知识库文档失败，请稍后重试！");
+            if (params && typeof params.onError === "function") {
+              params.onError(error);
+            }
+          }.bind(this)
+        );
+    },
+    extractSourcesFromResponse(chatResponse) {
+      return extractSourcesFromResponseUtil(chatResponse);
+    },
+    parseRecordSources(sourcesJson) {
+      if (!sourcesJson) {
+        return [];
+      }
+
+      var parsedSources = sourcesJson;
+      if (typeof sourcesJson === "string") {
+        try {
+          parsedSources = JSON.parse(sourcesJson);
+        } catch (error) {
+          return [];
+        }
+      }
+
+      if (Array.isArray(parsedSources)) {
+        return extractSourcesFromResponseUtil({ sources: parsedSources });
+      }
+
+      if (parsedSources && typeof parsedSources === "object") {
+        var normalizedCollection =
+          parsedSources.sources ||
+          parsedSources.items ||
+          parsedSources.list ||
+          parsedSources.references ||
+          parsedSources.citations ||
+          parsedSources.docs ||
+          parsedSources.sourceList ||
+          parsedSources.sourceDocs;
+
+        if (Array.isArray(normalizedCollection)) {
+          return extractSourcesFromResponseUtil({
+            sources: normalizedCollection,
+          });
+        }
+
+        return extractSourcesFromResponseUtil({ sources: [parsedSources] });
+      }
+
+      if (typeof parsedSources === "string") {
+        return extractSourcesFromResponseUtil({ sources: [parsedSources] });
+      }
+
+      return [];
+    },
+    mapSessionMessagesToChatList(messages) {
+      if (!Array.isArray(messages)) {
+        return [];
+      }
+
+      var me = this;
+      return messages
+        .slice()
+        .sort(function (a, b) {
+          var aSeq = a && a.seqNo != null ? Number(a.seqNo) : NaN;
+          var bSeq = b && b.seqNo != null ? Number(b.seqNo) : NaN;
+          if (!isNaN(aSeq) && !isNaN(bSeq) && aSeq !== bSeq) {
+            return aSeq - bSeq;
+          }
+
+          var aDate = me.resolveChatSessionDate(a && a.createdAt);
+          var bDate = me.resolveChatSessionDate(b && b.createdAt);
+          var aTime = aDate ? aDate.getTime() : 0;
+          var bTime = bDate ? bDate.getTime() : 0;
+          return aTime - bTime;
+        })
+        .map(function (message, index) {
+          return me.mapRecordToChatItem(message, index);
+        })
+        .filter(function (item) {
+          return !!item;
+        });
+    },
+    mapRecordToChatItem(message, index) {
+      if (!message) {
+        return null;
+      }
+
+      // 识别上下文压缩摘要记录（role=system, messageType=summary）
+      if (message.role === "system" && message.messageType === "summary") {
+        var meta = {};
+        try {
+          meta = message.sourcesJson ? JSON.parse(message.sourcesJson) : {};
+        } catch (e) {
+          meta = {};
+        }
+        return {
+          id: "summary-" + (message.seqNo != null ? message.seqNo : index),
+          content: "",
+          summaryContent: message.content || "",
+          userName: "system",
+          chatType: "system",
+          compressCount: meta.compressedCount || 0,
+          createdAt: message.createdAt || new Date().toISOString(),
+          sessionCode: message.sessionCode || null,
+          sceneType: message.sceneType || null,
+          sources: [],
+        };
+      }
+
+      var role = message.role === "assistant" ? "assistant" : "user";
+      var rawContent = message.content == null ? "" : String(message.content);
+      return {
+        id:
+          message.messageId != null
+            ? String(message.messageId)
+            : "record-" + index + "-" + this.generateRandomId(6),
+        messageId: message.messageId != null ? message.messageId : null,
+        content: role === "assistant" ? this.renderMarkdown(rawContent) : rawContent,
+        rawContent: rawContent,
+        isStreaming: false,
+        isFinished: true,
+        userName: role === "assistant" ? "bot" : this.currentUserName || "用户",
+        chatType: role === "assistant" ? "bot" : "user",
+        botMsgId: message.botMsgId || null,
+        createdAt: message.createdAt || new Date().toISOString(),
+        sessionCode: message.sessionCode || null,
+        sceneType: message.sceneType || null,
+        sourceType: message.sourceType || null,
+        sources:
+          role === "assistant"
+            ? this.parseRecordSources(message.sourcesJson)
+            : [],
+        interrupted: role === "assistant" && rawContent.indexOf("已中断") >= 0,
+        // 历史消息思考内容状态：默认空 + 折叠 + 未加载
+        thinkingContent:
+          role === "assistant" ? "" : null,
+        thinkingSegments: [],
+        thinkingExpanded: false,
+        thinkingLoaded: false,
+        thinkingLoading: false,
+      };
+    },
+    /**
+     * 遍历 chatList，对 assistant 消息查思考内容缓存。
+     * 命中则填充 thinkingContent/thinkingSegments/agentSteps，
+     * 置 thinkingLoaded=true 与 thinkingExpanded=true（默认展开）。
+     * 未命中保持原状（折叠 + 未加载）。
+     */
+    applyThinkingCacheToChatList(sessionId) {
+      if (!Array.isArray(this.chatList) || sessionId == null) return;
+      var userKey = this.resolveStableUserKey();
+      if (!userKey) return;
+      for (var i = 0; i < this.chatList.length; i++) {
+        var item = this.chatList[i];
+        if (!item || item.chatType !== "bot") continue;
+        if (!item.botMsgId) continue;
+        if (item.thinkingLoaded) continue; // 已加载过则跳过
+        var cached = getThinkingCache(
+          String(userKey),
+          String(sessionId),
+          String(item.botMsgId)
+        );
+        if (cached) {
+          var cachedSteps = cached.agentSteps;
+          var hasSubAgentStep = false;
+          if (Array.isArray(cachedSteps)) {
+            for (var ci = 0; ci < cachedSteps.length; ci++) {
+              var cet = cachedSteps[ci] && cachedSteps[ci].eventType;
+              if (cet === "subagent_started" || cet === "subagent_finished") {
+                hasSubAgentStep = true;
+                break;
+              }
+            }
+          }
+          var hasCachedSubRuns = Array.isArray(cached.subRuns) && cached.subRuns.length > 0;
+          // 有 subagent step 但缓存中没有 subRuns 数据（旧 v=1 缓存），跳过
+          if (hasSubAgentStep && !hasCachedSubRuns) {
+            continue;
+          }
+          item.thinkingContent = cached.thinkingContent;
+          item.thinkingSegments = cached.thinkingSegments;
+          item.agentSteps = cached.agentSteps;
+          // 水合子 run 数据到 activeAgentRuns
+          if (hasCachedSubRuns) {
+            var listParentRunId = null;
+            for (var lsi = 0; lsi < cached.subRuns.length; lsi++) {
+              if (cached.subRuns[lsi] && cached.subRuns[lsi].parentRunId) {
+                listParentRunId = cached.subRuns[lsi].parentRunId;
+                break;
+              }
+            }
+            if (listParentRunId) {
+              this.hydrateSubRunsFromCache(listParentRunId, item.botMsgId, cached.subRuns);
+            }
+          }
+          item.thinkingLoaded = true;
+          item.thinkingExpanded = true;
+        }
+      }
+    },
+    resolveChatHistorySources(chatItems) {
+      if (!Array.isArray(chatItems)) {
+        return [];
+      }
+
+      for (var i = chatItems.length - 1; i >= 0; i--) {
+        var item = chatItems[i];
+        if (item && Array.isArray(item.sources) && item.sources.length > 0) {
+          return item.sources;
+        }
+      }
+
+      return [];
+    },
+    resolveLastUsageFromMessages(messages) {
+      if (!Array.isArray(messages)) {
+        return null;
+      }
+      for (var i = messages.length - 1; i >= 0; i--) {
+        var msg = messages[i];
+        if (msg && msg.role === "assistant" && msg.usageJson) {
+          try {
+            return JSON.parse(msg.usageJson);
+          } catch (e) {
+            return null;
+          }
+        }
+      }
+      return null;
+    },
+    handleChatScroll() {
+      var chatMessages = document.getElementById("chat-messages");
+      if (!chatMessages) {
+        return;
+      }
+
+      var distanceFromBottom =
+        chatMessages.scrollHeight -
+        (chatMessages.scrollTop + chatMessages.clientHeight);
+
+      // 程序触发的滚动不更新用户标志（避免 scrollToBottom 自身触发 scroll 事件误判）
+      if (this.isProgrammaticScroll) {
+        this.showBackToBottom = distanceFromBottom > 200;
+        return;
+      }
+
+      // 流式输出期间 markdown 渲染会引发布局抖动，提高阈值避免误判为用户主动滚动
+      var threshold = this.isStreaming ? 600 : 200;
+
+      // 用户主动滚动：远离底部时标记停止跟随，靠近底部时恢复跟随
+      if (distanceFromBottom > threshold) {
+        this.isUserScrolledUp = true;
+        this.showBackToBottom = true;
+      } else {
+        this.isUserScrolledUp = false;
+        this.showBackToBottom = false;
+      }
+    },
+    extractMessageText(content) {
+      if (content == null) {
+        return "";
+      }
+
+      var contentString = String(content);
+      if (contentString.indexOf("<") === -1) {
+        return contentString;
+      }
+
+      var tempDiv = document.createElement("div");
+      tempDiv.innerHTML = contentString;
+      return (tempDiv.textContent || tempDiv.innerText || "").trim();
+    },
+    copyTextWithFallback(text) {
+      var textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.setAttribute("readonly", "readonly");
+      textarea.style.position = "fixed";
+      textarea.style.top = "-9999px";
+      textarea.style.left = "-9999px";
+
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+
+      var copied = false;
+      try {
+        copied = document.execCommand("copy");
+      } catch (error) {
+        copied = false;
+      }
+
+      document.body.removeChild(textarea);
+      return copied;
+    },
+    copyMessageContent(item) {
+      // 优先用 rawContent（markdown 原文），fallback 到 content（HTML）
+      var raw = item && item.rawContent;
+      var text;
+      if (raw) {
+        text = String(raw).trim();
+      } else {
+        text = this.extractMessageText(item && item.content).trim();
+      }
+      if (!text) {
+        this.showUiMessage("error", "暂无可复制内容");
+        return;
+      }
+
+      if (
+        typeof navigator !== "undefined" &&
+        navigator.clipboard &&
+        typeof window !== "undefined" &&
+        window.isSecureContext
+      ) {
+        navigator.clipboard
+          .writeText(text)
+          .then(
+            function () {
+              this.showUiMessage("success", "复制成功");
+            }.bind(this)
+          )
+          .catch(
+            function () {
+              var copied = this.copyTextWithFallback(text);
+              if (copied) {
+                this.showUiMessage("success", "复制成功");
+              } else {
+                this.showUiMessage("error", "复制失败，请手动复制");
+              }
+            }.bind(this)
+          );
+        return;
+      }
+
+      var copied = this.copyTextWithFallback(text);
+      if (copied) {
+        this.showUiMessage("success", "复制成功");
+      } else {
+        this.showUiMessage("error", "复制失败，请手动复制");
+      }
+    },
+    focusInputPanel(moveCursorToEnd) {
+      var panel = this.$refs.chatInputPanel;
+      if (!panel) {
+        return;
+      }
+
+      if (moveCursorToEnd && typeof panel.setCursorToEnd === "function") {
+        panel.setCursorToEnd();
+        return;
+      }
+
+      if (typeof panel.focusInput === "function") {
+        panel.focusInput();
+      }
+    },
+    quoteMessageToInput(item) {
+      var text = this.extractMessageText(item && item.content).trim();
+      if (!text) {
+        this.showUiMessage("error", "暂无可引用内容");
+        return;
+      }
+
+      var quotedText = "引用：\n" + text;
+      var currentValue = this.draftMessage || "";
+      if (currentValue) {
+        currentValue = currentValue.replace(/\s+$/, "");
+        this.draftMessage = currentValue + "\n\n" + quotedText;
+      } else {
+        this.draftMessage = quotedText;
+      }
+
+      this.guidanceMessage = "已将所选消息引用到输入框，可继续编辑后发送。";
+      this.focusInputPanel(true);
+    },
+    async stopGeneration(skipConfirm) {
+      // 二次确认（retryUserMessage 内部调用时已确认过，跳过）
+      if (!skipConfirm) {
+        var stopConfirmed = await this.showConfirmBar("确定要停止生成吗？", {
+          confirmText: "停止",
+          cancelText: "取消",
+        });
+        if (!stopConfirmed) {
+          return;
+        }
+      }
+      // 获取当前 runId
+      var currentStopRun = this.currentAgentRun;
+      var runId = (currentStopRun && currentStopRun.runId) || null;
+      if (!runId) {
+        // 没有 runId 时仅做前端状态重置
+        this.isSending = false;
+        this.isStreaming = false;
+        this.isThinking = false;
+        this.guidanceMessage = "已停止生成。";
+        return;
+      }
+
+      this.guidanceMessage = "正在停止生成…";
+      try {
+        await doctorApi.cancelAgent(runId);
+      } catch (e) {
+        console.error("取消Agent请求失败:", e);
+      }
+
+      // 前端状态立即重置（后端会推送 interrupted FINISH 事件做最终收尾）
+      // 但如果 SSE 通道已断开，FINISH 可能收不到，所以这里也做兜底重置
+      // 注意：不完全重置 isStreaming，等 FINISH 事件或超时后再重置
+      // 设置一个超时兜底：5秒后如果没收到 FINISH，强制重置
+      var me = this;
+      if (this._stopTimeout) {
+        clearTimeout(this._stopTimeout);
+      }
+      this._stopTimeout = setTimeout(function () {
+        if (me.isStreaming || me.isSending) {
+          console.warn("停止超时，强制重置状态");
+          // flush 残留 buffer + 收尾流式消息（渲染 markdown）
+          if (runId) me.flushRunBuffer(runId);
+          if (currentStopRun && currentStopRun.botMsgId) {
+            me.finalizeStreamingChatItem(currentStopRun.botMsgId, true);
+          }
+          me.isSending = false;
+          me.isStreaming = false;
+          me.isThinking = false;
+          me.guidanceMessage = "已停止生成。";
+        }
+      }, 5000);
+    },
+    async retryUserMessage(item) {
+      var text = this.extractMessageText(item && item.content).trim();
+      if (!text) {
+        this.showUiMessage("error", "暂无可重试内容");
+        return;
+      }
+
+      // 二次确认（回滚会删除该消息及之后的历史，不可恢复）
+      var rollbackConfirmed = await this.showConfirmBar(
+        "确定要回滚到该消息吗？该消息及其后的所有回复将被删除。",
+        { confirmText: "回滚", cancelText: "取消" }
+      );
+      if (!rollbackConfirmed) {
+        return;
+      }
+
+      // 如果正在输出，先打断（串行：等打断完成再回滚）
+      if (this.isSending || this.isStreaming) {
+        this.guidanceMessage = "正在停止当前生成，请稍候…";
+        await this.stopGeneration(true);
+
+        // 等待 interrupted FINISH 事件到达（stopGeneration 已设置 5 秒超时兜底）
+        // 这里用轮询等待 isStreaming 变为 false
+        var waitCount = 0;
+        while ((this.isStreaming || this.isSending) && waitCount < 60) {
+          await new Promise(function (resolve) {
+            setTimeout(resolve, 100);
+          });
+          waitCount++;
+        }
+      }
+
+      // 在 chatList 中定位被点击的 user 消息 index
+      var userIndex = -1;
+      for (var i = 0; i < this.chatList.length; i++) {
+        if (this.chatList[i] === item) {
+          userIndex = i;
+          break;
+        }
+      }
+      // 兜底：按内容匹配（item 可能是历史加载的副本，引用不同）
+      if (userIndex < 0) {
+        for (var k = 0; k < this.chatList.length; k++) {
+          if (
+            this.chatList[k].chatType === "user" &&
+            this.extractMessageText(this.chatList[k].content).trim() === text
+          ) {
+            userIndex = k;
+            break;
+          }
+        }
+      }
+
+      // 找该 user 消息后面紧跟的 assistant 消息的 botMsgId（后端按 botMsgId 定位删除起点）
+      var assistantBotMsgId = null;
+      if (userIndex >= 0) {
+        for (var j = userIndex + 1; j < this.chatList.length; j++) {
+          if (
+            this.chatList[j].chatType === "bot" ||
+            this.chatList[j].chatType === "assistant"
+          ) {
+            assistantBotMsgId = this.chatList[j].botMsgId;
+            break;
+          }
+        }
+      }
+
+      // 调后端回滚接口删除（user 消息 + 之后所有消息）
+      var sessionId = this.activeChatSessionId;
+      if (assistantBotMsgId && sessionId) {
+        try {
+          await doctorApi.rollbackMessage(sessionId, assistantBotMsgId);
+        } catch (e) {
+          console.error("回滚消息失败:", e);
+          this.showUiMessage("error", "回滚失败，请稍后重试");
+          return;
+        }
+      }
+
+      // 从前端 chatList 中移除该 user 消息及之后的所有消息
+      if (userIndex >= 0) {
+        this.chatList.splice(userIndex);
+      }
+
+      // 回填输入框
+      this.draftMessage = text;
+      this.guidanceMessage = "已将历史任务填回输入框，可直接调整后再次发送。";
+      this.focusInputPanel(true);
+    },
+    applyQuickPrompt(promptText) {
+      this.draftMessage = promptText || "";
+      this.guidanceMessage = "已写入快捷指令，可直接调整内容后发送。";
+      this.focusInputPanel(true);
+    },
+    // Agent steps management
+    buildAgentSteps(message) {
+      return [];
+    },
+    updateAgentStepsOnStream() {
+      return;
+    },
+    completeAllAgentSteps() {
+      return;
+    },
+    failCurrentAgentStep() {
+      return;
+    },
+    async triggerManualCompress() {
+      if (this.isCompressing || this.isSending || this.isStreaming) {
+        return;
+      }
+      var sessionId = this.activeChatSessionId;
+      if (sessionId == null) {
+        this.showUiMessage("error", "当前没有活动会话，无法压缩。");
+        return;
+      }
+      // 二次确认（与回滚/中断一致的 confirmBar）
+      var confirmed = await this.showConfirmBar(
+        "确定压缩当前会话上下文？压缩后早期对话将被摘要替代。",
+        { confirmText: "压缩", cancelText: "取消" }
+      );
+      if (!confirmed) {
+        return;
+      }
+      this.isCompressing = true;
+      try {
+        await doctorApi.compressContext(sessionId);
+        // 结果由 SSE handler 统一处理（context_compressing / context_compressed / context_compress_failed）
+      } catch (e) {
+        this.isCompressing = false;
+        this.showUiMessage("error", "触发压缩失败：" + (e && e.message ? e.message : "未知错误"));
+      }
+    },
+    async doChat() {
+      var currentUserName = this.currentUserName;
+
+      if (this.isSending || this.isStreaming) {
+        this.showUiMessage("error", "正在执行任务，请稍后再发送。");
+        return;
+      }
+
+      var pendingMsg = (this.draftMessage || "").trim();
+      if (pendingMsg === "") {
+        return;
+      }
+      this.clearThinkingState();
+
+      this.isSending = true;
+      this.isStreaming = false;
+      this.guidanceMessage = "正在建立 SSE 实时通道，请稍候。";
+
+      var sseConnection = null;
+      try {
+        sseConnection = await this.ensureSseConnection();
+      } catch (error) {
+        console.error("准备 SSE 连接失败:", error);
+      }
+      currentUserName = this.currentUserName;
+
+      if (!currentUserName) {
+        this.showUiMessage(
+          "error",
+          "请先完成手机号登录，再开始你的专属健身会话。"
+        );
+        this.isSending = false;
+        this.guidanceMessage = "请先完成手机号登录，再开始你的专属健身会话。";
+        return;
+      }
+
+      if (!sseConnection) {
+        this.showUiMessage("error", "SSE 通道初始化失败，请稍后重试。");
+        this.isSending = false;
+        this.guidanceMessage = "SSE 通道初始化失败，请稍后重试。";
+        return;
+      }
+
+      var botMsgId = this.generateRandomId(12);
+      this.taskStartTime = Date.now();
+      this.lastTtft = null;
+
+      var internetSearchSelected = this.internetSearchSelected;
+      var knowledgeBaseSelected = this.knowledgeBaseSelected;
+      var ragSelected = this.ragSelected;
+      var currentSourceType = ragSelected
+        ? "rag"
+        : knowledgeBaseSelected
+        ? "wiki"
+        : internetSearchSelected
+        ? "internet"
+        : "chat";
+      var expectedSceneType = this.resolveExpectedSessionSceneType();
+      var singleChat = {
+        currentUserName: currentUserName,
+        message: pendingMsg,
+        botMsgId: botMsgId,
+        sessionCode: this.currentSessionCode || null,
+        knowledgeBaseEnabled: knowledgeBaseSelected,
+        ragEnabled: ragSelected,
+        internetEnabled: internetSearchSelected,
+      };
+
+      var requestPromise = null;
+      var me = this;
+
+      console.log("agentExecute");
+      requestPromise = doctorApi.agentExecute(singleChat);
+
+      if (requestPromise && typeof requestPromise.then === "function") {
+        requestPromise = requestPromise.then(function (res) {
+          var data = me.unwrapApiData(res, "任务请求失败，请稍后重试！");
+          // ack 响应路径：允许更新当前会话指针
+          me.applyServerSessionMeta(data, { updateGlobalSession: true });
+          var ackApplied = me.applyAgentExecuteAck(
+            data,
+            singleChat,
+            expectedSceneType,
+            currentSourceType
+          );
+          if (!ackApplied) {
+            me.clearActiveAgentRun();
+          }
+          return res;
+        });
+      }
+
+      if (requestPromise && typeof requestPromise.catch === "function") {
+        requestPromise.catch(
+          function (error) {
+            console.error("任务请求失败:", error);
+            // 识别 429 并发上限，给出友好提示（ack 未到达，不会创建 run entry）
+            var errStatus =
+              error && error.response && error.response.status != null
+                ? error.response.status
+                : error && error.status != null
+                ? error.status
+                : null;
+            if (errStatus === 429) {
+              this.showUiMessage(
+                "error",
+                "当前并发任务数已达上限（3），请稍后再试。"
+              );
+              this.guidanceMessage =
+                "当前并发任务数已达上限（3），请稍后再试。";
+            } else {
+              this.showUiMessage("error", "请求失败，请稍后重试！");
+              this.guidanceMessage = "任务发送失败，请稍后重试。";
+            }
+            this.isSending = false;
+            this.isStreaming = false;
+            this.clearThinkingState();
+            this.failCurrentAgentStep();
+          }.bind(this)
+        );
+      }
+
+      this.chatList.push({
+        id: "user-" + this.generateRandomId(8),
+        content: pendingMsg,
+        userName: currentUserName || "用户",
+        chatType: "user",
+        createdAt: new Date().toISOString(),
+        sessionCode: this.currentSessionCode || null,
+        sceneType: expectedSceneType,
+        sourceType: currentSourceType,
+        botMsgId: botMsgId,
+      });
+
+      this.draftMessage = "";
+      this.guidanceMessage = "任务已提交，正在执行中。";
+      this.scrollToBottom(true);
+    },
+    generateRandomId(length) {
+      var characters =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+      var result = "";
+      var charactersLength = characters.length;
+      for (var i = 0; i < length; i++) {
+        result += characters.charAt(
+          Math.floor(Math.random() * charactersLength)
+        );
+      }
+      return result;
+    },
+    // rAF 节流：每帧最多一次 scrollToBottom，所有 run 共享
+    scrollToBottomThrottled() {
+      if (this.scrollRAFScheduled) return;
+      this.scrollRAFScheduled = true;
+      var me = this;
+      requestAnimationFrame(function () {
+        me.scrollRAFScheduled = false;
+        me.doScrollToBottom(false);
+      });
+    },
+    scrollToBottom(force) {
+      if (force === true) {
+        // 强制滚动：等 Vue 刷新 DOM 后立即执行，重置用户标志
+        var me = this;
+        this.$nextTick(function () {
+          me.doScrollToBottom(true);
+        });
+        return;
+      }
+      this.scrollToBottomThrottled();
+    },
+    doScrollToBottom(force) {
+      if (!this.cachedChatMessagesEl) {
+        this.cachedChatMessagesEl = document.getElementById("chat-messages");
+      }
+      if (!this.cachedChatMessagesEl) return;
+      var me = this;
+      // 流式输出（非 force）：只要用户没主动向上滚就跟随
+      // 强制滚动（force=true）：发送消息/回到底部按钮，重置用户标志
+      var shouldScroll = force === true || !me.isUserScrolledUp;
+      if (shouldScroll) {
+        // 标记程序滚动，避免触发的 scroll 事件被 handleChatScroll 误判为用户操作
+        me.isProgrammaticScroll = true;
+        me.cachedChatMessagesEl.scrollTop = me.cachedChatMessagesEl.scrollHeight;
+        if (force === true) {
+          me.isUserScrolledUp = false;
+          me.showBackToBottom = false;
+        }
+        // 用双 rAF 保持程序滚动标志到下一帧绘制后，避免布局抖动期被误判
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () {
+            me.isProgrammaticScroll = false;
+          });
+        });
+      }
+      me.handleChatScroll();
+    },
+    doInternetSearch(internetSearchSelected) {
+      this.internetSearchSelected = !internetSearchSelected;
+
+      if (this.internetSearchSelected) {
+        this.imageReadSelected = false;
+      }
+
+      this.guidanceMessage =
+        "\u5DF2\u5207\u6362\u4E3A\u300C" +
+        this.activeModeLabel +
+        "\u300D\u6A21\u5F0F\u3002";
+    },
+    doKnowledgeBase(knowledgeBaseSelected) {
+      this.knowledgeBaseSelected = !knowledgeBaseSelected;
+
+      if (!this.knowledgeBaseSelected) {
+        this.ragSelected = false;
+      } else {
+        this.imageReadSelected = false;
+      }
+
+      this.guidanceMessage =
+        "\u5DF2\u5207\u6362\u4E3A\u300C" +
+        this.activeModeLabel +
+        "\u300D\u6A21\u5F0F\u3002";
+    },
+    doRag(ragSelected) {
+      var nextValue = !ragSelected;
+      if (nextValue && !this.knowledgeBaseSelected) {
+        return;
+      }
+      this.ragSelected = nextValue;
+
+      if (this.ragSelected) {
+        this.imageReadSelected = false;
+      }
+
+      this.guidanceMessage =
+        "\u5DF2\u5207\u6362\u4E3A\u300C" +
+        this.activeModeLabel +
+        "\u300D\u6A21\u5F0F\u3002";
+    },
+    async onModelSelect(modelId) {
+      if (!modelId || modelId === this.currentModel) {
+        return;
+      }
+      try {
+        await llmConfig.save({ model: modelId });
+        this.currentModel = llmConfig.getConfig().model;
+      } catch (e) {
+        this.showUiMessage("error", "切换模型失败");
+      }
+    },
+    async onToggleThinking() {
+      var next = !this.thinkingEnabled;
+      try {
+        await llmConfig.save({ thinkingEnabled: next });
+        this.thinkingEnabled = llmConfig.getConfig().thinkingEnabled;
+      } catch (e) {
+        this.showUiMessage("error", "切换思考模式失败");
+      }
+    },
+    async onSelectReasoningEffort(effort) {
+      if (!effort || effort === this.reasoningEffort) {
+        return;
+      }
+      try {
+        await llmConfig.save({ reasoningEffort: effort });
+        this.reasoningEffort = llmConfig.getConfig().reasoningEffort;
+      } catch (e) {
+        this.showUiMessage("error", "切换推理强度失败");
+      }
+    },
+  },
+};
+</script>

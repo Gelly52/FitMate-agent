@@ -176,7 +176,7 @@ export default {
 .dash-page {
   display: flex;
   flex-direction: column;
-  gap: 64px;
+  gap: 40px;
   width: 100%;
   height: 100%;
   min-height: 0;
@@ -185,155 +185,162 @@ export default {
   background: var(--color-background);
 }
 
+/* ===== Metric overview: pixel stat cards ===== */
 .dash-metrics {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 32px;
+  gap: 20px;
 }
 
 .dash-metric {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  position: relative;
-  padding-left: 12px;
+  padding: 12px 14px;
+  background: var(--color-surface);
+  border: 3px solid var(--color-outline);
+  border-top: 5px solid var(--pixel-blue);
+  box-shadow: 3px 3px 0 0 #101010;
 }
-.dash-metric::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 6px;
-  bottom: 14px;
-  width: 2px;
-  background: linear-gradient(180deg, var(--color-primary), transparent);
-  border-radius: 2px;
-  box-shadow: 0 0 6px color-mix(in srgb, var(--color-primary) 70%, transparent);
+.dash-metric:nth-child(2) {
+  border-top-color: var(--pixel-green);
+}
+.dash-metric:nth-child(3) {
+  border-top-color: var(--pixel-yellow);
+}
+.dash-metric:nth-child(4) {
+  border-top-color: var(--pixel-red);
 }
 
 .dash-metric-label {
-  font-size: 9px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--color-on-surface-variant);
 }
 
 .dash-metric-value {
-  font-size: 40px;
-  font-weight: 600;
+  font-size: 36px;
   line-height: 1.1;
-  letter-spacing: -0.02em;
   color: var(--color-on-surface);
   font-variant-numeric: tabular-nums;
-  text-shadow: 0 0 12px color-mix(in srgb, var(--color-primary) 30%, transparent);
-  font-family: ui-monospace, "Manrope", sans-serif;
 }
 
 .dash-metric-accent {
-  color: var(--color-primary-fixed-dim);
+  color: var(--color-primary);
 }
 
 .dash-metric-rule {
-  height: 1px;
-  background: var(--color-surface-container);
+  height: 3px;
+  background: var(--color-outline-variant);
   margin-top: 8px;
 }
 
+/* ===== Two columns: pixel panels ===== */
 .dash-columns {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 64px;
+  gap: 32px;
 }
 
 .dash-col {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  background: var(--color-surface);
+  border: 3px solid var(--color-outline);
+  box-shadow: 6px 6px 0 0 #101010;
+  overflow: hidden;
 }
 
 .dash-col-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding: 8px 14px;
+  background: var(--color-primary);
+  border-bottom: 3px solid var(--color-outline);
 }
 
 .dash-col-title {
-  font-size: 24px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
+  font-size: 22px;
   color: var(--color-on-surface);
   margin: 0;
   position: relative;
-  padding-left: 14px;
-  font-family: ui-monospace, "Inter", sans-serif;
+  padding-left: 18px;
   letter-spacing: 0.02em;
 }
 .dash-col-title::before {
   content: "";
   position: absolute;
   left: 0;
-  top: 4px;
-  bottom: 4px;
-  width: 3px;
-  background: linear-gradient(180deg, #ff0080, var(--color-primary), #00d4ff);
-  border-radius: 3px;
-  box-shadow:
-    0 0 8px color-mix(in srgb, var(--color-primary) 70%, transparent),
-    0 0 14px rgba(255, 0, 128, 0.3);
+  top: 50%;
+  transform: translateY(-50%);
+  width: 10px;
+  height: 10px;
+  background: var(--color-primary);
+  border: 2px solid var(--color-outline);
+}
+
+.dash-col-head .dash-col-title {
+  color: var(--color-on-primary);
+  padding-left: 0;
+}
+.dash-col-head .dash-col-title::before {
+  display: none;
 }
 
 .dash-col-action {
-  font-size: 9px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--color-on-surface-variant);
+  color: var(--color-on-surface);
+  background: var(--color-surface);
+  border: 2px solid var(--color-outline);
+  padding: 2px 8px;
   text-decoration: none;
-  transition: color 0.2s ease;
+  box-shadow: 2px 2px 0 0 #101010;
+  transition: transform 0.1s, box-shadow 0.1s;
 }
 
 .dash-col-action:hover {
-  color: var(--color-primary-fixed-dim);
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0 0 #101010;
+}
+
+.dash-col-action:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
 }
 
 .dash-training-list {
   display: flex;
   flex-direction: column;
+  padding: 4px 14px 14px;
 }
 
 .dash-training-item {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  padding: 12px 0 12px 10px;
-  border-bottom: 1px solid var(--color-surface-container);
-  position: relative;
-  transition: background 0.2s ease;
-  border-radius: 4px;
-}
-.dash-training-item::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 50%;
-  width: 3px;
-  height: 0;
-  background: var(--color-primary);
-  border-radius: 2px;
-  box-shadow: 0 0 6px color-mix(in srgb, var(--color-primary) 70%, transparent);
-  transition: height 0.2s ease, top 0.2s ease;
-}
-.dash-training-item:hover::before {
-  height: 60%;
-  top: 20%;
+  padding: 12px 4px;
+  border-bottom: 2px solid var(--color-outline-variant);
+  transition: background 0.1s;
 }
 .dash-training-item:hover {
-  background: color-mix(in srgb, var(--color-primary) 3%, transparent);
+  background: var(--color-surface-container-low);
 }
 
 .dash-training-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
   font-size: 18px;
-  color: var(--color-primary-fixed-dim);
+  color: var(--color-on-primary);
+  background: var(--color-primary);
+  border: 2px solid var(--color-outline);
   flex-shrink: 0;
-  margin-top: 2px;
 }
 
 .dash-training-body {
@@ -345,15 +352,14 @@ export default {
 }
 
 .dash-training-date {
-  font-size: 9px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   color: var(--color-on-surface-variant);
   font-variant-numeric: tabular-nums;
-  font-family: ui-monospace, monospace;
 }
 
 .dash-training-summary {
-  font-size: 13px;
+  font-size: 15px;
   color: var(--color-on-surface);
   line-height: 1.5;
   display: -webkit-box;
@@ -363,19 +369,23 @@ export default {
 }
 
 .dash-empty {
-  padding: 24px 0;
-  font-size: 13px;
+  padding: 24px 14px;
+  font-size: 15px;
   color: var(--color-on-surface-variant);
 }
 
+/* UserProfilePanel lives inside the panel body */
+.dash-col :deep(.profile-panel) {
+  padding: 12px 14px 14px;
+}
+
 .dash-col-tag {
-  font-size: 9px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--color-on-surface-variant);
-  border: 1px solid var(--color-outline-variant);
+  border: 2px solid var(--color-outline-variant);
   padding: 2px 6px;
-  border-radius: 2px;
 }
 
 .dash-placeholder {
@@ -385,8 +395,7 @@ export default {
   justify-content: center;
   gap: 8px;
   padding: 48px 24px;
-  border: 1px dashed var(--color-outline-variant);
-  border-radius: 8px;
+  border: 2px dashed var(--color-outline-variant);
   background: var(--color-surface-container-low);
   flex: 1;
   min-height: 200px;
@@ -399,16 +408,16 @@ export default {
 }
 
 .dash-placeholder-text {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 15px;
   color: var(--color-on-surface);
 }
 
 .dash-placeholder-hint {
-  font-size: 11px;
+  font-size: 14px;
   color: var(--color-on-surface-variant);
 }
 
+/* ===== Quick actions: pixel button cards ===== */
 .dash-actions {
   display: flex;
   flex-direction: column;
@@ -418,7 +427,7 @@ export default {
 .dash-actions-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
+  gap: 20px;
 }
 
 .dash-action-card {
@@ -426,62 +435,55 @@ export default {
   flex-direction: column;
   align-items: flex-start;
   gap: 8px;
-  padding: 20px;
-  border: 1px solid var(--color-surface-container);
-  border-radius: 10px;
-  background: var(--color-surface-container-low);
+  padding: 16px;
+  border: 3px solid var(--color-outline);
+  background: var(--color-surface);
+  color: var(--color-on-surface);
+  box-shadow: 4px 4px 0 0 #101010;
   cursor: pointer;
   text-align: left;
-  transition: border-color 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
-  position: relative;
-  overflow: hidden;
-}
-.dash-action-card::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, var(--color-primary), transparent);
-  opacity: 0;
-  transition: opacity 0.25s ease;
+  transition: transform 0.1s, box-shadow 0.1s;
 }
 .dash-action-card:hover {
-  border-color: color-mix(in srgb, var(--color-primary) 40%, var(--color-outline-variant));
-  transform: translateY(-2px);
-  box-shadow:
-    0 8px 24px color-mix(in srgb, var(--color-primary) 12%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0 0 #101010;
 }
-.dash-action-card:hover::after {
-  opacity: 1;
+.dash-action-card:active {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 0 #101010;
 }
 
 .dash-action-icon {
-  font-size: 22px;
-  color: var(--color-primary-fixed-dim);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  font-size: 20px;
+  color: var(--color-on-primary);
+  background: var(--color-primary);
+  border: 2px solid var(--color-outline);
 }
 
 .dash-action-label {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 17px;
   color: var(--color-on-surface);
 }
 
 .dash-action-desc {
-  font-size: 12px;
+  font-size: 14px;
   color: var(--color-on-surface-variant);
 }
 
+/* ===== Status bar ===== */
 .dash-status {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-top: auto;
-  padding-top: 16px;
-  border-top: 1px solid var(--color-surface-container);
-  font-size: 9px;
+  padding-top: 12px;
+  border-top: 3px solid var(--color-outline);
+  font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--color-on-surface-variant);
@@ -490,15 +492,15 @@ export default {
 @media (max-width: 900px) {
   .dash-page {
     padding: 24px;
-    gap: 40px;
+    gap: 32px;
   }
   .dash-metrics {
     grid-template-columns: repeat(2, 1fr);
-    gap: 24px;
+    gap: 16px;
   }
   .dash-columns {
     grid-template-columns: 1fr;
-    gap: 40px;
+    gap: 24px;
   }
   .dash-actions-grid {
     grid-template-columns: 1fr;

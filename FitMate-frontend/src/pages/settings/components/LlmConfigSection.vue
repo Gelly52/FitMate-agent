@@ -247,20 +247,23 @@ export default {
   flex-direction: column;
   gap: 18px;
   padding: 24px;
-  border: 1px solid var(--color-outline-variant);
-  border-radius: 12px;
-  background: var(--color-surface-container-lowest, var(--color-background));
+  border: 4px solid var(--color-outline);
+  border-radius: 0;
+  background: var(--color-surface-container);
+  box-shadow: 6px 6px 0 0 #101010;
 }
 .llm-default-banner {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 10px 14px;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
-  color: var(--color-primary);
-  font-size: 13px;
+  border-radius: 0;
+  border: 2px solid var(--color-outline);
+  background: var(--pixel-green);
+  color: var(--pixel-white);
+  font-size: 15px;
   font-weight: 500;
+  box-shadow: 2px 2px 0 0 #101010;
 }
 .llm-default-icon {
   display: inline-flex;
@@ -268,10 +271,11 @@ export default {
   justify-content: center;
   width: 20px;
   height: 20px;
-  border-radius: 50%;
-  background: var(--color-primary);
-  color: #fff;
-  font-size: 12px;
+  border-radius: 0;
+  border: 2px solid var(--pixel-black);
+  background: var(--pixel-white);
+  color: var(--pixel-green);
+  font-size: 13px;
   flex-shrink: 0;
 }
 .llm-field {
@@ -285,15 +289,15 @@ export default {
   justify-content: space-between;
 }
 .llm-label {
-  font-size: 13px;
+  font-size: 15px;
   color: var(--color-on-surface-variant);
   font-weight: 600;
 }
 .llm-required {
-  color: var(--color-error, #ef4444);
+  color: var(--pixel-red);
 }
 .llm-hint {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--color-on-surface-variant);
   opacity: 0.7;
   margin: 0;
@@ -301,18 +305,19 @@ export default {
 .llm-input,
 .llm-select {
   padding: 8px 12px;
-  border: 1px solid var(--color-outline-variant);
-  border-radius: 8px;
-  background: var(--color-background);
+  border: 3px solid var(--color-outline);
+  border-radius: 0;
+  background: var(--color-surface);
   color: var(--color-on-surface);
-  font-size: 14px;
-  font-family: "Inter", sans-serif;
+  font-size: 16px;
+  font-family: var(--font-main);
   outline: none;
-  transition: border-color 0.2s ease;
+  box-shadow: inset 2px 2px 0 0 rgba(16, 16, 16, 0.35);
+  transition: border-color 0.1s;
 }
 .llm-input:focus,
 .llm-select:focus {
-  border-color: var(--color-primary);
+  border-color: var(--pixel-blue);
 }
 .llm-model-row {
   display: flex;
@@ -324,57 +329,65 @@ export default {
 }
 .llm-btn-secondary {
   padding: 8px 14px;
-  border: 1px solid var(--color-outline-variant);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--color-on-surface-variant);
-  font-size: 12px;
+  border: 2px solid var(--color-outline);
+  border-radius: 0;
+  background: var(--color-surface);
+  color: var(--color-on-surface);
+  font-size: 14px;
   cursor: pointer;
-  transition: color 0.2s ease, border-color 0.2s ease;
+  box-shadow: 2px 2px 0 0 #101010;
+  transition: background-color 0.1s, color 0.1s, transform 0.1s;
 }
 .llm-btn-secondary:hover:not(:disabled) {
-  color: var(--color-primary);
-  border-color: var(--color-primary);
+  color: var(--color-on-primary);
+  background: var(--color-primary);
+}
+.llm-btn-secondary:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: none;
 }
 .llm-btn-secondary:disabled {
-  opacity: 0.4;
+  opacity: 0.5;
   cursor: not-allowed;
+  box-shadow: 2px 2px 0 0 #666666;
 }
 .llm-test-result {
-  font-size: 12px;
+  font-size: 14px;
   margin: 0;
 }
 .llm-test-ok {
-  color: var(--color-primary);
+  color: var(--pixel-green);
 }
 .llm-test-fail {
-  color: var(--color-error, #ef4444);
+  color: var(--pixel-red);
 }
 .llm-toggle {
-  width: 44px;
-  height: 24px;
-  border-radius: 999px;
-  border: none;
-  background: var(--color-outline-variant);
+  width: 52px;
+  height: 26px;
+  border-radius: 0;
+  border: 3px solid var(--color-outline);
+  background: var(--color-surface-container-high);
   position: relative;
   cursor: pointer;
-  transition: background 0.2s ease;
+  padding: 0;
+  transition: background 0.1s;
 }
 .llm-toggle-on {
   background: var(--color-primary);
 }
 .llm-toggle-knob {
   position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: #fff;
-  transition: transform 0.2s ease;
+  top: 1px;
+  left: 1px;
+  width: 18px;
+  height: 18px;
+  border-radius: 0;
+  border: 2px solid var(--pixel-black);
+  background: var(--pixel-white);
+  transition: transform 0.1s steps(2);
 }
 .llm-toggle-on .llm-toggle-knob {
-  transform: translateX(20px);
+  transform: translateX(26px);
 }
 .llm-radio-group {
   display: flex;
@@ -384,12 +397,13 @@ export default {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
+  font-size: 15px;
   color: var(--color-on-surface);
   cursor: pointer;
 }
 .llm-radio input {
   cursor: pointer;
+  accent-color: var(--color-primary);
 }
 .llm-actions {
   display: flex;
@@ -400,39 +414,51 @@ export default {
 }
 .llm-btn-danger {
   padding: 9px 18px;
-  border: 1px solid var(--color-error, #ef4444);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--color-error, #ef4444);
-  font-size: 14px;
+  border: 3px solid var(--color-outline);
+  border-radius: 0;
+  background: var(--pixel-red);
+  color: var(--pixel-white);
+  font-size: 16px;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.2s ease, opacity 0.2s ease;
+  box-shadow: 4px 4px 0 0 #101010;
+  transition: background-color 0.1s, transform 0.1s;
 }
 .llm-btn-danger:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--color-error, #ef4444) 10%, transparent);
+  transform: scale(1.05);
+}
+.llm-btn-danger:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 0 #101010;
 }
 .llm-btn-danger:disabled {
-  opacity: 0.4;
+  opacity: 0.5;
   cursor: not-allowed;
+  box-shadow: 2px 2px 0 0 #666666;
 }
 .llm-btn-primary {
   padding: 9px 24px;
-  border: none;
-  border-radius: 8px;
+  border: 3px solid var(--color-outline);
+  border-radius: 0;
   background: var(--color-primary);
   color: var(--color-on-primary);
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 600;
   cursor: pointer;
-  transition: opacity 0.2s ease;
+  box-shadow: 4px 4px 0 0 #101010;
+  transition: background-color 0.1s, transform 0.1s;
   margin-left: auto;
 }
 .llm-btn-primary:hover:not(:disabled) {
-  opacity: 0.85;
+  transform: scale(1.05);
+}
+.llm-btn-primary:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 0 #101010;
 }
 .llm-btn-primary:disabled {
-  opacity: 0.4;
+  opacity: 0.5;
   cursor: not-allowed;
+  box-shadow: 2px 2px 0 0 #666666;
 }
 </style>

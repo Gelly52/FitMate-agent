@@ -157,25 +157,32 @@ export default {
 .user-menu-trigger {
   width: 32px;
   height: 32px;
-  border-radius: 50%;
+  border-radius: 0;
   background: var(--color-surface-container-high);
-  border: 1px solid var(--color-outline-variant);
+  border: 2px solid var(--color-outline);
+  box-shadow: 2px 2px 0 0 #101010;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   padding: 0;
-  transition: opacity 0.2s ease;
+  transition: background-color 0.1s, transform 0.1s, box-shadow 0.1s;
 }
 
 .user-menu-trigger:hover,
 .user-menu-trigger-active {
-  opacity: 0.7;
+  background: var(--color-surface-container-highest);
+  transform: scale(1.05);
+}
+
+.user-menu-trigger:active {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 0 #101010;
 }
 
 .user-menu-avatar-text {
   color: var(--color-primary);
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
 }
 
@@ -190,9 +197,9 @@ export default {
   right: 0;
   width: 240px;
   background: var(--color-surface-container);
-  border: 1px solid var(--color-outline-variant);
-  border-radius: 6px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  border: 3px solid var(--color-outline);
+  border-radius: 0;
+  box-shadow: 4px 4px 0 0 #101010;
   z-index: 50;
   overflow: hidden;
 }
@@ -202,20 +209,21 @@ export default {
   align-items: center;
   gap: 10px;
   padding: 12px 14px;
-  border-bottom: 1px solid var(--color-outline-variant);
+  border-bottom: 2px solid var(--color-outline);
 }
 
 .user-menu-header-avatar {
   width: 36px;
   height: 36px;
-  border-radius: 50%;
+  border-radius: 0;
+  border: 2px solid var(--color-outline);
   background: var(--color-secondary-container);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--color-primary);
+  color: var(--color-on-secondary-container);
   font-weight: 600;
-  font-size: 14px;
+  font-size: 16px;
   flex-shrink: 0;
 }
 
@@ -225,7 +233,7 @@ export default {
 
 .user-menu-header-name {
   color: var(--color-on-surface);
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -234,7 +242,7 @@ export default {
 
 .user-menu-header-email {
   color: var(--color-on-surface-variant);
-  font-size: 11px;
+  font-size: 13px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -250,20 +258,25 @@ export default {
   gap: 10px;
   padding: 8px 10px;
   color: var(--color-on-surface);
-  font-size: 13px;
-  border-radius: 4px;
+  font-size: 15px;
+  border-radius: 0;
+  border: 2px solid transparent;
   cursor: pointer;
   text-decoration: none;
   background: transparent;
-  border: none;
   width: 100%;
   text-align: left;
   font-family: inherit;
-  transition: background 0.2s ease, color 0.2s ease;
+  transition: background-color 0.1s, color 0.1s, border-color 0.1s;
 }
 
 .user-menu-item:hover {
   background: var(--color-surface-container-high);
+  border-color: var(--color-outline);
+}
+
+.user-menu-item:active {
+  transform: translate(2px, 2px);
 }
 
 .user-menu-item-icon {
@@ -285,12 +298,12 @@ export default {
 }
 
 .user-menu-divider {
-  border-top: 1px solid var(--color-outline-variant);
+  border-top: 2px solid var(--color-outline-variant);
 }
 
 .user-menu-fade-enter-active,
 .user-menu-fade-leave-active {
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  transition: opacity 0.1s steps(2), transform 0.1s steps(2);
 }
 
 .user-menu-fade-enter-from,

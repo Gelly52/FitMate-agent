@@ -439,18 +439,20 @@ export default {
   flex-direction: column;
   gap: 18px;
   padding: 24px;
-  border: 1px solid var(--color-outline-variant);
-  border-radius: 12px;
-  background: var(--color-surface-container-lowest, var(--color-background));
+  border: 4px solid var(--color-outline);
+  border-radius: 0;
+  background: var(--color-surface-container);
+  box-shadow: 6px 6px 0 0 #101010;
 }
 .mcp-server-row {
   display: flex;
   flex-direction: column;
   gap: 12px;
   padding: 16px;
-  border: 1px solid var(--color-outline-variant);
-  border-radius: 10px;
-  background: var(--color-surface-container, var(--color-background));
+  border: 3px solid var(--color-outline);
+  border-radius: 0;
+  background: var(--color-surface);
+  box-shadow: 4px 4px 0 0 #101010;
 }
 .mcp-server-head {
   display: flex;
@@ -465,13 +467,13 @@ export default {
   min-width: 0;
 }
 .mcp-server-index {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--color-on-surface-variant);
   opacity: 0.7;
 }
 .mcp-server-name {
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--color-on-surface);
   overflow: hidden;
@@ -494,26 +496,27 @@ export default {
   gap: 6px;
 }
 .mcp-label {
-  font-size: 13px;
+  font-size: 15px;
   color: var(--color-on-surface-variant);
   font-weight: 600;
 }
 .mcp-required {
-  color: var(--color-error, #ef4444);
+  color: var(--pixel-red);
 }
 .mcp-input {
   padding: 8px 12px;
-  border: 1px solid var(--color-outline-variant);
-  border-radius: 8px;
-  background: var(--color-background);
+  border: 3px solid var(--color-outline);
+  border-radius: 0;
+  background: var(--color-surface);
   color: var(--color-on-surface);
-  font-size: 14px;
-  font-family: "Inter", sans-serif;
+  font-size: 16px;
+  font-family: var(--font-main);
   outline: none;
-  transition: border-color 0.2s ease;
+  box-shadow: inset 2px 2px 0 0 rgba(16, 16, 16, 0.35);
+  transition: border-color 0.1s;
 }
 .mcp-input:focus {
-  border-color: var(--color-primary);
+  border-color: var(--pixel-blue);
 }
 .mcp-server-actions {
   display: flex;
@@ -521,74 +524,86 @@ export default {
 }
 .mcp-btn-secondary {
   padding: 8px 14px;
-  border: 1px solid var(--color-outline-variant);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--color-on-surface-variant);
-  font-size: 12px;
+  border: 2px solid var(--color-outline);
+  border-radius: 0;
+  background: var(--color-surface);
+  color: var(--color-on-surface);
+  font-size: 14px;
   cursor: pointer;
-  transition: color 0.2s ease, border-color 0.2s ease;
+  box-shadow: 2px 2px 0 0 #101010;
+  transition: background-color 0.1s, color 0.1s, transform 0.1s;
 }
 .mcp-btn-secondary:hover:not(:disabled) {
-  color: var(--color-primary);
-  border-color: var(--color-primary);
+  color: var(--color-on-primary);
+  background: var(--color-primary);
+}
+.mcp-btn-secondary:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: none;
 }
 .mcp-btn-secondary:disabled {
-  opacity: 0.4;
+  opacity: 0.5;
   cursor: not-allowed;
+  box-shadow: 2px 2px 0 0 #666666;
 }
 .mcp-btn-danger {
   padding: 6px 12px;
-  border: 1px solid var(--color-outline-variant);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--color-error, #ef4444);
-  font-size: 12px;
+  border: 2px solid var(--color-outline);
+  border-radius: 0;
+  background: var(--pixel-red);
+  color: var(--pixel-white);
+  font-size: 14px;
   cursor: pointer;
-  transition: opacity 0.2s ease, border-color 0.2s ease;
+  box-shadow: 2px 2px 0 0 #101010;
+  transition: transform 0.1s, background-color 0.1s;
 }
 .mcp-btn-danger:hover {
-  opacity: 0.85;
-  border-color: var(--color-error, #ef4444);
+  transform: scale(1.05);
+}
+.mcp-btn-danger:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
 }
 .mcp-test-result {
-  font-size: 12px;
+  font-size: 14px;
   margin: 0;
 }
 .mcp-test-ok {
-  color: var(--color-primary);
+  color: var(--pixel-green);
 }
 .mcp-test-fail {
-  color: var(--color-error, #ef4444);
+  color: var(--pixel-red);
 }
 .mcp-toggle {
-  width: 44px;
-  height: 24px;
-  border-radius: 999px;
-  border: none;
-  background: var(--color-outline-variant);
+  width: 52px;
+  height: 26px;
+  border-radius: 0;
+  border: 3px solid var(--color-outline);
+  background: var(--color-surface-container-high);
   position: relative;
   cursor: pointer;
-  transition: background 0.2s ease;
+  padding: 0;
+  transition: background 0.1s;
 }
 .mcp-toggle-on {
   background: var(--color-primary);
 }
 .mcp-toggle-knob {
   position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: #fff;
-  transition: transform 0.2s ease;
+  top: 1px;
+  left: 1px;
+  width: 18px;
+  height: 18px;
+  border-radius: 0;
+  border: 2px solid var(--pixel-black);
+  background: var(--pixel-white);
+  transition: transform 0.1s steps(2);
 }
 .mcp-toggle-on .mcp-toggle-knob {
-  transform: translateX(20px);
+  transform: translateX(26px);
 }
 .mcp-empty {
-  font-size: 13px;
+  font-size: 15px;
   color: var(--color-on-surface-variant);
   opacity: 0.7;
   padding: 12px 4px;
@@ -601,17 +616,21 @@ export default {
 }
 .mcp-btn-add {
   padding: 9px 16px;
-  border: 1px dashed var(--color-outline-variant);
-  border-radius: 8px;
+  border: 2px dashed var(--color-outline);
+  border-radius: 0;
   background: transparent;
   color: var(--color-on-surface-variant);
-  font-size: 13px;
+  font-size: 15px;
   cursor: pointer;
-  transition: color 0.2s ease, border-color 0.2s ease;
+  transition: color 0.1s, border-color 0.1s, background-color 0.1s;
 }
 .mcp-btn-add:hover {
-  color: var(--color-primary);
-  border-color: var(--color-primary);
+  color: var(--color-on-surface);
+  border-style: solid;
+  background: var(--color-surface-container-high);
+}
+.mcp-btn-add:active {
+  transform: translate(2px, 2px);
 }
 .mcp-actions {
   display: flex;
@@ -620,21 +639,27 @@ export default {
 }
 .mcp-btn-primary {
   padding: 9px 24px;
-  border: none;
-  border-radius: 8px;
+  border: 3px solid var(--color-outline);
+  border-radius: 0;
   background: var(--color-primary);
   color: var(--color-on-primary);
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 600;
   cursor: pointer;
-  transition: opacity 0.2s ease;
+  box-shadow: 4px 4px 0 0 #101010;
+  transition: background-color 0.1s, transform 0.1s;
 }
 .mcp-btn-primary:hover:not(:disabled) {
-  opacity: 0.85;
+  transform: scale(1.05);
+}
+.mcp-btn-primary:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 0 #101010;
 }
 .mcp-btn-primary:disabled {
-  opacity: 0.4;
+  opacity: 0.5;
   cursor: not-allowed;
+  box-shadow: 2px 2px 0 0 #666666;
 }
 /* JSON 预览区 */
 .mcp-json-preview {
@@ -642,9 +667,10 @@ export default {
   flex-direction: column;
   gap: 8px;
   padding: 14px;
-  border: 1px solid var(--color-outline-variant);
-  border-radius: 10px;
-  background: var(--color-surface-container, var(--color-background));
+  border: 3px solid var(--color-outline);
+  border-radius: 0;
+  background: var(--color-surface);
+  box-shadow: 4px 4px 0 0 #101010;
 }
 .mcp-json-head {
   display: flex;
@@ -660,38 +686,41 @@ export default {
 .mcp-json-hint {
   margin: 0;
   padding: 8px 10px;
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.55;
   color: var(--color-on-surface-variant);
-  background: var(--color-surface-container-high, rgba(0, 0, 0, 0.04));
-  border-left: 3px solid var(--color-primary);
-  border-radius: 4px;
+  background: var(--color-surface-container-high);
+  border: 2px solid var(--color-outline);
+  border-left: 5px solid var(--pixel-blue);
+  border-radius: 0;
 }
 .mcp-json-hint code {
-  font-family: "JetBrains Mono", "Fira Code", "Consolas", "Menlo", monospace;
-  font-size: 11.5px;
+  font-family: var(--font-main);
+  font-size: 14px;
   padding: 1px 5px;
-  background: var(--color-surface-container-highest, rgba(0, 0, 0, 0.08));
-  border-radius: 3px;
-  color: var(--color-primary);
+  background: var(--color-surface-container-highest);
+  border: 1px solid var(--color-outline);
+  border-radius: 0;
+  color: var(--color-on-surface);
 }
 .mcp-json-textarea {
   width: 100%;
   min-height: 180px;
   padding: 10px 12px;
-  border: 1px solid var(--color-outline-variant);
-  border-radius: 8px;
-  background: var(--color-background);
+  border: 3px solid var(--color-outline);
+  border-radius: 0;
+  background: var(--color-surface);
   color: var(--color-on-surface);
-  font-size: 12.5px;
-  font-family: "JetBrains Mono", "Fira Code", "Consolas", "Menlo", monospace;
+  font-size: 15px;
+  font-family: var(--font-main);
   line-height: 1.55;
   outline: none;
   resize: vertical;
-  transition: border-color 0.2s ease;
+  box-shadow: inset 2px 2px 0 0 rgba(16, 16, 16, 0.35);
+  transition: border-color 0.1s;
   box-sizing: border-box;
 }
 .mcp-json-textarea:focus {
-  border-color: var(--color-primary);
+  border-color: var(--pixel-blue);
 }
 </style>

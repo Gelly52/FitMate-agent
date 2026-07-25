@@ -1,0 +1,141 @@
+/* @fitmate/pixel-ui — global base styles.
+   Import AFTER tokens.css (or rely on the app entry importing both):
+     @import "@fitmate/pixel-ui/tokens.css";
+     @import "@fitmate/pixel-ui/base.css";
+   Contains: global rendering rules, pixel scrollbar/selection/focus,
+   and framework-agnostic component classes (.pixel-btn/.pixel-card/...). */
+
+* {
+  box-sizing: border-box;
+  image-rendering: pixelated;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  min-height: 100vh;
+  font-family: var(--font-main);
+  font-size: 18px;
+  line-height: 1.4;
+  background-color: var(--color-background);
+  color: var(--color-on-background);
+  overflow-x: hidden;
+}
+
+body,
+button,
+input,
+textarea,
+select {
+  font-family: var(--font-main);
+}
+
+/* Icon fonts must never be overridden by the pixel font */
+.material-symbols-outlined {
+  font-family: "Material Symbols Outlined" !important;
+}
+
+::selection {
+  background-color: var(--pixel-blue);
+  color: var(--pixel-white);
+}
+
+/* ===== Pixel scrollbar ===== */
+::-webkit-scrollbar {
+  width: 14px;
+  height: 14px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-surface-container);
+  border: 2px solid var(--pixel-black);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--pixel-gray);
+  border: 2px solid var(--pixel-black);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--pixel-blue);
+}
+
+/* ===== Focus & touch ===== */
+*:focus-visible {
+  outline: 3px solid var(--pixel-blue);
+  outline-offset: 2px;
+}
+
+button,
+a,
+input,
+textarea,
+select {
+  -webkit-tap-highlight-color: rgba(212, 165, 51, 0.35);
+}
+
+/* ===== Pixel component classes ===== */
+
+/* press-down feedback for any clickable pixel element */
+.pixel-press:active {
+  position: relative;
+  top: 2px;
+  left: 2px;
+}
+
+.pixel-btn {
+  font-family: var(--font-main);
+  border: 3px solid var(--pixel-black);
+  box-shadow: 4px 4px 0px 0px #101010;
+  transition: background-color 0.1s, color 0.1s, transform 0.1s;
+}
+
+.pixel-btn:hover:not(:disabled) {
+  transform: scale(1.05);
+}
+
+.pixel-btn:active:not(:disabled) {
+  transform: scale(0.95) translate(2px, 2px);
+  box-shadow: 2px 2px 0px 0px #101010;
+}
+
+.pixel-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: 2px 2px 0px 0px #666666;
+}
+
+.pixel-card {
+  background: var(--color-surface);
+  border: 4px solid var(--pixel-black);
+  box-shadow: 6px 6px 0px 0px #101010;
+}
+
+.pixel-panel {
+  background: var(--color-surface);
+  border: 3px solid var(--pixel-black);
+  box-shadow: 4px 4px 0px 0px #101010;
+}
+
+.pixel-input {
+  background: var(--color-surface);
+  border: 3px solid var(--pixel-black);
+  box-shadow: inset 2px 2px 0px 0px rgba(16, 16, 16, 0.35);
+  font-family: var(--font-main);
+}
+
+.pixel-input:focus {
+  border-color: var(--pixel-blue);
+  outline: none;
+}
+
+/* On dark surfaces black borders vanish — use gray borders/shadows there */
+[data-theme="dark"] .pixel-card,
+[data-theme="dark"] .pixel-panel {
+  border-color: var(--pixel-gray);
+  box-shadow: 4px 4px 0px 0px #000000;
+}

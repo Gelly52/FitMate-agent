@@ -76,13 +76,13 @@ export default defineComponent({
 
 .skills-title {
   margin: 0;
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 600;
 }
 
 .skills-subtitle {
   margin: 0;
-  font-size: 13px;
+  font-size: 15px;
   opacity: 0.6;
   line-height: 1.5;
 }
@@ -92,7 +92,7 @@ export default defineComponent({
   padding: 32px 0;
   text-align: center;
   opacity: 0.5;
-  font-size: 14px;
+  font-size: 16px;
 }
 
 .skills-list {
@@ -103,9 +103,10 @@ export default defineComponent({
 
 .skill-card {
   padding: 14px 16px;
-  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-  border-radius: 10px;
-  background: var(--card-bg, rgba(255, 255, 255, 0.02));
+  border: 3px solid var(--color-outline);
+  border-radius: 0;
+  background: var(--color-surface-container);
+  box-shadow: 4px 4px 0 0 #101010;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -118,18 +119,18 @@ export default defineComponent({
 }
 
 .skill-index {
-  font-size: 12px;
+  font-size: 14px;
   opacity: 0.4;
   font-variant-numeric: tabular-nums;
 }
 
 .skill-name {
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 600;
 }
 
 .skill-desc {
-  font-size: 13px;
+  font-size: 15px;
   opacity: 0.75;
   line-height: 1.5;
 }
@@ -138,17 +139,18 @@ export default defineComponent({
   display: flex;
   align-items: flex-start;
   gap: 6px;
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.5;
 }
 
 .skill-trigger-label {
   flex-shrink: 0;
   padding: 1px 6px;
-  border-radius: 4px;
-  background: var(--accent-color-soft, rgba(100, 149, 237, 0.15));
-  color: var(--accent-color, #6495ed);
-  font-size: 11px;
+  border-radius: 0;
+  border: 2px solid var(--color-outline);
+  background: var(--pixel-blue);
+  color: var(--pixel-white);
+  font-size: 13px;
 }
 
 .skill-trigger-text {

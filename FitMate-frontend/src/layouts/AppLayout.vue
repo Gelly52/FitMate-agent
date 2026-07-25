@@ -1,8 +1,8 @@
 <template>
-  <div class="flex h-screen overflow-hidden bg-background text-on-background font-inter antialiased">
+  <div class="flex h-screen overflow-hidden bg-background text-on-background">
     <SideNav :expanded="isSideNavExpanded" @toggle="toggleSideNav" />
     <div
-      class="flex-1 flex flex-col h-screen transition-all duration-200 ease-out"
+      class="flex-1 flex flex-col h-screen transition-all duration-150 ease-out"
       :class="isSideNavExpanded ? 'md:ml-60' : 'md:ml-20'"
     >
       <TopBar :title="currentTitle" @logout="handleLogout" />
@@ -12,7 +12,7 @@
     </div>
     <!-- Mobile sidebar offset spacer -->
     <div
-      class="hidden md:block fixed left-0 top-0 h-full z-40 pointer-events-none transition-all duration-200 ease-out"
+      class="hidden md:block fixed left-0 top-0 h-full z-40 pointer-events-none transition-all duration-150 ease-out"
       :class="isSideNavExpanded ? 'w-60' : 'w-20'"
     ></div>
   </div>

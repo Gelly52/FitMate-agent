@@ -128,7 +128,7 @@ export default defineComponent({
 }
 .section-desc {
   color: var(--color-on-surface-variant);
-  font-size: 13px;
+  font-size: 15px;
   margin-bottom: 16px;
 }
 .memory-filters {
@@ -139,22 +139,31 @@ export default defineComponent({
 }
 .filter-btn {
   padding: 4px 12px;
-  border: 1px solid var(--color-outline-variant);
-  background: transparent;
+  border: 2px solid var(--color-outline);
+  background: var(--color-surface-container);
   color: var(--color-on-surface-variant);
-  border-radius: 12px;
+  border-radius: 0;
   cursor: pointer;
-  font-size: 13px;
-  transition: all 0.2s ease;
+  font-size: 15px;
+  box-shadow: 2px 2px 0 0 #101010;
+  transition: color 0.1s, background-color 0.1s, transform 0.1s;
 }
 .filter-btn:hover {
   color: var(--color-on-surface);
-  border-color: var(--color-on-surface-variant);
+  background: var(--color-surface-container-high);
+}
+.filter-btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
 }
 .filter-btn-active {
   background: var(--color-primary);
-  color: var(--color-surface);
-  border-color: var(--color-primary);
+  color: var(--color-on-primary);
+  border-color: var(--color-outline);
+}
+.filter-btn-active:hover {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
 }
 .memory-list {
   display: flex;
@@ -162,56 +171,66 @@ export default defineComponent({
   gap: 12px;
 }
 .memory-item {
-  border: 1px solid var(--color-outline-variant);
-  border-radius: 8px;
+  border: 3px solid var(--color-outline);
+  border-radius: 0;
   padding: 12px;
-  background: var(--color-surface-container-low);
+  background: var(--color-surface-container);
+  box-shadow: 4px 4px 0 0 #101010;
 }
 .memory-item-head {
   display: flex;
   align-items: center;
   gap: 8px;
   margin-bottom: 8px;
-  font-size: 12px;
+  font-size: 14px;
 }
 .memory-type {
   padding: 2px 8px;
-  border-radius: 4px;
-  color: white;
+  border-radius: 0;
+  border: 2px solid var(--pixel-black);
+  color: var(--pixel-white);
   font-weight: 500;
-  font-size: 11px;
+  font-size: 13px;
   letter-spacing: 0.04em;
 }
 .type-fact {
-  background: #5b8def;
+  background: var(--pixel-blue);
 }
 .type-episodic {
-  background: #f59e0b;
+  background: var(--pixel-yellow);
+  color: var(--pixel-black);
 }
 .type-snapshot {
-  background: #8b5cf6;
+  background: var(--pixel-gray);
 }
 .type-insight {
-  background: #10b981;
+  background: var(--pixel-green);
 }
 .memory-time {
   color: var(--color-on-surface-variant);
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-main);
 }
 .delete-btn {
   margin-left: auto;
-  background: transparent;
-  border: none;
-  color: #ef4444;
+  background: var(--pixel-red);
+  border: 2px solid var(--color-outline);
+  color: var(--pixel-white);
   cursor: pointer;
-  font-size: 12px;
+  font-size: 13px;
   padding: 2px 6px;
+  border-radius: 0;
+  box-shadow: 2px 2px 0 0 #101010;
+  transition: transform 0.1s;
 }
 .delete-btn:hover {
-  text-decoration: underline;
+  transform: scale(1.05);
+}
+.delete-btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
 }
 .memory-content {
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1.5;
   color: var(--color-on-surface);
 }
@@ -220,15 +239,21 @@ export default defineComponent({
 }
 .danger-btn {
   padding: 6px 16px;
-  background: #ef4444;
-  color: white;
-  border: none;
-  border-radius: 6px;
+  background: var(--pixel-red);
+  color: var(--pixel-white);
+  border: 3px solid var(--color-outline);
+  border-radius: 0;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 15px;
+  box-shadow: 4px 4px 0 0 #101010;
+  transition: transform 0.1s;
 }
 .danger-btn:hover {
-  background: #dc2626;
+  transform: scale(1.05);
+}
+.danger-btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 0 #101010;
 }
 .loading,
 .empty {

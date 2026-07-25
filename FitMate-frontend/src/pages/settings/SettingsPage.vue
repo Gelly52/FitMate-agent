@@ -2,8 +2,8 @@
 <template>
   <div class="settings-page px-lg pb-lg overflow-y-auto">
     <header class="mb-xl mt-lg">
-      <h1 class="font-headline-md text-headline-md text-on-surface tracking-tight">设置</h1>
-      <p class="font-inter text-label-xs text-on-surface-variant uppercase tracking-widest opacity-70 mt-xs">
+      <h1 class="text-headline-md text-on-surface tracking-tight">设置</h1>
+      <p class="text-label-xs text-on-surface-variant uppercase tracking-widest opacity-70 mt-xs">
         Manage your account &amp; appearance
       </p>
     </header>

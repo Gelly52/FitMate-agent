@@ -537,18 +537,23 @@ export default {
   gap: 8px;
 }
 
-/* ===== Header：可点击折叠/展开（纯文字 + 下拉箭头，无背景框） ===== */
+/* ===== Header：可点击折叠/展开（像素风：粗分隔线 + 方块指示灯） ===== */
 .reasoning-trace-header {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 2px 0;
+  padding: 2px 0 4px;
   cursor: pointer;
   user-select: none;
   background: transparent;
   border: none;
+  border-bottom: 2px solid var(--color-outline-variant);
   border-radius: 0;
-  transition: color 0.2s ease;
+  transition: color 0.1s, border-color 0.1s;
+}
+
+.reasoning-trace-header:active {
+  transform: translate(1px, 1px);
 }
 
 .reasoning-trace-title {
@@ -559,11 +564,12 @@ export default {
 }
 
 .reasoning-trace-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-primary-fixed-dim);
-  animation: reasoning-pulse 1.4s ease-in-out infinite;
+  width: 8px;
+  height: 8px;
+  border-radius: 0;
+  background: var(--color-primary);
+  border: 2px solid var(--color-outline);
+  animation: reasoning-pulse 1s steps(2, end) infinite;
   flex-shrink: 0;
 }
 
@@ -573,16 +579,15 @@ export default {
 }
 
 .reasoning-trace-label {
-  font-family: "Inter", sans-serif;
-  font-size: 12px;
+  font-size: 15px;
   color: var(--color-on-surface-variant);
   letter-spacing: 0.03em;
-  transition: color 0.2s ease;
+  text-transform: uppercase;
+  transition: color 0.1s;
 }
 
 .reasoning-trace-meta {
-  font-family: "Inter", sans-serif;
-  font-size: 11px;
+  font-size: 14px;
   color: var(--color-on-surface-variant);
   opacity: 0.7;
 }
@@ -591,7 +596,7 @@ export default {
   flex-shrink: 0;
   font-size: 16px;
   color: var(--color-on-surface-variant);
-  transition: transform 0.2s ease, color 0.2s ease;
+  transition: color 0.1s;
 }
 
 .reasoning-trace-header:hover .reasoning-trace-label,
@@ -603,7 +608,7 @@ export default {
   color: var(--color-primary);
 }
 
-/* ===== Body：融合时间线（无背景框，与 header 风格一致） ===== */
+/* ===== Body：融合时间线 ===== */
 .reasoning-trace-body {
   padding: 4px 0 4px 4px;
 }
@@ -631,36 +636,39 @@ export default {
 }
 
 .reasoning-turn-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 0;
   background: var(--color-surface);
-  border: 1.5px solid color-mix(in srgb, var(--color-primary) 35%, transparent);
+  border: 2px solid var(--color-primary);
   cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+  transition: background 0.1s, border-color 0.1s;
   flex-shrink: 0;
 }
 
 .reasoning-turn-dot:hover {
   border-color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  background: var(--color-surface-container-high);
+}
+
+.reasoning-turn-dot:active {
+  transform: translate(1px, 1px);
 }
 
 .reasoning-turn-dot.is-collapsed {
   background: var(--color-primary);
   border-color: var(--color-primary);
-  transform: scale(0.85);
 }
 
 .reasoning-turn-dot.is-streaming {
-  animation: reasoning-pulse 1.4s ease-in-out infinite;
+  animation: reasoning-pulse 1s steps(2, end) infinite;
 }
 
 .reasoning-turn-line {
-  width: 1.5px;
+  width: 2px;
   flex: 1;
   min-height: 12px;
-  background: var(--color-surface-container);
+  background: var(--color-outline-variant);
   margin-top: 4px;
 }
 
@@ -672,8 +680,12 @@ export default {
 
 .reasoning-turn-step {
   cursor: pointer;
-  transition: color 0.2s ease;
+  transition: color 0.1s;
   padding-top: 1px;
+}
+
+.reasoning-turn-step:active {
+  transform: translate(1px, 1px);
 }
 
 .reasoning-turn-step:hover .reasoning-merged-step-label {
@@ -683,11 +695,11 @@ export default {
 .reasoning-turn-thinking {
   margin-top: 4px;
   padding-left: 12px;
-  border-left: 1px dashed var(--color-surface-container);
+  border-left: 2px solid var(--color-outline-variant);
   overflow: hidden;
   max-height: 2000px;
-  transition: max-height 0.25s ease, opacity 0.2s ease, margin 0.2s ease,
-    padding 0.2s ease, border-color 0.2s ease;
+  transition: max-height 0.15s steps(4), opacity 0.15s steps(3), margin 0.15s,
+    padding 0.15s, border-color 0.15s;
 }
 
 .reasoning-turn-thinking.is-collapsed {
@@ -698,7 +710,7 @@ export default {
   border-left-color: transparent;
 }
 
-/* ===== Standalone step：工具调用 / 最终答案等（无圆点） ===== */
+/* ===== Standalone step：工具调用 / 最终答案等（无方块） ===== */
 .reasoning-step-entry {
   display: flex;
   gap: 10px;
@@ -706,7 +718,7 @@ export default {
 }
 
 .reasoning-step-placeholder {
-  width: 8px;
+  width: 10px;
   flex-shrink: 0;
 }
 
@@ -719,15 +731,14 @@ export default {
 
 /* ===== 共用文本样式 ===== */
 .reasoning-merged-step-label {
-  font-size: 12px;
-  font-family: "Inter", sans-serif;
+  font-size: 14px;
   color: var(--color-on-surface-variant);
   line-height: 1.4;
 }
 
 .reasoning-merged-step-meta {
   margin-left: 4px;
-  font-size: 11px;
+  font-size: 13px;
   color: var(--color-on-surface-variant);
   opacity: 0.7;
 }
@@ -736,8 +747,7 @@ export default {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
-  font-family: "Inter", sans-serif;
+  font-size: 13px;
   color: var(--color-on-surface-variant);
   letter-spacing: 0.03em;
   opacity: 0.8;
@@ -745,25 +755,25 @@ export default {
 }
 
 .reasoning-merged-thinking-content {
-  font-size: 13px;
-  line-height: 1.7;
+  font-size: 15px;
+  line-height: 1.6;
   color: var(--color-on-surface-variant);
   white-space: pre-wrap;
   word-break: break-word;
-  font-style: italic;
-  background: color-mix(in srgb, var(--color-primary) 6%, transparent);
-  border-radius: 6px;
+  background: var(--color-surface-container);
+  border: 2px solid var(--color-outline-variant);
+  border-radius: 0;
   padding: 8px 12px;
 }
 
 .reasoning-merged-thinking-muted {
-  color: color-mix(in srgb, var(--color-on-surface-variant) 60%, transparent);
-  font-style: italic;
+  color: var(--color-on-surface-variant);
+  opacity: 0.6;
 }
 
 .reasoning-trace-collapsed-hint {
   margin-top: 2px;
-  font-size: 11px;
+  font-size: 13px;
   color: var(--color-on-surface-variant);
   opacity: 0.6;
   white-space: nowrap;
@@ -779,15 +789,14 @@ export default {
   margin-top: 6px;
   margin-left: 4px;
   padding-left: 10px;
-  border-left: 1px solid var(--color-surface-container);
+  border-left: 2px solid var(--color-outline-variant);
 }
 
 .kb-substep {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
-  font-family: "Inter", sans-serif;
+  font-size: 14px;
   color: var(--color-on-surface-variant);
 }
 
@@ -798,23 +807,23 @@ export default {
 
 .kb-substep-label {
   color: var(--color-on-surface-variant);
-  transition: color 0.2s ease;
+  transition: color 0.1s;
 }
 
 .kb-substep-running {
-  color: var(--color-primary-fixed-dim);
-  font-size: 11px;
-  animation: reasoning-pulse 1.4s ease-in-out infinite;
+  color: var(--pixel-yellow);
+  font-size: 13px;
+  animation: reasoning-pulse 1s steps(2, end) infinite;
 }
 
 .kb-substep-done {
-  color: var(--color-primary-fixed-dim);
-  font-size: 11px;
+  color: var(--pixel-green);
+  font-size: 13px;
 }
 
 .kb-substep-detail {
   color: var(--color-on-surface-variant);
-  font-size: 11px;
+  font-size: 13px;
   margin-left: 4px;
   opacity: 0.7;
 }

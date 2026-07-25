@@ -1,10 +1,10 @@
 <template>
   <div class="kb-page">
     <header class="kb-header">
-      <h1 class="font-inter text-display-lg text-on-surface tracking-tight">
+      <h1 class="font-pixel text-display-lg text-on-surface">
         Knowledge Base
       </h1>
-      <p class="font-inter text-body-base text-on-surface-variant">
+      <p class="font-pixel text-body-base text-on-surface-variant">
         上传 .txt 文档，切换聊天的 RAG 模式即可基于知识库问答。
       </p>
     </header>
@@ -45,7 +45,7 @@
         <!-- Doc list -->
         <section class="kb-section">
           <div class="kb-section-head">
-            <h2 class="font-inter text-label-sm text-on-surface uppercase tracking-widest">
+            <h2 class="font-pixel text-label-sm text-on-surface uppercase tracking-widest">
               Uploaded Documents
             </h2>
           </div>
@@ -76,7 +76,7 @@
       <div class="kb-col">
         <section class="kb-section">
           <div class="kb-section-head kb-section-head-row">
-            <h2 class="font-inter text-label-sm text-on-surface uppercase tracking-widest">
+            <h2 class="font-pixel text-label-sm text-on-surface uppercase tracking-widest">
               Execution Log
             </h2>
             <span class="kb-live">
@@ -278,48 +278,52 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  border-bottom: 1px solid var(--color-surface-container);
+  border-bottom: 3px solid var(--color-outline);
   padding-bottom: 24px;
   position: relative;
 }
 .kb-header::after {
   content: "";
   position: absolute;
-  bottom: -1px;
+  bottom: -3px;
   left: 0;
-  width: 60px;
-  height: 2px;
-  background: linear-gradient(90deg, var(--color-primary), transparent);
-  box-shadow: 0 0 8px color-mix(in srgb, var(--color-primary) 70%, transparent);
+  width: 64px;
+  height: 6px;
+  background: var(--color-primary);
 }
 
+/* ===== 统计：像素 Stat Card（3px 边框 + 顶部主题色条 + 硬阴影） ===== */
 .kb-stats {
   display: flex;
-  gap: 48px;
+  gap: 24px;
 }
 
 .kb-stat {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 128px;
+  padding: 12px 16px;
+  background: var(--color-surface);
+  border: 3px solid var(--color-outline);
+  border-top: 5px solid var(--color-primary);
+  box-shadow: 3px 3px 0 0 #101010;
 }
 
 .kb-stat-value {
-  font-size: 24px;
-  font-weight: 500;
+  font-size: 28px;
   color: var(--color-on-surface);
   font-variant-numeric: tabular-nums;
-  font-family: ui-monospace, "Inter", sans-serif;
-  text-shadow: 0 0 10px color-mix(in srgb, var(--color-primary) 30%, transparent);
 }
 
 .kb-stat-label {
-  font-size: 9px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--color-on-surface-variant);
 }
 
+/* ===== 上传区：3px 虚线边框，悬停变蓝 ===== */
 .kb-dropzone {
   display: flex;
   flex-direction: column;
@@ -327,34 +331,19 @@ export default {
   justify-content: center;
   gap: 8px;
   padding: 48px 32px;
-  border: 1px dashed color-mix(in srgb, var(--color-primary) 30%, var(--color-outline-variant));
-  border-radius: 10px;
+  border: 3px dashed var(--color-outline);
+  border-radius: 0;
   background: var(--color-surface-container-low);
   cursor: pointer;
-  transition: border-color 0.25s ease, background 0.25s ease, box-shadow 0.25s ease;
+  transition: border-color 0.15s, background-color 0.15s, box-shadow 0.15s;
   position: relative;
-  overflow: hidden;
-}
-.kb-dropzone::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, var(--color-primary), transparent);
-  opacity: 0;
-  transition: opacity 0.25s ease;
 }
 .kb-dropzone:hover,
 .kb-dropzone-active {
-  border-color: var(--color-primary-fixed-dim);
-  background: color-mix(in srgb, var(--color-primary) 5%, var(--color-surface-container-low));
-  box-shadow: 0 0 20px color-mix(in srgb, var(--color-primary) 10%, transparent), inset 0 0 20px color-mix(in srgb, var(--color-primary) 3%, transparent);
-}
-.kb-dropzone:hover::before,
-.kb-dropzone-active::before {
-  opacity: 1;
+  border-color: var(--pixel-blue);
+  border-style: solid;
+  background: var(--color-surface-container);
+  box-shadow: 4px 4px 0 0 #101010;
 }
 
 .kb-file-input {
@@ -367,17 +356,17 @@ export default {
 }
 
 .kb-dropzone-text {
-  font-size: 14px;
+  font-size: 16px;
   color: var(--color-on-surface-variant);
 }
 
 .kb-dropzone-text em {
-  color: var(--color-primary-fixed-dim);
+  color: var(--color-primary);
   font-style: normal;
 }
 
 .kb-dropzone-hint {
-  font-size: 11px;
+  font-size: 14px;
   color: var(--color-on-surface-variant);
 }
 
@@ -391,58 +380,59 @@ export default {
   display: flex;
   align-items: center;
   position: relative;
-  padding-left: 10px;
+  padding-left: 12px;
 }
 .kb-section-head::before {
   content: "";
   position: absolute;
   left: 0;
-  top: 2px;
-  bottom: 2px;
-  width: 2px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
   background: var(--color-primary);
-  border-radius: 2px;
-  box-shadow: 0 0 6px color-mix(in srgb, var(--color-primary) 70%, transparent);
 }
 .kb-section-head h2 {
-  font-family: ui-monospace, "Inter", sans-serif !important;
+  font-size: 15px;
   letter-spacing: 0.14em !important;
-  text-shadow: 0 0 8px color-mix(in srgb, var(--color-primary) 25%, transparent);
 }
 
+/* ===== 文档列表：带边框面板 + 2px 分隔线的列表行 ===== */
 .kb-file-list {
   display: flex;
   flex-direction: column;
+  background: var(--color-surface);
+  border: 3px solid var(--color-outline);
+  box-shadow: 4px 4px 0 0 #101010;
 }
 
 .kb-file-item {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 0 12px 10px;
-  border-bottom: 1px solid var(--color-surface-container);
+  padding: 12px 12px;
+  border-bottom: 2px solid var(--color-outline-variant);
   position: relative;
-  border-radius: 4px;
-  transition: background 0.2s ease;
+  border-radius: 0;
+  transition: background-color 0.15s;
+}
+.kb-file-item:last-child {
+  border-bottom: none;
 }
 .kb-file-item::before {
   content: "";
   position: absolute;
   left: 0;
-  top: 50%;
-  width: 3px;
-  height: 0;
+  top: 0;
+  bottom: 0;
+  width: 0;
   background: var(--color-primary);
-  border-radius: 2px;
-  box-shadow: 0 0 6px color-mix(in srgb, var(--color-primary) 70%, transparent);
-  transition: height 0.2s ease, top 0.2s ease;
+  transition: width 0.1s steps(2);
 }
 .kb-file-item:hover::before {
-  height: 60%;
-  top: 20%;
+  width: 4px;
 }
 .kb-file-item:hover {
-  background: color-mix(in srgb, var(--color-primary) 3%, transparent);
+  background: var(--color-surface-container-low);
 }
 
 .kb-file-icon {
@@ -452,7 +442,7 @@ export default {
 
 .kb-file-name {
   flex: 1;
-  font-size: 14px;
+  font-size: 16px;
   color: var(--color-on-surface);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -460,7 +450,7 @@ export default {
 }
 
 .kb-file-meta {
-  font-size: 9px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   color: var(--color-on-surface-variant);
   flex-shrink: 0;
@@ -472,13 +462,13 @@ export default {
   justify-content: center;
   width: 26px;
   height: 26px;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
+  border: 2px solid var(--color-outline);
+  border-radius: 0;
+  background: var(--color-surface);
   color: var(--color-on-surface-variant);
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.2s ease, color 0.2s ease, background 0.2s ease;
+  transition: opacity 0.15s, color 0.1s, background-color 0.1s;
   flex-shrink: 0;
 }
 .kb-file-delete .material-symbols-outlined {
@@ -488,54 +478,64 @@ export default {
   opacity: 1;
 }
 .kb-file-delete:hover {
-  color: var(--color-error);
-  background: color-mix(in srgb, var(--color-error) 10%, transparent);
+  color: var(--pixel-white);
+  background: var(--pixel-red);
+  border-color: var(--color-outline);
+}
+.kb-file-delete:active {
+  transform: translate(1px, 1px);
 }
 
 .kb-empty {
-  padding: 24px 0;
-  font-size: 13px;
+  padding: 24px 16px;
+  font-size: 15px;
   color: var(--color-on-surface-variant);
+  border: 2px dashed var(--color-outline-variant);
+  text-align: center;
 }
 
 .kb-section-head-row {
   justify-content: space-between;
 }
 
+/* ===== 执行日志：带边框面板 + 2px 分隔线 ===== */
 .kb-log-list {
   display: flex;
   flex-direction: column;
+  background: var(--color-surface);
+  border: 3px solid var(--color-outline);
+  box-shadow: 4px 4px 0 0 #101010;
 }
 
 .kb-log-item {
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--color-surface-container);
+  padding: 12px;
+  border-bottom: 2px solid var(--color-outline-variant);
+}
+.kb-log-item:last-child {
+  border-bottom: none;
 }
 
 .kb-log-time {
-  font-size: 12px;
-  color: var(--color-primary-fixed-dim);
+  font-size: 14px;
+  color: var(--color-primary);
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
-  font-family: ui-monospace, monospace;
-  text-shadow: 0 0 6px color-mix(in srgb, var(--color-primary) 60%, transparent);
 }
 
 .kb-log-text {
   flex: 1;
-  font-size: 13px;
+  font-size: 15px;
   color: var(--color-on-surface-variant);
-  font-family: ui-monospace, monospace;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .kb-log-status {
-  font-size: 12px;
+  font-size: 14px;
   color: var(--color-on-surface-variant);
   flex-shrink: 0;
 }
@@ -549,19 +549,20 @@ export default {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 9px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--color-on-surface-variant);
 }
 
+/* 方形像素 LIVE 指示灯，闪烁不带光晕 */
 .kb-live-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #7ee787;
-  box-shadow: 0 0 8px #7ee787;
-  animation: kb-pulse 1.6s ease-in-out infinite;
+  width: 8px;
+  height: 8px;
+  border-radius: 0;
+  background: var(--pixel-green);
+  border: 1px solid var(--color-outline);
+  animation: kb-pulse 1.6s steps(2) infinite;
 }
 
 @keyframes kb-pulse {

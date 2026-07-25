@@ -3,10 +3,10 @@
     <div class="form-main">
       <!-- Header -->
       <header class="form-header">
-        <h1 class="font-inter text-display-lg text-on-surface tracking-tight">
+        <h1 class="text-display-lg text-on-surface tracking-tight">
           Body Metrics
         </h1>
-        <p class="font-inter text-body-base text-on-surface-variant">
+        <p class="text-body-base text-on-surface-variant">
           记录今天的身体指标与恢复状态。
         </p>
       </header>
@@ -30,7 +30,7 @@
       <section class="form-section">
         <div class="form-section-head">
           <span class="material-symbols-outlined text-primary" style="font-size: 20px;">monitor_weight</span>
-          <h2 class="font-inter text-label-sm text-on-surface uppercase tracking-widest">
+          <h2 class="text-label-sm text-on-surface uppercase tracking-widest">
             Daily Metrics
           </h2>
         </div>
@@ -139,7 +139,7 @@
       <section v-if="recentMetrics.length > 0" class="form-section">
         <div class="form-section-head">
           <span class="material-symbols-outlined text-primary" style="font-size: 20px;">history</span>
-          <h2 class="font-inter text-label-sm text-on-surface uppercase tracking-widest">
+          <h2 class="text-label-sm text-on-surface uppercase tracking-widest">
             Recent Changes
           </h2>
         </div>
@@ -206,7 +206,7 @@
 
     <!-- Today snapshot -->
     <aside class="form-aside">
-      <h3 class="font-inter text-label-sm text-on-surface-variant uppercase tracking-widest aside-title">
+      <h3 class="text-label-sm text-on-surface-variant uppercase tracking-widest aside-title">
         Today Snapshot
       </h3>
       <div class="aside-stat">
@@ -449,26 +449,25 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  border-bottom: 1px solid var(--color-surface-container);
-  padding-bottom: 24px;
+  border-bottom: 3px solid var(--color-outline);
+  padding-bottom: 20px;
   position: relative;
 }
 .form-header::after {
   content: "";
   position: absolute;
-  bottom: -1px;
+  bottom: -3px;
   left: 0;
-  width: 60px;
-  height: 2px;
-  background: linear-gradient(90deg, var(--color-primary), transparent);
-  box-shadow: 0 0 8px color-mix(in srgb, var(--color-primary) 70%, transparent);
+  width: 64px;
+  height: 6px;
+  background: var(--color-primary);
 }
 
 .form-section {
   display: flex;
   flex-direction: column;
   gap: 20px;
-  border-bottom: 1px solid var(--color-surface-container);
+  border-bottom: 2px solid var(--color-outline-variant);
   padding-bottom: 32px;
 }
 
@@ -477,7 +476,7 @@ export default {
   align-items: center;
   gap: 8px;
   position: relative;
-  padding-left: 10px;
+  padding-left: 12px;
 }
 .form-section-head::before {
   content: "";
@@ -485,15 +484,11 @@ export default {
   left: 0;
   top: 2px;
   bottom: 2px;
-  width: 2px;
+  width: 4px;
   background: var(--color-primary);
-  border-radius: 2px;
-  box-shadow: 0 0 6px color-mix(in srgb, var(--color-primary) 70%, transparent);
 }
 .form-section-head h2 {
-  font-family: ui-monospace, "Inter", sans-serif !important;
-  letter-spacing: 0.14em !important;
-  text-shadow: 0 0 8px color-mix(in srgb, var(--color-primary) 25%, transparent);
+  letter-spacing: 0.14em;
 }
 
 .metrics-grid {
@@ -516,7 +511,7 @@ export default {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 9px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--color-on-surface-variant);
@@ -527,27 +522,27 @@ export default {
 }
 
 .group:focus-within .metric-current {
-  color: var(--color-primary-fixed-dim);
+  color: var(--color-primary);
 }
 
 .metric-input {
-  background: transparent;
-  border: none;
-  border-bottom: 1px solid var(--color-outline-variant);
+  background: var(--color-surface);
+  border: 3px solid var(--color-outline);
+  box-shadow: inset 2px 2px 0 0 rgba(16, 16, 16, 0.25);
   color: var(--color-on-surface);
-  font-size: 15px;
-  font-family: "Inter", sans-serif;
-  padding: 4px 0;
+  font-size: 16px;
+  padding: 6px 10px;
   outline: none;
-  transition: border-color 0.2s ease;
+  transition: border-color 0.1s;
 }
 
 .metric-input:focus {
-  border-bottom-color: var(--color-primary);
+  border-color: var(--pixel-blue);
 }
 
 .metric-input::placeholder {
-  color: var(--color-surface-bright);
+  color: var(--color-on-surface-variant);
+  opacity: 0.6;
 }
 
 .metric-input::-webkit-outer-spin-button,
@@ -561,24 +556,24 @@ export default {
 }
 
 .metric-textarea {
-  background: transparent;
-  border: 1px solid var(--color-outline-variant);
-  border-radius: 0.5rem;
+  background: var(--color-surface);
+  border: 3px solid var(--color-outline);
+  box-shadow: inset 2px 2px 0 0 rgba(16, 16, 16, 0.25);
   color: var(--color-on-surface);
-  font-size: 15px;
-  font-family: "Inter", sans-serif;
+  font-size: 16px;
   padding: 10px 12px;
   outline: none;
   resize: vertical;
-  transition: border-color 0.2s ease;
+  transition: border-color 0.1s;
 }
 
 .metric-textarea:focus {
-  border-color: var(--color-primary);
+  border-color: var(--pixel-blue);
 }
 
 .metric-textarea::placeholder {
-  color: var(--color-surface-bright);
+  color: var(--color-on-surface-variant);
+  opacity: 0.6;
 }
 
 .fatigue-toggle {
@@ -589,26 +584,33 @@ export default {
 .fatigue-pill {
   flex: 1;
   padding: 8px 0;
-  border: 1px solid var(--color-outline-variant);
-  border-radius: 0.5rem;
-  background: transparent;
+  border: 2px solid var(--color-outline);
+  background: var(--color-surface);
   color: var(--color-on-surface-variant);
-  font-size: 13px;
-  font-family: "Inter", sans-serif;
+  font-size: 15px;
   cursor: pointer;
-  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+  box-shadow: 2px 2px 0 0 #101010;
+  transition: background-color 0.1s, color 0.1s, transform 0.1s, box-shadow 0.1s;
 }
 
 .fatigue-pill:hover {
-  color: var(--color-on-surface-variant);
-  border-color: var(--color-on-surface-variant);
+  color: var(--color-on-surface);
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0 0 #101010;
+}
+
+.fatigue-pill:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
 }
 
 .fatigue-pill-active {
   color: var(--color-on-primary);
-  background: var(--color-primary-fixed-dim);
-  border-color: var(--color-primary-fixed-dim);
-  box-shadow: 0 0 10px color-mix(in srgb, var(--color-primary) 40%, transparent);
+  background: var(--color-primary);
+}
+
+.fatigue-pill-active:hover {
+  color: var(--color-on-primary);
 }
 
 .history-list {
@@ -621,18 +623,18 @@ export default {
   align-items: center;
   gap: 16px;
   padding: 10px 0;
-  border-bottom: 1px solid var(--color-surface-container);
+  border-bottom: 2px solid var(--color-outline-variant);
 }
 
 .history-date {
-  font-size: 12px;
+  font-size: 14px;
   color: var(--color-on-surface-variant);
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
 }
 
 .history-detail {
-  font-size: 13px;
+  font-size: 15px;
   color: var(--color-on-surface-variant);
 }
 
@@ -645,66 +647,46 @@ export default {
   padding: 10px 28px;
   background: var(--color-primary);
   color: var(--color-on-primary);
-  border: none;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 600;
+  border: 3px solid var(--color-outline);
+  box-shadow: 4px 4px 0 0 #101010;
+  font-size: 14px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  font-family: ui-monospace, "Inter", sans-serif;
   cursor: pointer;
-  transition: background 0.2s ease, opacity 0.2s ease, box-shadow 0.2s ease;
-  position: relative;
-  overflow: hidden;
+  transition: transform 0.1s, box-shadow 0.1s, opacity 0.1s;
 }
-.form-submit-btn::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-  transition: left 0.4s ease;
-}
+
 .form-submit-btn:hover:not(:disabled) {
-  background: var(--color-primary-fixed-dim);
-  box-shadow: 0 0 16px color-mix(in srgb, var(--color-primary) 50%, transparent);
+  transform: translate(-1px, -1px);
+  box-shadow: 5px 5px 0 0 #101010;
 }
-.form-submit-btn:hover:not(:disabled)::before {
-  left: 100%;
+
+.form-submit-btn:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 0 #101010;
 }
 
 .form-submit-btn:disabled {
-  opacity: 0.4;
+  opacity: 0.5;
   cursor: not-allowed;
+  box-shadow: 2px 2px 0 0 #666666;
 }
 
 .form-aside {
   width: 280px;
   flex-shrink: 0;
-  border-left: 1px solid var(--color-surface-container);
+  border-left: 3px solid var(--color-outline);
   padding: 32px 24px;
   display: flex;
   flex-direction: column;
   gap: 4px;
   position: relative;
 }
-.form-aside::before {
-  content: "";
-  position: absolute;
-  left: -1px;
-  top: 32px;
-  width: 2px;
-  height: 40px;
-  background: linear-gradient(180deg, var(--color-primary), transparent);
-  box-shadow: 0 0 8px color-mix(in srgb, var(--color-primary) 70%, transparent);
-}
 
 .aside-title {
   margin-bottom: 16px;
   padding-bottom: 12px;
-  border-bottom: 1px solid var(--color-surface-container);
+  border-bottom: 2px solid var(--color-outline-variant);
 }
 
 .aside-stat {
@@ -715,27 +697,25 @@ export default {
 }
 
 .aside-stat-label {
-  font-size: 11px;
+  font-size: 14px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--color-on-surface-variant);
 }
 
 .aside-stat-value {
-  font-size: 15px;
+  font-size: 17px;
   color: var(--color-on-surface);
   font-variant-numeric: tabular-nums;
-  font-family: ui-monospace, "Inter", sans-serif;
-  text-shadow: 0 0 8px color-mix(in srgb, var(--color-primary) 20%, transparent);
 }
 
 .aside-stat-value small {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--color-on-surface-variant);
 }
 
 .status-good {
-  color: var(--color-primary-fixed-dim);
+  color: var(--color-secondary);
 }
 
 .status-warn {
@@ -748,26 +728,30 @@ export default {
 
 .tab-bar {
   display: flex;
-  gap: 4px;
+  gap: 8px;
   margin-bottom: 16px;
 }
 
 .tab-btn {
   padding: 6px 16px;
-  border: none;
-  background: transparent;
+  border: 2px solid var(--color-outline);
+  background: var(--color-surface);
   color: var(--color-on-surface-variant);
   cursor: pointer;
-  border-radius: 999px;
-  font-size: 13px;
+  font-size: 15px;
   letter-spacing: 0.04em;
-  font-family: "Inter", sans-serif;
+  box-shadow: 2px 2px 0 0 #101010;
+  transition: background-color 0.1s, color 0.1s, transform 0.1s, box-shadow 0.1s;
+}
+
+.tab-btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
 }
 
 .tab-btn-active {
   background: var(--color-primary);
   color: var(--color-on-primary);
-  box-shadow: 0 0 12px color-mix(in srgb, var(--color-primary) 40%, transparent);
 }
 
 .heart-rate-section {
@@ -783,7 +767,7 @@ export default {
 }
 
 .form-label {
-  font-size: 9px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--color-on-surface-variant);
@@ -810,7 +794,7 @@ export default {
 }
 
 .section-title {
-  font-size: 11px;
+  font-size: 14px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--color-on-surface-variant);
@@ -820,7 +804,7 @@ export default {
 .summary-block {
   margin-top: 16px;
   padding-top: 16px;
-  border-top: 1px solid var(--color-surface-container);
+  border-top: 2px solid var(--color-outline-variant);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -833,25 +817,22 @@ export default {
 }
 
 .summary-label {
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--color-on-surface-variant);
 }
 
 .summary-value {
-  font-size: 18px;
-  font-weight: 600;
+  font-size: 20px;
   color: var(--color-on-surface);
   font-variant-numeric: tabular-nums;
-  font-family: ui-monospace, "Inter", sans-serif;
-  text-shadow: 0 0 8px color-mix(in srgb, var(--color-primary) 25%, transparent);
 }
 
 .height-setting {
   margin-top: 16px;
   padding-top: 16px;
-  border-top: 1px solid var(--color-surface-container);
+  border-top: 2px solid var(--color-outline-variant);
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -864,25 +845,27 @@ export default {
 .height-input {
   flex: 1;
   font-size: 16px;
-  font-weight: 600;
 }
 .height-save-btn {
   padding: 4px 12px;
-  border: none;
-  border-radius: 4px;
+  border: 2px solid var(--color-outline);
   background: var(--color-primary);
   color: var(--color-on-primary);
-  font-size: 10px;
-  font-weight: 600;
+  font-size: 12px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  font-family: ui-monospace, "Inter", sans-serif;
   cursor: pointer;
-  transition: box-shadow 0.2s ease;
+  box-shadow: 2px 2px 0 0 #101010;
+  transition: transform 0.1s, box-shadow 0.1s;
   flex-shrink: 0;
 }
 .height-save-btn:hover {
-  box-shadow: 0 0 12px color-mix(in srgb, var(--color-primary) 50%, transparent);
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0 0 #101010;
+}
+.height-save-btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
 }
 
 @media (max-width: 900px) {
@@ -892,7 +875,7 @@ export default {
   .form-aside {
     width: auto;
     border-left: none;
-    border-top: 1px solid var(--color-surface-container);
+    border-top: 3px solid var(--color-outline);
   }
   .metrics-grid {
     grid-template-columns: 1fr;

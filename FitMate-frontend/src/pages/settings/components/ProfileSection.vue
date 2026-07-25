@@ -9,10 +9,10 @@
           <span v-else class="material-symbols-outlined" style="font-size:28px;">person</span>
         </div>
         <div class="min-w-0">
-          <div class="text-on-surface font-inter text-body-base font-semibold truncate">
+          <div class="text-on-surface text-body-base font-semibold truncate">
             {{ displayNickname }}
           </div>
-          <div class="text-on-surface-variant font-inter text-label-xs truncate">
+          <div class="text-on-surface-variant text-label-xs truncate">
             {{ profile && profile.email ? profile.email : "—" }}
           </div>
         </div>
@@ -297,23 +297,26 @@ export default {
 <style scoped>
 .settings-card {
   background: var(--color-surface-container);
-  border: 1px solid var(--color-outline-variant);
-  border-radius: 8px;
+  border: 4px solid var(--color-outline);
+  border-radius: 0;
   padding: 16px;
+  box-shadow: 6px 6px 0 0 #101010;
 }
 
 .settings-avatar {
   width: 48px;
   height: 48px;
-  border-radius: 50%;
-  background: var(--color-secondary-container);
+  border-radius: 0;
+  border: 3px solid var(--color-outline);
+  background: var(--color-primary);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--color-primary);
+  color: var(--color-on-primary);
   font-weight: 600;
-  font-size: 18px;
+  font-size: 22px;
   flex-shrink: 0;
+  box-shadow: 2px 2px 0 0 #101010;
 }
 
 .settings-field-grid {
@@ -330,14 +333,14 @@ export default {
 
 .settings-field {
   background: var(--color-surface);
-  border: 1px solid var(--color-outline-variant);
-  border-radius: 4px;
+  border: 2px solid var(--color-outline);
+  border-radius: 0;
   padding: 10px 12px;
 }
 
 .settings-field-label {
   color: var(--color-on-surface-variant);
-  font-size: 11px;
+  font-size: 13px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   margin-bottom: 4px;
@@ -345,7 +348,7 @@ export default {
 
 .settings-field-value {
   color: var(--color-on-surface);
-  font-size: 13px;
+  font-size: 15px;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -356,24 +359,29 @@ export default {
 }
 
 .settings-lock-icon {
-  font-size: 13px;
-  color: var(--color-outline);
+  font-size: 15px;
+  color: var(--color-on-surface-variant);
   margin-left: auto;
 }
 
 .settings-edit-btn {
   margin-left: auto;
   background: transparent;
-  border: none;
+  border: 2px solid var(--color-outline);
   color: var(--color-on-surface-variant);
   cursor: pointer;
   padding: 2px;
-  border-radius: 2px;
-  transition: color 0.2s ease;
+  border-radius: 0;
+  transition: color 0.1s, background 0.1s;
 }
 
 .settings-edit-btn:hover {
-  color: var(--color-primary);
+  color: var(--color-on-primary);
+  background: var(--color-primary);
+}
+
+.settings-edit-btn:active {
+  transform: translate(1px, 1px);
 }
 
 .settings-field-edit {
@@ -384,40 +392,51 @@ export default {
 
 .settings-input {
   flex: 1;
-  background: var(--color-surface-container-low);
-  border: 1px solid var(--color-outline-variant);
-  border-radius: 2px;
+  min-width: 0;
+  background: var(--color-surface);
+  border: 3px solid var(--color-outline);
+  border-radius: 0;
   padding: 4px 8px;
   color: var(--color-on-surface);
-  font-size: 13px;
-  font-family: inherit;
+  font-size: 15px;
+  font-family: var(--font-main);
   outline: none;
+  box-shadow: inset 2px 2px 0 0 rgba(16, 16, 16, 0.35);
+  transition: border-color 0.1s;
 }
 
 .settings-input:focus {
-  border-color: var(--color-primary);
+  border-color: var(--pixel-blue);
 }
 
 .settings-save-btn,
 .settings-cancel-btn {
-  font-size: 11px;
+  font-size: 13px;
   padding: 4px 8px;
-  border-radius: 2px;
+  border-radius: 0;
   cursor: pointer;
-  border: 1px solid var(--color-outline-variant);
-  background: transparent;
-  color: var(--color-on-surface-variant);
+  border: 2px solid var(--color-outline);
+  background: var(--color-surface);
+  color: var(--color-on-surface);
+  box-shadow: 2px 2px 0 0 #101010;
+  transition: background-color 0.1s, color 0.1s, transform 0.1s;
+}
+
+.settings-save-btn:active:not(:disabled),
+.settings-cancel-btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
 }
 
 .settings-save-btn {
   background: var(--color-primary);
   color: var(--color-on-primary);
-  border-color: var(--color-primary);
 }
 
 .settings-save-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  box-shadow: 2px 2px 0 0 #666666;
 }
 
 /* 余额卡片 */
@@ -448,22 +467,22 @@ export default {
 
 .balance-title-text {
   color: var(--color-on-surface);
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 600;
   line-height: 1.2;
 }
 
 .balance-title-sub {
   color: var(--color-on-surface-variant);
-  font-size: 11px;
+  font-size: 13px;
   margin-top: 2px;
   opacity: 0.75;
 }
 
 .balance-refresh-btn {
-  background: transparent;
-  border: 1px solid var(--color-outline-variant);
-  border-radius: 4px;
+  background: var(--color-surface);
+  border: 2px solid var(--color-outline);
+  border-radius: 0;
   width: 32px;
   height: 32px;
   display: flex;
@@ -471,18 +490,25 @@ export default {
   justify-content: center;
   cursor: pointer;
   color: var(--color-on-surface-variant);
-  transition: color 0.2s ease, border-color 0.2s ease;
+  box-shadow: 2px 2px 0 0 #101010;
+  transition: color 0.1s, background-color 0.1s, transform 0.1s;
   flex-shrink: 0;
 }
 
 .balance-refresh-btn:hover:not(:disabled) {
-  color: var(--color-primary);
-  border-color: var(--color-primary);
+  color: var(--color-on-primary);
+  background: var(--color-primary);
+}
+
+.balance-refresh-btn:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: none;
 }
 
 .balance-refresh-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  box-shadow: 2px 2px 0 0 #666666;
 }
 
 .balance-refresh-btn .material-symbols-outlined {
@@ -497,9 +523,10 @@ export default {
 
 .balance-item {
   background: var(--color-surface);
-  border: 1px solid var(--color-outline-variant);
-  border-radius: 6px;
+  border: 2px solid var(--color-outline);
+  border-radius: 0;
   padding: 12px 14px;
+  box-shadow: 2px 2px 0 0 #101010;
 }
 
 .balance-item-main {
@@ -510,15 +537,13 @@ export default {
 
 .balance-total {
   color: var(--color-on-surface);
-  font-size: 22px;
+  font-size: 26px;
   font-weight: 700;
-  font-family: "Inter", sans-serif;
-  letter-spacing: -0.01em;
 }
 
 .balance-currency {
   color: var(--color-on-surface-variant);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -528,7 +553,7 @@ export default {
   gap: 6px;
   margin-top: 6px;
   color: var(--color-on-surface-variant);
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .balance-dot {
@@ -540,10 +565,11 @@ export default {
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  border-radius: 6px;
-  background: var(--color-error-container, rgba(239, 68, 68, 0.1));
-  color: var(--color-on-error-container, var(--color-error, #ef4444));
-  font-size: 12px;
+  border-radius: 0;
+  border: 2px solid var(--color-outline);
+  background: var(--pixel-red);
+  color: var(--pixel-white);
+  font-size: 14px;
 }
 
 .balance-warn .material-symbols-outlined {
@@ -552,7 +578,7 @@ export default {
 
 .balance-updated {
   color: var(--color-on-surface-variant);
-  font-size: 11px;
+  font-size: 13px;
   opacity: 0.7;
   text-align: right;
   margin-top: 2px;
@@ -565,7 +591,7 @@ export default {
   gap: 8px;
   padding: 20px 12px;
   color: var(--color-on-surface-variant);
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .balance-state .material-symbols-outlined {
@@ -573,11 +599,11 @@ export default {
 }
 
 .balance-state-error {
-  color: var(--color-error, #ef4444);
+  color: var(--pixel-red);
 }
 
 .spin {
-  animation: balance-spin 0.9s linear infinite;
+  animation: balance-spin 0.9s steps(8) infinite;
 }
 
 @keyframes balance-spin {

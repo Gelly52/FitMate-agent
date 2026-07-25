@@ -1,10 +1,10 @@
 <template>
   <div class="wiki-page">
     <header class="wiki-header">
-      <h1 class="font-inter text-display-lg text-on-surface tracking-tight">
+      <h1 class="font-pixel text-display-lg text-on-surface">
         Wiki
       </h1>
-      <p class="font-inter text-body-base text-on-surface-variant">
+      <p class="font-pixel text-body-base text-on-surface-variant">
         浏览知识库编译后的结构化 Wiki 页面。
       </p>
     </header>
@@ -37,7 +37,7 @@
       <!-- 左栏：页面列表（按 pageType 分组） -->
       <div class="wiki-col">
         <div class="wiki-section-head">
-          <h2 class="font-inter text-label-sm text-on-surface uppercase tracking-widest">
+          <h2 class="font-pixel text-label-sm text-on-surface uppercase tracking-widest">
             Pages
           </h2>
           <span v-if="loadingPages" class="wiki-loading-hint">加载中...</span>
@@ -91,7 +91,7 @@
       <!-- 右栏：页面详情 + Markdown 渲染 -->
       <div class="wiki-col">
         <div class="wiki-section-head">
-          <h2 class="font-inter text-label-sm text-on-surface uppercase tracking-widest">
+          <h2 class="font-pixel text-label-sm text-on-surface uppercase tracking-widest">
             Detail
           </h2>
         </div>
@@ -411,19 +411,18 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  border-bottom: 1px solid var(--color-surface-container);
+  border-bottom: 3px solid var(--color-outline);
   padding-bottom: 24px;
   position: relative;
 }
 .wiki-header::after {
   content: "";
   position: absolute;
-  bottom: -1px;
+  bottom: -3px;
   left: 0;
-  width: 60px;
-  height: 2px;
-  background: linear-gradient(90deg, var(--color-primary), transparent);
-  box-shadow: 0 0 8px color-mix(in srgb, var(--color-primary) 70%, transparent);
+  width: 64px;
+  height: 6px;
+  background: var(--color-primary);
 }
 
 /* 空间切换器 */
@@ -434,66 +433,76 @@ export default {
 }
 
 .wiki-spaces-label {
-  font-size: 9px;
+  font-size: 12px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--color-on-surface-variant);
-  font-family: ui-monospace, "Inter", sans-serif;
 }
 
 .wiki-spaces-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 12px;
 }
 
+/* 像素风空间 chip：2px 边框 + 硬阴影，选中反色 */
 .wiki-space-chip {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   padding: 8px 14px;
-  border: 1px solid var(--color-outline-variant);
-  border-radius: 6px;
-  background: var(--color-surface-container-low);
+  border: 2px solid var(--color-outline);
+  border-radius: 0;
+  background: var(--color-surface);
   color: var(--color-on-surface-variant);
   cursor: pointer;
   font-family: inherit;
-  font-size: 13px;
-  transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
+  font-size: 15px;
+  box-shadow: 2px 2px 0 0 #101010;
+  transition: color 0.1s, background-color 0.1s, transform 0.1s, box-shadow 0.1s;
 }
 
 .wiki-space-chip:hover:not(:disabled) {
-  border-color: var(--color-primary-fixed-dim);
   color: var(--color-on-surface);
+  transform: translateY(-1px);
+}
+
+.wiki-space-chip:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 0 #101010;
 }
 
 .wiki-space-chip-active {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+.wiki-space-chip-active:hover:not(:disabled) {
+  color: var(--color-on-primary);
 }
 
 .wiki-space-chip:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  box-shadow: 2px 2px 0 0 #666666;
 }
 
 .wiki-space-scope {
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.08em;
   padding: 2px 6px;
-  border-radius: 3px;
-  background: color-mix(in srgb, var(--color-primary) 20%, transparent);
-  color: var(--color-primary-fixed-dim);
-  font-family: ui-monospace, monospace;
+  border: 2px solid var(--color-outline);
+  border-radius: 0;
+  background: var(--pixel-yellow);
+  color: var(--pixel-black);
+  text-transform: uppercase;
 }
 
 .wiki-space-title {
-  font-weight: 500;
+  font-weight: 400;
 }
 
 .wiki-spaces-empty {
-  font-size: 13px;
+  font-size: 15px;
   color: var(--color-on-surface-variant);
   padding: 8px 0;
 }
@@ -518,30 +527,26 @@ export default {
   align-items: center;
   gap: 12px;
   position: relative;
-  padding-left: 10px;
+  padding-left: 12px;
 }
 .wiki-section-head::before {
   content: "";
   position: absolute;
   left: 0;
-  top: 2px;
-  bottom: 2px;
-  width: 2px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
   background: var(--color-primary);
-  border-radius: 2px;
-  box-shadow: 0 0 6px color-mix(in srgb, var(--color-primary) 70%, transparent);
 }
 .wiki-section-head h2 {
-  font-family: ui-monospace, "Inter", sans-serif !important;
+  font-size: 15px;
   letter-spacing: 0.14em !important;
-  text-shadow: 0 0 8px color-mix(in srgb, var(--color-primary) 25%, transparent);
 }
 
 .wiki-loading-hint,
 .wiki-count-hint {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--color-on-surface-variant);
-  font-family: ui-monospace, monospace;
 }
 
 /* 分组列表 */
@@ -551,32 +556,34 @@ export default {
   gap: 20px;
 }
 
+/* 每组是一张像素卡片：3px 边框 + 硬阴影 + 主题色标题条 */
 .wiki-group {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  background: var(--color-surface);
+  border: 3px solid var(--color-outline);
+  box-shadow: 4px 4px 0 0 #101010;
 }
 
 .wiki-group-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 0 6px 0;
-  border-bottom: 1px dashed var(--color-outline-variant);
+  padding: 6px 12px;
+  background: var(--color-primary);
+  border-bottom: 3px solid var(--color-outline);
 }
 
 .wiki-group-type {
-  font-size: 10px;
+  font-size: 13px;
   letter-spacing: 0.1em;
-  color: var(--color-primary-fixed-dim);
-  font-family: ui-monospace, monospace;
+  color: var(--color-on-primary);
   text-transform: uppercase;
 }
 
 .wiki-group-count {
-  font-size: 10px;
-  color: var(--color-on-surface-variant);
-  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  color: var(--color-on-primary);
 }
 
 .wiki-page-list {
@@ -587,47 +594,48 @@ export default {
   flex-direction: column;
 }
 
+/* 列表行：2px 分隔线 + 左侧像素高亮条 */
 .wiki-page-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 10px;
-  border-radius: 4px;
+  padding: 10px 12px;
+  border-radius: 0;
+  border-bottom: 2px solid var(--color-outline-variant);
   cursor: pointer;
-  transition: background 0.2s ease;
+  transition: background-color 0.15s;
   position: relative;
+}
+.wiki-page-item:last-child {
+  border-bottom: none;
 }
 .wiki-page-item::before {
   content: "";
   position: absolute;
   left: 0;
-  top: 50%;
-  width: 3px;
-  height: 0;
+  top: 0;
+  bottom: 0;
+  width: 0;
   background: var(--color-primary);
-  border-radius: 2px;
-  box-shadow: 0 0 6px color-mix(in srgb, var(--color-primary) 70%, transparent);
-  transition: height 0.2s ease, top 0.2s ease;
+  transition: width 0.1s steps(2);
 }
 .wiki-page-item:hover::before {
-  height: 60%;
-  top: 20%;
+  width: 4px;
 }
 .wiki-page-item:hover {
-  background: color-mix(in srgb, var(--color-primary) 3%, transparent);
+  background: var(--color-surface-container-low);
 }
 .wiki-page-item-active {
-  background: color-mix(in srgb, var(--color-primary) 6%, transparent);
+  background: var(--color-surface-container);
 }
 .wiki-page-item-active::before {
-  height: 70%;
-  top: 15%;
+  width: 6px;
 }
 
 .wiki-page-title {
   flex: 1;
-  font-size: 14px;
+  font-size: 16px;
   color: var(--color-on-surface);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -635,9 +643,8 @@ export default {
 }
 
 .wiki-page-slug {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--color-on-surface-variant);
-  font-family: ui-monospace, monospace;
   flex-shrink: 0;
 }
 
@@ -647,13 +654,13 @@ export default {
   justify-content: center;
   width: 24px;
   height: 24px;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
+  border: 2px solid var(--color-outline);
+  border-radius: 0;
+  background: var(--color-surface);
   color: var(--color-on-surface-variant);
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.2s ease, color 0.2s ease, background 0.2s ease;
+  transition: opacity 0.15s, color 0.1s, background-color 0.1s;
   flex-shrink: 0;
 }
 .wiki-page-delete .material-symbols-outlined {
@@ -663,24 +670,31 @@ export default {
   opacity: 1;
 }
 .wiki-page-delete:hover {
-  color: var(--color-error);
-  background: color-mix(in srgb, var(--color-error) 10%, transparent);
+  color: var(--pixel-white);
+  background: var(--pixel-red);
+}
+.wiki-page-delete:active {
+  transform: translate(1px, 1px);
 }
 
 .wiki-empty {
   padding: 24px 16px;
-  font-size: 13px;
+  font-size: 15px;
   color: var(--color-on-surface-variant);
   text-align: center;
-  border: 1px dashed var(--color-outline-variant);
-  border-radius: 8px;
+  border: 2px dashed var(--color-outline);
+  border-radius: 0;
 }
 
-/* 页面详情 */
+/* 页面详情：大像素卡片 */
 .wiki-detail {
   display: flex;
   flex-direction: column;
   gap: 20px;
+  padding: 16px;
+  background: var(--color-surface);
+  border: 4px solid var(--color-outline);
+  box-shadow: 6px 6px 0 0 #101010;
 }
 
 .wiki-detail-meta {
@@ -688,16 +702,15 @@ export default {
   flex-direction: column;
   gap: 10px;
   padding-bottom: 16px;
-  border-bottom: 1px solid var(--color-surface-container);
+  border-bottom: 3px solid var(--color-outline);
 }
 
 .wiki-detail-title {
   margin: 0;
-  font-size: 22px;
-  font-weight: 600;
+  font-size: 26px;
+  font-weight: 400;
   color: var(--color-on-surface);
-  letter-spacing: -0.01em;
-  font-family: "Manrope", system-ui, sans-serif;
+  letter-spacing: 0;
 }
 
 .wiki-detail-tags {
@@ -706,19 +719,20 @@ export default {
   gap: 8px;
 }
 
+/* 像素徽章：2px 边框，无圆角 */
 .wiki-tag {
   display: inline-flex;
   align-items: center;
-  padding: 3px 8px;
-  border-radius: 3px;
-  font-size: 11px;
-  font-family: ui-monospace, monospace;
+  padding: 2px 8px;
+  border: 2px solid var(--color-outline);
+  border-radius: 0;
+  font-size: 13px;
   letter-spacing: 0.04em;
 }
 
 .wiki-tag-type {
-  background: color-mix(in srgb, var(--color-primary) 20%, transparent);
-  color: var(--color-primary-fixed-dim);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
 }
 
 .wiki-tag-slug {
@@ -730,12 +744,12 @@ export default {
 .wiki-tag-time {
   background: transparent;
   color: var(--color-on-surface-variant);
-  border: 1px solid var(--color-outline-variant);
+  border: 2px solid var(--color-outline-variant);
 }
 
 /* Markdown 渲染区 */
 .wiki-markdown {
-  font-size: 14px;
+  font-size: 16px;
   line-height: 1.7;
   color: var(--color-on-surface);
   word-break: break-word;
@@ -748,7 +762,7 @@ export default {
 .wiki-markdown :deep(h5),
 .wiki-markdown :deep(h6) {
   margin: 1.4em 0 0.6em;
-  font-weight: 600;
+  font-weight: 400;
   line-height: 1.3;
   color: var(--color-on-surface);
 }
@@ -772,24 +786,27 @@ export default {
 }
 
 .wiki-markdown :deep(code) {
-  padding: 2px 6px;
-  border-radius: 3px;
+  padding: 1px 6px;
+  border: 2px solid var(--color-outline-variant);
+  border-radius: 0;
   background: var(--color-surface-container);
-  color: var(--color-primary-fixed-dim);
-  font-family: ui-monospace, monospace;
+  color: var(--color-primary);
   font-size: 0.9em;
 }
 
 .wiki-markdown :deep(pre) {
   margin: 0.8em 0;
   padding: 12px 14px;
-  border-radius: 6px;
+  border: 3px solid var(--color-outline);
+  border-radius: 0;
   background: var(--color-surface-container);
+  box-shadow: 3px 3px 0 0 #101010;
   overflow-x: auto;
 }
 
 .wiki-markdown :deep(pre code) {
   padding: 0;
+  border: none;
   background: transparent;
   color: var(--color-on-surface);
 }
@@ -797,60 +814,59 @@ export default {
 .wiki-markdown :deep(blockquote) {
   margin: 0.8em 0;
   padding: 0.4em 1em;
-  border-left: 3px solid var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 5%, transparent);
+  border-left: 4px solid var(--color-primary);
+  background: var(--color-surface-container-low);
   color: var(--color-on-surface-variant);
 }
 
 .wiki-markdown :deep(a) {
-  color: var(--color-primary-fixed-dim);
+  color: var(--color-primary);
   text-decoration: none;
-  border-bottom: 1px dashed var(--color-primary-fixed-dim);
+  border-bottom: 2px dashed var(--color-primary);
 }
 .wiki-markdown :deep(a:hover) {
-  color: var(--color-primary);
-  border-bottom-color: var(--color-primary);
+  border-bottom-style: solid;
 }
 
-/* wikilink 特殊样式（[[xxx]] 生成的内部链接） */
+/* wikilink 特殊样式（[[xxx]] 生成的内部链接）：像素标签按钮 */
 .wiki-markdown :deep(.wiki-wikilink) {
   color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
-  padding: 1px 6px;
-  border-radius: 3px;
-  border-bottom: none;
+  border: 2px solid var(--color-primary);
+  background: transparent;
+  padding: 0 6px;
+  border-radius: 0;
   cursor: pointer;
-  font-weight: 500;
-  transition: background 0.2s ease, color 0.2s ease;
+  transition: background-color 0.1s, color 0.1s;
 }
 .wiki-markdown :deep(.wiki-wikilink:hover) {
-  background: color-mix(in srgb, var(--color-primary) 20%, transparent);
-  color: var(--color-on-surface);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
 }
 
 .wiki-markdown :deep(table) {
   width: 100%;
   margin: 0.8em 0;
   border-collapse: collapse;
+  border: 2px solid var(--color-outline);
   font-size: 0.95em;
 }
 
 .wiki-markdown :deep(th),
 .wiki-markdown :deep(td) {
   padding: 6px 10px;
-  border: 1px solid var(--color-outline-variant);
+  border: 2px solid var(--color-outline);
   text-align: left;
 }
 
 .wiki-markdown :deep(th) {
   background: var(--color-surface-container);
-  font-weight: 600;
+  font-weight: 400;
 }
 
 .wiki-markdown :deep(hr) {
   margin: 1.2em 0;
   border: none;
-  border-top: 1px solid var(--color-outline-variant);
+  border-top: 2px solid var(--color-outline-variant);
 }
 
 @media (max-width: 900px) {

@@ -9,11 +9,11 @@
     <div class="agent-step-header">
       <div class="flex flex-col gap-xs">
         <h4
-          class="font-inter text-label-sm text-on-surface uppercase tracking-widest"
+          class="text-label-sm text-on-surface uppercase tracking-widest"
         >
           Agent Steps
         </h4>
-        <p class="font-inter text-label-xs text-on-surface-variant uppercase tracking-wider">
+        <p class="text-label-xs text-on-surface-variant uppercase tracking-wider">
           {{ resolveCardSummary() }}
         </p>
       </div>
@@ -192,13 +192,14 @@ export default {
 .agent-step-card {
   margin: 16px 0;
   padding: 16px 20px;
-  border: 1px solid var(--color-surface-container);
-  border-radius: 8px;
+  border: 3px solid var(--color-outline);
+  border-radius: 0;
   background: var(--color-surface-container-low);
+  box-shadow: 4px 4px 0 0 #101010;
 }
 
 .agent-step-card.is-active {
-  border-color: color-mix(in srgb, var(--color-primary) 40%, transparent);
+  border-color: var(--color-primary);
 }
 
 .agent-step-header {
@@ -207,6 +208,8 @@ export default {
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--color-outline-variant);
 }
 
 /* ReasoningTraceBlock 在卡片内取消自身底部 margin，避免双重间距 */

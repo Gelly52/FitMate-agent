@@ -44,9 +44,10 @@ export default {
 <style scoped>
 .settings-section-nav {
   display: flex;
-  gap: 4px;
-  border-bottom: 1px solid var(--color-outline-variant);
-  padding-bottom: 8px;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-bottom: 3px solid var(--color-outline);
+  padding-bottom: 12px;
   margin-bottom: 24px;
   position: sticky;
   top: 0;
@@ -58,21 +59,37 @@ export default {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: 15px;
   padding: 6px 12px;
-  border-radius: 4px;
+  border: 2px solid var(--color-outline);
+  border-radius: 0;
+  background: var(--color-surface-container);
   color: var(--color-on-surface-variant);
   cursor: pointer;
-  transition: color 0.2s ease, background 0.2s ease;
+  text-decoration: none;
+  box-shadow: 2px 2px 0 0 #101010;
+  transition: color 0.1s, background 0.1s;
 }
 
 .settings-section-tab:hover {
   color: var(--color-on-surface);
-  background: var(--color-surface-container);
+  background: var(--color-surface-container-high);
+}
+
+.settings-section-tab:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
 }
 
 .settings-section-tab-active {
-  color: var(--color-primary);
-  background: var(--color-surface-container);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  border-color: var(--color-outline);
+  box-shadow: 2px 2px 0 0 #101010;
+}
+
+.settings-section-tab-active:hover {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
 }
 </style>

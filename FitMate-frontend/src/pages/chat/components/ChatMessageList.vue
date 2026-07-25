@@ -331,13 +331,13 @@ export default {
   overflow-x: hidden;
   /* Firefox */
   scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--color-on-surface) 15%, transparent) transparent;
+  scrollbar-color: var(--pixel-gray) transparent;
 }
 
-/* Webkit (Chrome / Edge / Safari) */
+/* Webkit (Chrome / Edge / Safari) — 像素方块滚动条 */
 .chat-scroll::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
 }
 
 .chat-scroll::-webkit-scrollbar-track {
@@ -345,15 +345,13 @@ export default {
 }
 
 .chat-scroll::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--color-on-surface) 15%, transparent);
-  border-radius: 4px;
-  border: 2px solid transparent;
-  background-clip: padding-box;
+  background: var(--pixel-gray);
+  border-radius: 0;
+  border: 2px solid var(--color-background);
 }
 
 .chat-scroll::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--color-on-surface) 25%, transparent);
-  background-clip: padding-box;
+  background: var(--pixel-blue);
 }
 
 .chat-scroll-inner {
@@ -374,13 +372,14 @@ export default {
 }
 
 .chat-date-separator span {
-  font-size: 9px;
-  letter-spacing: 0.08em;
+  font-size: 12px;
+  letter-spacing: 0;
   text-transform: uppercase;
   color: var(--color-on-surface-variant);
   padding: 2px 10px;
-  border: 1px solid var(--color-surface-container);
-  border-radius: 9999px;
+  border: 2px solid var(--color-outline);
+  border-radius: 0;
+  background: var(--color-surface);
 }
 
 .msg-row-system {
@@ -395,11 +394,12 @@ export default {
   align-items: center;
   gap: 6px;
   padding: 4px 14px;
-  border-radius: 9999px;
-  background: color-mix(in srgb, var(--color-primary) 8%, var(--color-surface));
-  border: 1px solid color-mix(in srgb, var(--color-primary) 25%, transparent);
+  border-radius: 0;
+  background: var(--color-surface-container);
+  border: 2px solid var(--color-outline);
+  box-shadow: 2px 2px 0 0 #101010;
   color: var(--color-on-surface-variant);
-  font-size: 12px;
+  font-size: 14px;
   cursor: default;
   user-select: none;
 }
@@ -440,20 +440,30 @@ export default {
 
 .msg-bubble-user .msg-text {
   background: var(--color-surface-container);
-  border: 1px solid var(--color-surface-container-high);
-  border-radius: 12px 12px 4px 12px;
+  border: 2px solid var(--color-outline);
+  border-radius: 0;
+  box-shadow: 3px 3px 0 0 #101010;
   padding: 10px 14px;
   color: var(--color-on-surface);
-  font-size: 15px;
+  font-size: 17px;
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
   max-width: 100%;
 }
 
+/* 助手消息：带边框的像素面板 */
+.msg-bubble-bot {
+  background: var(--color-surface);
+  border: 2px solid var(--color-outline);
+  border-radius: 0;
+  box-shadow: 3px 3px 0 0 #101010;
+  padding: 12px 14px;
+}
+
 .msg-bubble-bot .msg-text {
   color: var(--color-on-surface);
-  font-size: 15px;
+  font-size: 17px;
   line-height: 1.6;
   word-break: break-word;
 }
@@ -474,7 +484,7 @@ export default {
 .streaming-cursor {
   display: inline-block;
   margin-left: 2px;
-  color: var(--accent-color, #19c37d);
+  color: var(--pixel-green);
   animation: streaming-blink 1s steps(2, start) infinite;
 }
 
@@ -499,7 +509,7 @@ export default {
   align-items: center;
   gap: 8px;
   opacity: 0;
-  transition: opacity 0.2s ease;
+  transition: opacity 0.15s steps(2);
 }
 
 .msg-row-user .msg-meta {
@@ -511,8 +521,8 @@ export default {
 }
 
 .msg-time {
-  font-size: 9px;
-  letter-spacing: 0.08em;
+  font-size: 12px;
+  letter-spacing: 0;
   color: var(--color-on-surface-variant);
 }
 
@@ -527,17 +537,22 @@ export default {
   justify-content: center;
   width: 24px;
   height: 24px;
-  border: none;
-  border-radius: 4px;
+  border: 2px solid transparent;
+  border-radius: 0;
   background: transparent;
   color: var(--color-on-surface-variant);
   cursor: pointer;
-  transition: color 0.2s ease, background 0.2s ease;
+  transition: color 0.1s, background-color 0.1s, border-color 0.1s;
 }
 
 .msg-action-btn:hover {
-  color: var(--color-primary-fixed-dim);
-  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  color: var(--color-primary);
+  background: var(--color-surface-container);
+  border-color: var(--color-outline);
+}
+
+.msg-action-btn:active {
+  transform: translate(1px, 1px);
 }
 
 .msg-action-btn .material-symbols-outlined {
@@ -554,17 +569,23 @@ export default {
   justify-content: center;
   width: 36px;
   height: 36px;
-  border-radius: 50%;
-  border: 1px solid var(--color-outline-variant);
-  background: var(--color-surface-container);
-  color: var(--color-on-surface-variant);
+  border-radius: 0;
+  border: 2px solid var(--color-outline);
+  background: var(--color-surface);
+  color: var(--color-on-surface);
+  box-shadow: 3px 3px 0 0 #101010;
   cursor: pointer;
-  transition: color 0.2s ease, border-color 0.2s ease;
+  transition: color 0.1s, border-color 0.1s;
 }
 
 .back-to-bottom:hover {
-  color: var(--color-primary-fixed-dim);
-  border-color: var(--color-primary-fixed-dim);
+  color: var(--pixel-blue);
+  border-color: var(--pixel-blue);
+}
+
+.back-to-bottom:active {
+  transform: translateX(-50%) translate(2px, 2px);
+  box-shadow: 0 0 0 0 #101010;
 }
 
 .back-to-bottom .material-symbols-outlined {
@@ -575,18 +596,39 @@ export default {
   margin: 0 0 8px;
 }
 
+.markdown-body :deep(h1),
+.markdown-body :deep(h2) {
+  margin: 12px 0 8px;
+  padding-bottom: 4px;
+  border-bottom: 2px solid var(--color-outline);
+  letter-spacing: 0;
+}
+
+.markdown-body :deep(h3),
+.markdown-body :deep(h4) {
+  margin: 10px 0 6px;
+  letter-spacing: 0;
+}
+
 .markdown-body :deep(pre) {
-  background: var(--color-surface-container-lowest);
-  border: 1px solid var(--color-surface-container);
-  border-radius: 8px;
+  background: var(--color-surface-container-low);
+  border: 2px solid var(--color-outline);
+  border-radius: 0;
+  box-shadow: 2px 2px 0 0 #101010;
   padding: 12px;
   overflow-x: auto;
   margin: 8px 0;
 }
 
 .markdown-body :deep(code) {
-  font-family: ui-monospace, monospace;
-  font-size: 13px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 14px;
+}
+
+.markdown-body :deep(:not(pre) > code) {
+  background: var(--color-surface-container);
+  border: 1px solid var(--color-outline);
+  padding: 0 4px;
 }
 
 .markdown-body :deep(ul),
@@ -596,20 +638,32 @@ export default {
 }
 
 .markdown-body :deep(a) {
-  color: var(--color-primary-fixed-dim);
+  color: var(--pixel-blue);
+}
+
+.markdown-body :deep(blockquote) {
+  margin: 8px 0;
+  padding: 4px 12px;
+  border-left: 4px solid var(--color-outline);
+  background: var(--color-surface-container-low);
 }
 
 .markdown-body :deep(table) {
   border-collapse: collapse;
   width: 100%;
   margin: 8px 0;
+  border: 2px solid var(--color-outline);
 }
 
 .markdown-body :deep(th),
 .markdown-body :deep(td) {
-  border: 1px solid var(--color-surface-container);
+  border: 2px solid var(--color-outline);
   padding: 6px 10px;
   text-align: left;
+}
+
+.markdown-body :deep(th) {
+  background: var(--color-surface-container);
 }
 
 .msg-interrupted-badge {
@@ -618,10 +672,11 @@ export default {
   gap: 4px;
   margin-top: 6px;
   padding: 2px 8px;
-  border-radius: 4px;
-  background: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
-  font-size: 12px;
+  border-radius: 0;
+  border: 2px solid var(--pixel-red);
+  background: transparent;
+  color: var(--pixel-red);
+  font-size: 14px;
 }
 .msg-interrupted-badge .material-symbols-outlined {
   font-size: 14px;

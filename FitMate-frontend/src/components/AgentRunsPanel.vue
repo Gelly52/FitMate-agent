@@ -216,9 +216,9 @@ export default {
 .agent-runs-trigger {
   width: 32px;
   height: 32px;
-  border-radius: 50%;
+  border-radius: 0;
   background: transparent;
-  border: none;
+  border: 2px solid transparent;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -226,13 +226,18 @@ export default {
   padding: 0;
   position: relative;
   color: var(--color-on-surface-variant);
-  transition: color 0.2s ease, background 0.2s ease;
+  transition: color 0.1s, background-color 0.1s, border-color 0.1s;
 }
 
 .agent-runs-trigger:hover,
 .agent-runs-trigger-active {
   color: var(--color-primary);
   background: var(--color-surface-container-high);
+  border-color: var(--color-outline);
+}
+
+.agent-runs-trigger:active {
+  transform: translate(2px, 2px);
 }
 
 .agent-runs-trigger .material-symbols-outlined {
@@ -241,19 +246,19 @@ export default {
 
 .agent-runs-badge {
   position: absolute;
-  top: -2px;
-  right: -2px;
+  top: -4px;
+  right: -4px;
   min-width: 16px;
   height: 16px;
   padding: 0 4px;
-  border-radius: 8px;
+  border-radius: 0;
   background: var(--color-error);
   color: var(--color-on-error);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   line-height: 16px;
   text-align: center;
-  border: 2px solid var(--color-surface);
+  border: 2px solid var(--color-outline);
   box-sizing: content-box;
 }
 
@@ -264,9 +269,9 @@ export default {
   width: 320px;
   max-height: 420px;
   background: var(--color-surface-container);
-  border: 1px solid var(--color-outline-variant);
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  border: 3px solid var(--color-outline);
+  border-radius: 0;
+  box-shadow: 4px 4px 0 0 #101010;
   z-index: 50;
   overflow: hidden;
   display: flex;
@@ -278,19 +283,19 @@ export default {
   align-items: center;
   justify-content: space-between;
   padding: 12px 14px;
-  border-bottom: 1px solid var(--color-outline-variant);
+  border-bottom: 2px solid var(--color-outline);
 }
 
 .agent-runs-header-title {
   color: var(--color-on-surface);
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
 }
 
 .agent-runs-refresh {
   width: 24px;
   height: 24px;
-  border: none;
+  border: 2px solid transparent;
   background: transparent;
   cursor: pointer;
   padding: 0;
@@ -298,13 +303,18 @@ export default {
   align-items: center;
   justify-content: center;
   color: var(--color-on-surface-variant);
-  border-radius: 4px;
-  transition: color 0.2s ease, background 0.2s ease;
+  border-radius: 0;
+  transition: color 0.1s, background-color 0.1s, border-color 0.1s;
 }
 
 .agent-runs-refresh:hover:not(:disabled) {
   color: var(--color-primary);
   background: var(--color-surface-container-high);
+  border-color: var(--color-outline);
+}
+
+.agent-runs-refresh:active:not(:disabled) {
+  transform: translate(2px, 2px);
 }
 
 .agent-runs-refresh:disabled {
@@ -317,7 +327,7 @@ export default {
 }
 
 .agent-runs-spin {
-  animation: agent-runs-spin 0.9s linear infinite;
+  animation: agent-runs-spin 0.9s steps(8) infinite;
 }
 
 @keyframes agent-runs-spin {
@@ -333,7 +343,7 @@ export default {
   gap: 8px;
   padding: 32px 14px;
   color: var(--color-on-surface-variant);
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .agent-runs-state .material-symbols-outlined {
@@ -357,30 +367,34 @@ export default {
   width: 100%;
   padding: 10px 10px;
   background: transparent;
-  border: none;
-  border-radius: 6px;
+  border: 2px solid transparent;
+  border-radius: 0;
   cursor: pointer;
   text-align: left;
   font-family: inherit;
-  transition: background 0.15s ease;
+  transition: background-color 0.1s, border-color 0.1s;
 }
 
 .agent-runs-item:hover {
   background: var(--color-surface-container-high);
+  border-color: var(--color-outline);
+}
+
+.agent-runs-item:active {
+  transform: translate(2px, 2px);
 }
 
 .agent-runs-dot {
   width: 8px;
   height: 8px;
-  border-radius: 50%;
+  border-radius: 0;
   margin-top: 6px;
   flex-shrink: 0;
 }
 
 .agent-runs-dot-running {
   background: var(--color-primary);
-  box-shadow: 0 0 0 0 var(--color-primary);
-  animation: agent-runs-pulse 1.6s ease-out infinite;
+  animation: agent-runs-blink 1.2s steps(2, jump-none) infinite;
 }
 
 .agent-runs-dot-pending {
@@ -392,13 +406,13 @@ export default {
 }
 
 .agent-runs-dot-success {
-  background: #4ade80;
+  background: var(--pixel-green);
 }
 
-@keyframes agent-runs-pulse {
-  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-primary) 60%, transparent); }
-  70% { box-shadow: 0 0 0 6px transparent; }
-  100% { box-shadow: 0 0 0 0 transparent; }
+@keyframes agent-runs-blink {
+  0% { opacity: 1; }
+  50% { opacity: 0.3; }
+  100% { opacity: 1; }
 }
 
 .agent-runs-item-body {
@@ -408,7 +422,7 @@ export default {
 
 .agent-runs-item-text {
   color: var(--color-on-surface);
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1.4;
   white-space: nowrap;
   overflow: hidden;
@@ -424,21 +438,21 @@ export default {
 
 .agent-runs-item-session {
   color: var(--color-on-surface-variant);
-  font-size: 11px;
+  font-size: 13px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .agent-runs-item-time {
-  color: var(--color-outline);
-  font-size: 11px;
+  color: var(--color-on-surface-variant);
+  font-size: 13px;
   white-space: nowrap;
   flex-shrink: 0;
 }
 
 .agent-runs-item-arrow {
-  color: var(--color-outline);
+  color: var(--color-on-surface-variant);
   font-size: 18px;
   margin-top: 2px;
   flex-shrink: 0;
@@ -446,7 +460,7 @@ export default {
 
 .agent-runs-fade-enter-active,
 .agent-runs-fade-leave-active {
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  transition: opacity 0.1s steps(2), transform 0.1s steps(2);
 }
 
 .agent-runs-fade-enter-from,

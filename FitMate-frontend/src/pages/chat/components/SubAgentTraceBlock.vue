@@ -357,15 +357,16 @@ export default {
 </script>
 
 <style scoped>
-/* ===== 嵌套容器：带边框区分层级 ===== */
+/* ===== 嵌套容器：粗边框 + 硬阴影区分层级 ===== */
 .subagent-trace-block {
-  margin-top: 6px;
+  margin-top: 8px;
   margin-left: 10px;
   padding: 8px 10px;
-  border: 1px solid var(--color-surface-container);
-  border-left: 2px solid color-mix(in srgb, var(--color-primary) 40%, transparent);
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--color-surface) 50%, transparent);
+  border: 2px solid var(--color-outline);
+  border-left: 3px solid var(--color-primary);
+  border-radius: 0;
+  background: var(--color-surface-container-low);
+  box-shadow: 2px 2px 0 0 #101010;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -375,10 +376,15 @@ export default {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 2px 0;
+  padding: 2px 0 4px;
+  border-bottom: 2px solid var(--color-outline-variant);
   cursor: pointer;
   user-select: none;
-  transition: color 0.2s ease;
+  transition: color 0.1s;
+}
+
+.subagent-trace-header:active {
+  transform: translate(1px, 1px);
 }
 
 .subagent-trace-title {
@@ -389,11 +395,12 @@ export default {
 }
 
 .subagent-trace-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-primary-fixed-dim);
-  animation: subagent-pulse 1.4s ease-in-out infinite;
+  width: 8px;
+  height: 8px;
+  border-radius: 0;
+  background: var(--pixel-yellow);
+  border: 2px solid var(--color-outline);
+  animation: subagent-pulse 1s steps(2, end) infinite;
   flex-shrink: 0;
 }
 
@@ -403,16 +410,15 @@ export default {
 }
 
 .subagent-trace-label {
-  font-family: "Inter", sans-serif;
-  font-size: 12px;
+  font-size: 15px;
   color: var(--color-on-surface-variant);
   letter-spacing: 0.03em;
-  transition: color 0.2s ease;
+  text-transform: uppercase;
+  transition: color 0.1s;
 }
 
 .subagent-trace-meta {
-  font-family: "Inter", sans-serif;
-  font-size: 11px;
+  font-size: 14px;
   color: var(--color-on-surface-variant);
   opacity: 0.7;
 }
@@ -421,7 +427,7 @@ export default {
   flex-shrink: 0;
   font-size: 16px;
   color: var(--color-on-surface-variant);
-  transition: transform 0.2s ease, color 0.2s ease;
+  transition: color 0.1s;
 }
 
 .subagent-trace-header:hover .subagent-trace-label,
@@ -460,36 +466,39 @@ export default {
 }
 
 .subagent-turn-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 0;
   background: var(--color-surface);
-  border: 1.5px solid color-mix(in srgb, var(--color-primary) 35%, transparent);
+  border: 2px solid var(--color-primary);
   cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+  transition: background 0.1s, border-color 0.1s;
   flex-shrink: 0;
 }
 
 .subagent-turn-dot:hover {
   border-color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  background: var(--color-surface-container-high);
+}
+
+.subagent-turn-dot:active {
+  transform: translate(1px, 1px);
 }
 
 .subagent-turn-dot.is-collapsed {
   background: var(--color-primary);
   border-color: var(--color-primary);
-  transform: scale(0.85);
 }
 
 .subagent-turn-dot.is-streaming {
-  animation: subagent-pulse 1.4s ease-in-out infinite;
+  animation: subagent-pulse 1s steps(2, end) infinite;
 }
 
 .subagent-turn-line {
-  width: 1.5px;
+  width: 2px;
   flex: 1;
   min-height: 12px;
-  background: var(--color-surface-container);
+  background: var(--color-outline-variant);
   margin-top: 4px;
 }
 
@@ -501,8 +510,12 @@ export default {
 
 .subagent-turn-step {
   cursor: pointer;
-  transition: color 0.2s ease;
+  transition: color 0.1s;
   padding-top: 1px;
+}
+
+.subagent-turn-step:active {
+  transform: translate(1px, 1px);
 }
 
 .subagent-turn-step:hover .subagent-merged-step-label {
@@ -512,11 +525,11 @@ export default {
 .subagent-turn-thinking {
   margin-top: 4px;
   padding-left: 12px;
-  border-left: 1px dashed var(--color-surface-container);
+  border-left: 2px solid var(--color-outline-variant);
   overflow: hidden;
   max-height: 2000px;
-  transition: max-height 0.25s ease, opacity 0.2s ease, margin 0.2s ease,
-    padding 0.2s ease, border-color 0.2s ease;
+  transition: max-height 0.15s steps(4), opacity 0.15s steps(3), margin 0.15s,
+    padding 0.15s, border-color 0.15s;
 }
 
 .subagent-turn-thinking.is-collapsed {
@@ -535,7 +548,7 @@ export default {
 }
 
 .subagent-step-placeholder {
-  width: 8px;
+  width: 10px;
   flex-shrink: 0;
 }
 
@@ -548,15 +561,14 @@ export default {
 
 /* ===== 文本样式 ===== */
 .subagent-merged-step-label {
-  font-size: 12px;
-  font-family: "Inter", sans-serif;
+  font-size: 14px;
   color: var(--color-on-surface-variant);
   line-height: 1.4;
 }
 
 .subagent-merged-step-meta {
   margin-left: 4px;
-  font-size: 11px;
+  font-size: 13px;
   color: var(--color-on-surface-variant);
   opacity: 0.7;
 }
@@ -565,8 +577,7 @@ export default {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
-  font-family: "Inter", sans-serif;
+  font-size: 13px;
   color: var(--color-on-surface-variant);
   letter-spacing: 0.03em;
   opacity: 0.8;
@@ -574,25 +585,25 @@ export default {
 }
 
 .subagent-merged-thinking-content {
-  font-size: 13px;
-  line-height: 1.7;
+  font-size: 15px;
+  line-height: 1.6;
   color: var(--color-on-surface-variant);
   white-space: pre-wrap;
   word-break: break-word;
-  font-style: italic;
-  background: color-mix(in srgb, var(--color-primary) 6%, transparent);
-  border-radius: 6px;
+  background: var(--color-surface-container);
+  border: 2px solid var(--color-outline-variant);
+  border-radius: 0;
   padding: 8px 12px;
 }
 
 .subagent-merged-thinking-muted {
-  color: color-mix(in srgb, var(--color-on-surface-variant) 60%, transparent);
-  font-style: italic;
+  color: var(--color-on-surface-variant);
+  opacity: 0.6;
 }
 
 .subagent-trace-collapsed-hint {
   margin-top: 2px;
-  font-size: 11px;
+  font-size: 13px;
   color: var(--color-on-surface-variant);
   opacity: 0.6;
   white-space: nowrap;
@@ -604,22 +615,23 @@ export default {
 .subagent-final-content {
   margin-top: 8px;
   padding: 8px 10px;
-  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
-  border-radius: 6px;
-  border-left: 2px solid var(--color-primary);
+  background: var(--color-surface-container);
+  border: 2px solid var(--color-outline-variant);
+  border-left: 3px solid var(--color-primary);
+  border-radius: 0;
 }
 
 .subagent-final-label {
-  font-size: 11px;
-  font-family: "Inter", sans-serif;
+  font-size: 13px;
   color: var(--color-primary);
   letter-spacing: 0.03em;
+  text-transform: uppercase;
   margin-bottom: 4px;
 }
 
 .subagent-final-text {
-  font-size: 13px;
-  line-height: 1.7;
+  font-size: 15px;
+  line-height: 1.6;
   color: var(--color-on-surface);
   white-space: pre-wrap;
   word-break: break-word;

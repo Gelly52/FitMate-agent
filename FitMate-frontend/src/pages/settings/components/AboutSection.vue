@@ -32,9 +32,10 @@ export default {
 <style scoped>
 .settings-card {
   background: var(--color-surface-container);
-  border: 1px solid var(--color-outline-variant);
-  border-radius: 8px;
+  border: 4px solid var(--color-outline);
+  border-radius: 0;
   padding: 16px;
+  box-shadow: 6px 6px 0 0 #101010;
 }
 
 .about-row {
@@ -42,11 +43,11 @@ export default {
   justify-content: space-between;
   align-items: center;
   padding: 6px 0;
-  font-size: 12px;
+  font-size: 15px;
 }
 
 .about-row + .about-row {
-  border-top: 1px solid var(--color-outline-variant);
+  border-top: 2px solid var(--color-outline-variant);
 }
 
 .about-label {
@@ -60,9 +61,12 @@ export default {
 .about-link {
   color: var(--color-primary);
   text-decoration: none;
+  border-bottom: 2px solid var(--color-primary);
+  transition: background-color 0.1s, color 0.1s;
 }
 
 .about-link:hover {
-  text-decoration: underline;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
 }
 </style>

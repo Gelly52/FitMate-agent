@@ -85,18 +85,22 @@ export default {
   align-items: center;
   gap: 4px;
   padding: 2px 8px;
-  border: none;
-  border-radius: 6px;
+  border: 2px solid transparent;
+  border-radius: 0;
   background: transparent;
   color: var(--color-on-surface-variant);
-  font-size: 11px;
-  font-family: "Inter", sans-serif;
+  font-size: 13px;
+  letter-spacing: 0;
   cursor: pointer;
-  transition: color 0.2s ease, background 0.2s ease;
+  transition: color 0.1s, background-color 0.1s, border-color 0.1s;
 }
 .model-selector-trigger:hover {
   color: var(--color-on-surface);
   background: var(--color-surface-container);
+  border-color: var(--color-outline);
+}
+.model-selector-trigger:active {
+  transform: translate(1px, 1px);
 }
 .model-selector-icon {
   font-size: 14px !important;
@@ -112,23 +116,22 @@ export default {
 }
 .model-selector-dropdown {
   position: absolute;
-  bottom: calc(100% + 4px);
+  bottom: calc(100% + 6px);
   left: 0;
   min-width: 180px;
   max-height: 240px;
   overflow-y: auto;
   padding: 4px;
-  border: 1px solid var(--color-outline-variant);
-  border-radius: 8px;
-  background: var(--color-surface-container-lowest, var(--color-background));
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  border: 3px solid var(--color-outline);
+  border-radius: 0;
+  background: var(--color-surface);
+  box-shadow: 4px 4px 0 0 #101010;
   z-index: 100;
 }
 .model-selector-empty {
   padding: 8px 12px;
-  font-size: 11px;
+  font-size: 13px;
   color: var(--color-on-surface-variant);
-  opacity: 0.7;
 }
 .model-option {
   display: block;
@@ -136,18 +139,19 @@ export default {
   text-align: left;
   padding: 6px 10px;
   border: none;
-  border-radius: 4px;
+  border-radius: 0;
   background: transparent;
   color: var(--color-on-surface);
-  font-size: 12px;
+  font-size: 14px;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background-color 0.1s;
 }
 .model-option:hover {
   background: var(--color-surface-container);
 }
 .model-option-active {
-  color: var(--color-primary);
+  color: var(--color-on-primary);
+  background: var(--color-primary);
   font-weight: 600;
 }
 </style>

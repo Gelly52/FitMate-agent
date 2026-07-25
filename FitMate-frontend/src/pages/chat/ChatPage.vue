@@ -358,31 +358,39 @@ export default {
   align-items: center;
   gap: 10px;
   padding: 10px 18px;
-  border-bottom: 1px solid color-mix(in srgb, var(--color-on-surface) 8%, transparent);
-  background: color-mix(in srgb, var(--color-background) 96%, transparent);
+  border-bottom: 3px solid var(--color-outline);
+  background: var(--color-background);
 }
 
 .chat-history-action {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border: 1px solid color-mix(in srgb, var(--color-on-surface) 12%, transparent);
-  border-radius: 999px;
-  padding: 7px 12px;
-  background: color-mix(in srgb, var(--color-on-surface) 6%, transparent);
-  color: color-mix(in srgb, var(--color-on-surface) 88%, transparent);
+  border: 2px solid var(--color-outline);
+  border-radius: 0;
+  padding: 6px 12px;
+  background: var(--color-surface);
+  color: var(--color-on-surface);
   cursor: pointer;
-  font-size: 13px;
+  font-size: 15px;
+  box-shadow: 2px 2px 0 0 #101010;
+  transition: background-color 0.1s, color 0.1s, border-color 0.1s;
 }
 
 .chat-history-action:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--color-primary) 55%, transparent);
-  background: color-mix(in srgb, var(--color-primary) 16%, transparent);
+  border-color: var(--pixel-blue);
+  color: var(--pixel-blue);
+}
+
+.chat-history-action:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 0 #101010;
 }
 
 .chat-history-action:disabled {
   cursor: not-allowed;
   opacity: 0.5;
+  box-shadow: 2px 2px 0 0 #666666;
 }
 
 .chat-history-action .material-symbols-outlined {
@@ -413,19 +421,19 @@ export default {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   padding: 8px;
-  margin-top: 4px;
-  border: 1px solid color-mix(in srgb, var(--color-on-surface) 10%, transparent);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--color-surface-container-lowest) 98%, transparent);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  margin-top: 6px;
+  border: 3px solid var(--color-outline);
+  border-radius: 0;
+  background: var(--color-surface);
+  box-shadow: 6px 6px 0 0 #101010;
 }
 
 .chat-history-empty {
   padding: 10px 0;
-  color: color-mix(in srgb, var(--color-on-surface) 52%, transparent);
-  font-size: 13px;
+  color: var(--color-on-surface-variant);
+  font-size: 15px;
   text-align: center;
 }
 
@@ -434,23 +442,24 @@ export default {
   align-items: center;
   gap: 10px;
   min-width: 0;
-  border: 1px solid transparent;
-  border-radius: 8px;
+  border: 2px solid transparent;
+  border-radius: 0;
   padding: 8px 10px;
   background: transparent;
-  color: color-mix(in srgb, var(--color-on-surface) 88%, transparent);
+  color: var(--color-on-surface);
   cursor: pointer;
   text-align: left;
+  transition: background-color 0.1s, border-color 0.1s;
 }
 
 .chat-history-item:hover {
-  border-color: color-mix(in srgb, var(--color-primary) 48%, transparent);
-  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+  border-color: var(--pixel-blue);
+  background: var(--color-surface-container);
 }
 
 .chat-history-item-active {
-  border-color: color-mix(in srgb, var(--color-primary) 82%, transparent);
-  background: color-mix(in srgb, var(--color-primary) 20%, transparent);
+  border-color: var(--pixel-blue);
+  background: var(--color-surface-container-high);
 }
 
 .chat-history-title {
@@ -459,7 +468,7 @@ export default {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
 }
 
@@ -468,8 +477,8 @@ export default {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: color-mix(in srgb, var(--color-on-surface) 52%, transparent);
-  font-size: 12px;
+  color: var(--color-on-surface-variant);
+  font-size: 14px;
 }
 
 /* 会话记录行的重命名 / 删除操作按钮 */
@@ -479,7 +488,7 @@ export default {
   gap: 2px;
   flex-shrink: 0;
   opacity: 0;
-  transition: opacity 0.18s ease;
+  transition: opacity 0.1s steps(2);
 }
 
 .chat-history-item:hover .chat-history-actions,
@@ -494,12 +503,12 @@ export default {
   width: 26px;
   height: 26px;
   padding: 0;
-  border: 1px solid transparent;
-  border-radius: 6px;
+  border: 2px solid transparent;
+  border-radius: 0;
   background: transparent;
-  color: color-mix(in srgb, var(--color-on-surface) 60%, transparent);
+  color: var(--color-on-surface-variant);
   cursor: pointer;
-  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+  transition: background-color 0.1s, color 0.1s, border-color 0.1s;
 }
 
 .chat-history-action-btn .material-symbols-outlined {
@@ -507,35 +516,40 @@ export default {
 }
 
 .chat-history-action-btn:hover {
-  background: color-mix(in srgb, var(--color-on-surface) 10%, transparent);
+  background: var(--color-surface-container-high);
   color: var(--color-on-surface);
-  border-color: color-mix(in srgb, var(--color-on-surface) 12%, transparent);
+  border-color: var(--color-outline);
+}
+
+.chat-history-action-btn:active {
+  transform: translate(1px, 1px);
 }
 
 .chat-history-action-danger:hover {
-  background: color-mix(in srgb, #e53935 16%, transparent);
-  color: #e53935;
-  border-color: color-mix(in srgb, #e53935 45%, transparent);
+  background: var(--pixel-red);
+  color: var(--pixel-white);
+  border-color: var(--color-outline);
 }
 
 .chat-history-more {
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px transparent;
-  border-radius: 8px;
+  border: 2px solid transparent;
+  border-radius: 0;
   padding: 6px 10px;
   background: transparent;
-  color: color-mix(in srgb, var(--color-primary) 78%, transparent);
+  color: var(--color-primary);
   cursor: pointer;
   text-align: center;
   font-size: 16px;
   font-weight: 700;
-  letter-spacing: 2px;
+  letter-spacing: 0;
 }
 
 .chat-history-more:hover {
-  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+  border-color: var(--color-outline);
+  background: var(--color-surface-container);
 }
 
 .chat-history-page {
@@ -552,19 +566,19 @@ export default {
   align-items: baseline;
   gap: 12px;
   padding-bottom: 12px;
-  border-bottom: 1px solid color-mix(in srgb, var(--color-on-surface) 8%, transparent);
+  border-bottom: 3px solid var(--color-outline);
   margin-bottom: 12px;
 }
 
 .chat-history-page-title {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 600;
   color: var(--color-on-surface);
 }
 
 .chat-history-page-count {
-  font-size: 13px;
-  color: color-mix(in srgb, var(--color-on-surface) 52%, transparent);
+  font-size: 15px;
+  color: var(--color-on-surface-variant);
 }
 
 .chat-history-page-empty {
@@ -572,8 +586,8 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: color-mix(in srgb, var(--color-on-surface) 52%, transparent);
-  font-size: 14px;
+  color: var(--color-on-surface-variant);
+  font-size: 16px;
 }
 
 .chat-history-page-list {
@@ -582,7 +596,7 @@ export default {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
   padding-right: 4px;
 }
 
@@ -591,23 +605,25 @@ export default {
   align-items: center;
   gap: 12px;
   min-width: 0;
-  border: 1px solid color-mix(in srgb, var(--color-on-surface) 8%, transparent);
-  border-radius: 10px;
+  border: 2px solid var(--color-outline);
+  border-radius: 0;
   padding: 10px 14px;
-  background: color-mix(in srgb, var(--color-on-surface) 3%, transparent);
-  color: color-mix(in srgb, var(--color-on-surface) 88%, transparent);
+  background: var(--color-surface);
+  color: var(--color-on-surface);
+  box-shadow: 2px 2px 0 0 #101010;
   cursor: pointer;
   text-align: left;
+  transition: background-color 0.1s, border-color 0.1s;
 }
 
 .chat-history-page-item:hover {
-  border-color: color-mix(in srgb, var(--color-primary) 48%, transparent);
-  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+  border-color: var(--pixel-blue);
+  background: var(--color-surface-container);
 }
 
 .chat-history-page-item-active {
-  border-color: color-mix(in srgb, var(--color-primary) 82%, transparent);
-  background: color-mix(in srgb, var(--color-primary) 20%, transparent);
+  border-color: var(--pixel-blue);
+  background: var(--color-surface-container-high);
 }
 
 .chat-history-page-item-title {
@@ -616,7 +632,7 @@ export default {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 600;
 }
 
@@ -625,8 +641,8 @@ export default {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: color-mix(in srgb, var(--color-on-surface) 52%, transparent);
-  font-size: 13px;
+  color: var(--color-on-surface-variant);
+  font-size: 15px;
 }
 
 .chat-page-input {
@@ -649,17 +665,18 @@ export default {
   align-items: center;
   gap: 10px;
   padding: 12px 16px;
-  border: 1px solid color-mix(in srgb, var(--color-on-surface) 10%, transparent);
-  border-radius: 16px;
-  background: var(--color-surface-container-lowest, var(--color-background));
-  color: color-mix(in srgb, var(--color-on-surface) 88%, transparent);
-  font-size: 13px;
+  border: 3px solid var(--color-outline);
+  border-radius: 0;
+  background: var(--color-surface);
+  color: var(--color-on-surface);
+  font-size: 15px;
+  box-shadow: 4px 4px 0 0 #101010;
 }
 
 .chat-confirm-icon {
   font-size: 20px;
   flex-shrink: 0;
-  color: color-mix(in srgb, var(--color-on-surface) 55%, transparent);
+  color: var(--pixel-yellow);
 }
 
 .chat-confirm-text {
@@ -675,30 +692,34 @@ export default {
 }
 
 .chat-confirm-btn {
-  border: 1px solid color-mix(in srgb, var(--color-on-surface) 12%, transparent);
-  border-radius: 9999px;
-  padding: 6px 14px;
-  font-size: 13px;
+  border: 2px solid var(--color-outline);
+  border-radius: 0;
+  padding: 5px 14px;
+  font-size: 15px;
   cursor: pointer;
-  background: transparent;
-  color: color-mix(in srgb, var(--color-on-surface) 75%, transparent);
-  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+  background: var(--color-surface);
+  color: var(--color-on-surface);
+  box-shadow: 2px 2px 0 0 #101010;
+  transition: color 0.1s, border-color 0.1s, background-color 0.1s;
+}
+
+.chat-confirm-btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 0 #101010;
 }
 
 .chat-confirm-cancel:hover {
-  border-color: var(--color-on-surface-variant);
-  color: var(--color-on-surface);
+  background: var(--color-surface-container);
 }
 
 .chat-confirm-accept {
-  border-color: color-mix(in srgb, var(--color-primary) 55%, transparent);
-  background: color-mix(in srgb, var(--color-primary) 16%, transparent);
-  color: var(--color-primary);
+  border-color: var(--color-outline);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
 }
 
 .chat-confirm-accept:hover {
-  background: color-mix(in srgb, var(--color-primary) 24%, transparent);
-  border-color: var(--color-primary);
+  border-color: var(--pixel-blue);
 }
 
 /* 居中模态确认弹窗（用于删除会话等需要强提示的二次确认） */
@@ -710,8 +731,8 @@ export default {
   align-items: center;
   justify-content: center;
   padding: 16px;
-  background: color-mix(in srgb, rgba(0, 0, 0, 0.45) 100%, transparent);
-  animation: chat-confirm-dialog-fade 0.18s ease;
+  background: rgba(16, 16, 16, 0.7);
+  animation: chat-confirm-dialog-fade 0.15s steps(3);
 }
 
 @keyframes chat-confirm-dialog-fade {
@@ -730,16 +751,16 @@ export default {
   flex-direction: column;
   gap: 14px;
   padding: 22px 22px 18px;
-  border: 1px solid color-mix(in srgb, var(--color-on-surface) 10%, transparent);
-  border-radius: 18px;
-  background: var(--color-surface-container-lowest, var(--color-background));
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
-  animation: chat-confirm-dialog-pop 0.2s ease;
+  border: 4px solid var(--color-outline);
+  border-radius: 0;
+  background: var(--color-surface);
+  box-shadow: 8px 8px 0 0 #101010;
+  animation: chat-confirm-dialog-pop 0.15s steps(3);
 }
 
 @keyframes chat-confirm-dialog-pop {
   from {
-    transform: translateY(8px) scale(0.98);
+    transform: translateY(8px) scale(0.95);
     opacity: 0;
   }
   to {
@@ -757,23 +778,23 @@ export default {
 .chat-confirm-dialog-icon {
   font-size: 24px;
   flex-shrink: 0;
-  color: color-mix(in srgb, var(--color-on-surface) 55%, transparent);
+  color: var(--pixel-yellow);
 }
 
 .chat-confirm-dialog-danger .chat-confirm-dialog-icon {
-  color: #e53935;
+  color: var(--pixel-red);
 }
 
 .chat-confirm-dialog-title {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 700;
   color: var(--color-on-surface);
 }
 
 .chat-confirm-dialog-body {
-  font-size: 14px;
-  line-height: 1.55;
-  color: color-mix(in srgb, var(--color-on-surface) 78%, transparent);
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--color-on-surface);
   word-break: break-word;
 }
 
@@ -786,41 +807,44 @@ export default {
 
 .chat-confirm-dialog-btn {
   min-width: 84px;
-  border: 1px solid color-mix(in srgb, var(--color-on-surface) 14%, transparent);
-  border-radius: 9999px;
-  padding: 8px 18px;
-  font-size: 13px;
+  border: 2px solid var(--color-outline);
+  border-radius: 0;
+  padding: 7px 18px;
+  font-size: 15px;
   cursor: pointer;
-  background: transparent;
-  color: color-mix(in srgb, var(--color-on-surface) 80%, transparent);
-  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+  background: var(--color-surface);
+  color: var(--color-on-surface);
+  box-shadow: 2px 2px 0 0 #101010;
+  transition: background-color 0.1s, color 0.1s, border-color 0.1s;
+}
+
+.chat-confirm-dialog-btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 0 #101010;
 }
 
 .chat-confirm-dialog-cancel:hover {
-  background: color-mix(in srgb, var(--color-on-surface) 8%, transparent);
-  color: var(--color-on-surface);
+  background: var(--color-surface-container);
 }
 
 .chat-confirm-dialog-accept {
-  border-color: color-mix(in srgb, var(--color-primary) 55%, transparent);
-  background: color-mix(in srgb, var(--color-primary) 18%, transparent);
-  color: var(--color-primary);
+  border-color: var(--color-outline);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
   font-weight: 600;
 }
 
 .chat-confirm-dialog-accept:hover {
-  background: color-mix(in srgb, var(--color-primary) 28%, transparent);
-  border-color: var(--color-primary);
+  border-color: var(--pixel-blue);
 }
 
 .chat-confirm-dialog-danger .chat-confirm-dialog-accept {
-  border-color: color-mix(in srgb, #e53935 55%, transparent);
-  background: color-mix(in srgb, #e53935 18%, transparent);
-  color: #e53935;
+  border-color: var(--color-outline);
+  background: var(--pixel-red);
+  color: var(--pixel-white);
 }
 
 .chat-confirm-dialog-danger .chat-confirm-dialog-accept:hover {
-  background: color-mix(in srgb, #e53935 30%, transparent);
-  border-color: #e53935;
+  border-color: var(--pixel-yellow);
 }
 </style>

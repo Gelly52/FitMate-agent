@@ -2,15 +2,15 @@
   <main
     class="login-page w-full min-h-screen flex flex-col items-center justify-center bg-background text-on-surface antialiased selection:bg-inverse-primary selection:text-inverse-surface px-margin"
   >
-    <div class="w-full max-w-sm flex flex-col gap-xl">
+    <div class="login-card w-full max-w-sm flex flex-col gap-lg">
       <!-- Brand -->
       <header class="flex flex-col items-center gap-md">
-        <div class="login-mark" aria-hidden="true">
+        <div class="login-mark animate-float" aria-hidden="true">
           <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="4" y="4" width="10" height="10" rx="2.5" fill="currentColor" />
-            <rect x="18" y="4" width="10" height="10" rx="2.5" fill="currentColor" opacity="0.35" />
-            <rect x="4" y="18" width="10" height="10" rx="2.5" fill="currentColor" opacity="0.35" />
-            <rect x="18" y="18" width="10" height="10" rx="2.5" fill="currentColor" />
+            <rect x="4" y="4" width="8" height="24" fill="currentColor" />
+            <rect x="12" y="4" width="10" height="8" fill="currentColor" />
+            <rect x="12" y="16" width="8" height="8" fill="currentColor" />
+            <rect x="26" y="4" width="6" height="6" fill="#D4A533" />
           </svg>
         </div>
         <h1 class="login-title">FitMate Agent</h1>
@@ -293,140 +293,160 @@ export default {
 </script>
 
 <style scoped>
-/* ===== 字体：Manrope，简约现代有特色 ===== */
-@import url("https://fonts.loli.net/css2?family=Manrope:wght@400;500;600;700&display=swap");
-
+/* ===== 像素风登录页：硬边框 + 硬阴影 + 像素网格背景 ===== */
 .login-page {
-  font-family: "Manrope", system-ui, -apple-system, sans-serif;
-  --login-gap-2xl: 48px;
-  --login-radius: 10px;
+  position: relative;
+  background-color: var(--color-background);
 }
 
-/* ===== Brand mark：2x2 几何方块网格，对角透明度形成视觉韵律 ===== */
+/* 低透明度像素网格背景（纯装饰，不响应指针） */
+.login-page::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(var(--color-outline) 1px, transparent 1px),
+    linear-gradient(90deg, var(--color-outline) 1px, transparent 1px);
+  background-size: 24px 24px;
+  opacity: 0.06;
+}
+
+/* ===== 登录卡片：hero 级 4px 边框 + 8px 硬阴影 ===== */
+.login-card {
+  position: relative;
+  background: var(--color-surface);
+  border: 4px solid var(--color-outline);
+  box-shadow: 8px 8px 0 0 #101010;
+  padding: 40px 32px;
+}
+
+/* ===== Brand mark：像素方块图标，悬浮动画 ===== */
 .login-mark {
-  width: 44px;
-  height: 44px;
+  width: 56px;
+  height: 56px;
+  padding: 8px;
   color: var(--color-primary);
   display: flex;
   align-items: center;
   justify-content: center;
+  border: 3px solid var(--color-outline);
+  background: var(--color-surface);
+  box-shadow: 3px 3px 0 0 #101010;
 }
 .login-mark svg {
   width: 100%;
   height: 100%;
 }
 
-/* ===== 标题：轻字重 + 紧凑字距，编辑风 ===== */
+/* ===== 标题：继承像素字体 ===== */
 .login-title {
-  font-family: "Manrope", system-ui, sans-serif;
-  font-weight: 600;
-  font-size: 22px;
-  letter-spacing: -0.01em;
+  font-size: 28px;
+  font-weight: 400;
+  letter-spacing: 0.02em;
   color: var(--color-on-surface);
   margin: 0;
 }
 
-/* ===== 标签：小写、正常字距，柔和而非科技感 ===== */
+/* ===== 标签 ===== */
 .login-label {
-  font-family: "Manrope", system-ui, sans-serif;
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 15px;
   color: var(--color-on-surface-variant);
-  letter-spacing: 0;
-  transition: color 0.2s ease;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  transition: color 0.1s;
 }
 .group:focus-within .login-label {
   color: var(--color-primary);
 }
 
-/* ===== 输入框：精致下划线 ===== */
+/* ===== 输入框：像素 Input 规范（3px 边框 + 内嵌硬阴影，聚焦变蓝） ===== */
 .login-underline {
-  background-color: transparent;
-  border: none;
-  border-bottom: 1px solid var(--color-outline-variant);
+  background-color: var(--color-surface);
+  border: 3px solid var(--color-outline);
   border-radius: 0;
-  padding: 8px 0;
+  padding: 8px 12px;
   width: 100%;
   outline: none;
-  font-family: "Manrope", system-ui, sans-serif;
-  font-size: 15px;
-  font-weight: 400;
+  font-size: 17px;
   color: var(--color-on-surface);
-  transition: border-color 0.2s ease;
+  box-shadow: inset 2px 2px 0 0 rgba(16, 16, 16, 0.35);
+  transition: border-color 0.1s;
 }
 .login-underline:focus {
-  border-bottom-color: var(--color-primary);
+  border-color: var(--pixel-blue);
+  outline: none;
 }
 .login-underline::placeholder {
   color: var(--color-on-surface-variant);
-  opacity: 0.45;
-  font-weight: 400;
+  opacity: 0.5;
 }
 
-/* 验证码输入：等宽字距，但不过分 */
+/* 验证码输入：等宽字距 */
 .login-code-input {
   letter-spacing: 0.3em;
   font-variant-numeric: tabular-nums;
 }
 
-/* ===== 发送验证码按钮：文字按钮，下划线 hover ===== */
+/* ===== 发送验证码按钮：黄色像素小按钮 ===== */
 .login-code-btn {
-  margin-bottom: 6px;
-  padding: 4px 2px;
-  font-family: "Manrope", system-ui, sans-serif;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--color-primary);
-  background: transparent;
-  border: none;
-  border-bottom: 1px solid transparent;
+  padding: 8px 12px;
+  font-size: 15px;
+  color: var(--pixel-black);
+  background: var(--pixel-yellow);
+  border: 3px solid var(--color-outline);
+  box-shadow: 2px 2px 0 0 #101010;
   cursor: pointer;
-  transition: border-color 0.2s ease, opacity 0.2s ease;
   white-space: nowrap;
+  transition: background-color 0.1s, transform 0.1s, box-shadow 0.1s;
 }
 .login-code-btn:hover:not(:disabled) {
-  border-bottom-color: var(--color-primary);
+  transform: translateY(-1px);
+}
+.login-code-btn:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 0 #101010;
 }
 .login-code-btn:disabled {
-  opacity: 0.4;
+  opacity: 0.5;
   cursor: not-allowed;
+  box-shadow: 2px 2px 0 0 #666666;
 }
 
 /* ===== 提示文案 ===== */
 .login-hint {
-  font-family: "Manrope", system-ui, sans-serif;
-  font-size: 12px;
-  font-weight: 400;
+  font-size: 14px;
   color: var(--color-on-surface-variant);
-  opacity: 0.75;
   line-height: 1.5;
   margin: 0;
 }
 
-/* ===== 提交按钮：实色、柔和圆角，去掉赛博风 ===== */
+/* ===== 提交按钮：像素 Button 规范（主色 + 硬阴影 + 按压下沉） ===== */
 .login-submit {
   width: 100%;
-  padding: 13px 20px;
+  padding: 12px 20px;
   background: var(--color-primary);
   color: var(--color-on-primary);
-  font-family: "Manrope", system-ui, sans-serif;
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  border: none;
-  border-radius: var(--login-radius);
+  font-size: 18px;
+  letter-spacing: 0.05em;
+  border: 3px solid var(--color-outline);
+  border-radius: 0;
+  box-shadow: 4px 4px 0 0 #101010;
   cursor: pointer;
-  transition: opacity 0.2s ease, transform 0.1s ease;
+  transition: transform 0.1s, box-shadow 0.1s, background-color 0.1s;
 }
 .login-submit:hover:not(:disabled) {
-  opacity: 0.9;
+  transform: translateY(-1px);
+  box-shadow: 5px 5px 0 0 #101010;
 }
 .login-submit:active:not(:disabled) {
-  transform: translateY(1px);
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 0 #101010;
 }
 .login-submit:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  box-shadow: 2px 2px 0 0 #666666;
 }
 
 /* ===== Autofill：跟随主题，避免亮色下黑块 ===== */
@@ -434,15 +454,8 @@ input:-webkit-autofill,
 input:-webkit-autofill:hover,
 input:-webkit-autofill:focus,
 input:-webkit-autofill:active {
-  -webkit-box-shadow: 0 0 0 30px var(--color-background) inset !important;
+  -webkit-box-shadow: 0 0 0 30px var(--color-surface) inset !important;
   -webkit-text-fill-color: var(--color-on-surface) !important;
   transition: background-color 5000s ease-in-out 0s;
-}
-</style>
-
-<!-- 亮色模式柔和化：纯白背景改为柔和浅灰，降低刺眼感 -->
-<style>
-[data-theme="light"] .login-page {
-  background-color: #eef1f5;
 }
 </style>

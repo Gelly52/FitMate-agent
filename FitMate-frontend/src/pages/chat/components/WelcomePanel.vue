@@ -2,7 +2,7 @@
   <div class="flex flex-col items-center justify-center h-full text-center px-md gap-lg">
     <div class="flex flex-col items-center gap-md">
       <div
-        class="w-16 h-16 rounded-full bg-surface-container border border-outline-variant flex items-center justify-center"
+        class="welcome-avatar w-16 h-16 flex items-center justify-center animate-float"
       >
         <span
           class="material-symbols-outlined text-primary"
@@ -10,10 +10,10 @@
           >fitness_center</span
         >
       </div>
-      <h2 class="font-inter text-headline-md text-on-surface tracking-tight">
+      <h2 class="text-headline-md text-on-surface">
         你好，我是 FitMate
       </h2>
-      <p class="font-inter text-body-base text-on-surface-variant max-w-md">
+      <p class="text-body-base text-on-surface-variant max-w-md">
         记住你的每一次训练，读懂你的每一次变化。
       </p>
     </div>
@@ -58,24 +58,36 @@ export default {
 </script>
 
 <style scoped>
+.welcome-avatar {
+  background: var(--color-surface-container);
+  border: 3px solid var(--color-outline);
+  border-radius: 0;
+  box-shadow: 4px 4px 0 0 #101010;
+}
+
 .welcome-prompt-btn {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   padding: 8px 16px;
-  border: 1px solid var(--color-outline-variant);
-  border-radius: 0.5rem;
-  background: transparent;
-  color: var(--color-on-surface-variant);
-  font-size: 13px;
-  font-family: "Inter", sans-serif;
+  border: 2px solid var(--color-outline);
+  border-radius: 0;
+  background: var(--color-surface);
+  color: var(--color-on-surface);
+  font-size: 15px;
+  letter-spacing: 0;
   cursor: pointer;
-  transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
+  box-shadow: 2px 2px 0 0 #101010;
+  transition: border-color 0.1s, color 0.1s, background-color 0.1s;
 }
 
 .welcome-prompt-btn:hover {
-  border-color: var(--color-primary-fixed-dim);
-  color: var(--color-primary-fixed-dim);
-  background: color-mix(in srgb, var(--color-primary) 6%, transparent);
+  border-color: var(--pixel-blue);
+  color: var(--color-primary);
+}
+
+.welcome-prompt-btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 0 #101010;
 }
 </style>

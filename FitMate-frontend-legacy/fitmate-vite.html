@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN">
+    <head>
+        <meta charset="UTF-8" />
+        <script>
+            (function () {
+                var mode = localStorage.getItem("fitmate_theme_mode") || "dark";
+                var accent = localStorage.getItem("fitmate_accent_color") || "blue";
+                if (mode === "auto") {
+                    mode = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+                }
+                document.documentElement.dataset.theme = mode;
+                document.documentElement.dataset.accent = accent;
+            })();
+        </script>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+        <title>FitMate</title>
+        <link rel="preconnect" href="https://fonts.loli.net" />
+        <link rel="preconnect" href="https://gstatic.loli.net" crossorigin />
+        <link href="https://fonts.loli.net/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+        <link href="https://fonts.loli.net/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+        <link href="https://fonts.loli.net/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+        <style>
+            /* 字体未加载完成前隐藏 material-symbols 文本，避免刷新时闪现 robot_2 等原始文字 */
+            .material-symbols-outlined:not(.ms-ready) {
+                visibility: hidden;
+            }
+        </style>
+        <script>
+            // 字体加载完成后再显示图标；加超时兜底，避免 CDN 异常时图标永久不可见
+            (function () {
+                var msReady = false;
+                function markReady() {
+                    if (msReady) return;
+                    msReady = true;
+                    document.querySelectorAll(".material-symbols-outlined").forEach(function (el) {
+                        el.classList.add("ms-ready");
+                    });
+                }
+                // 尽早启动 Observer：Vue 挂载后动态插入的图标，若字体已就绪则立即标记为可显示
+                var observer = new MutationObserver(function (mutations) {
+                    if (!msReady) return;
+                    mutations.forEach(function (m) {
+                        m.addedNodes.forEach(function (node) {
+                            if (node.nodeType !== 1) return;
+                            if (node.classList && node.classList.contains("material-symbols-outlined")) {
+                                node.classList.add("ms-ready");
+                            }
+                            if (node.querySelectorAll) {
+                                node.querySelectorAll(".material-symbols-outlined").forEach(function (el) {
+                                    el.classList.add("ms-ready");
+                                });
+                            }
+                        });
+                    });
+                });
+                observer.observe(document.documentElement, { childList: true, subtree: true });
+                // 字体加载：用 Font Loading API 主动拉取，3s 超时兜底
+                if (document.fonts && typeof document.fonts.load === "function") {
+                    Promise.race([
+                        document.fonts.load("1em Material Symbols Outlined").then(function () {
+                            return document.fonts.ready;
+                        }),
+                        new Promise(function (resolve) {
+                            setTimeout(resolve, 3000);
+                        }),
+                    ]).then(markReady);
+                } else {
+                    // 不支持 Font Loading API 的浏览器直接显示
+                    markReady();
+                }
+            })();
+        </script>
+    </head>
+    <body>
+        <div id="app"></div>
+        <script type="module" src="/src/main.ts"></script>
+    </body>
+</html>

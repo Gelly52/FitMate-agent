@@ -38,8 +38,8 @@ export const DEFAULT_USER_SETTINGS: UserSettings = {
 export const ACCENT_COLOR_OPTIONS: { value: AccentColor; label: string }[] = [
   { value: "blue", label: "蓝" },
   { value: "green", label: "绿" },
-  { value: "orange", label: "橙" },
-  { value: "purple", label: "紫" },
+  { value: "orange", label: "黄" },
+  { value: "purple", label: "红" },
   { value: "light", label: "亮色" },
   { value: "dark", label: "暗色" },
 ];

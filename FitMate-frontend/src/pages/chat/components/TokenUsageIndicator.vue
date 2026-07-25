@@ -7,30 +7,13 @@
     </span>
 
     <div class="token-ring-wrap">
-      <svg class="token-ring" width="14" height="14" viewBox="0 0 36 36">
-        <!-- 浅色背景圆（剩余上下文） -->
-        <circle
-          cx="18"
-          cy="18"
-          r="15.9"
-          fill="none"
-          stroke="var(--color-outline-variant)"
-          stroke-width="4"
-          opacity="0.4"
-        />
-        <!-- 深色前景圆（已用）按比例绘制 -->
-        <circle
-          cx="18"
-          cy="18"
-          r="15.9"
-          fill="none"
-          :stroke="ringColor"
-          stroke-width="4"
-          :stroke-dasharray="usedPercent + ', 100'"
-          stroke-linecap="round"
-          transform="rotate(-90 18 18)"
-        />
-      </svg>
+      <!-- 像素风：粗边框方块进度条（已用 / 总上下文） -->
+      <div class="token-bar" aria-hidden="true">
+        <div
+          class="token-bar-fill"
+          :style="{ width: usedPercent + '%', backgroundColor: ringColor }"
+        ></div>
+      </div>
 
       <!-- 悬停弹出详情 -->
       <div v-if="tokenUsage" class="token-tooltip">
@@ -181,10 +164,10 @@ export default {
 .token-usage-indicator {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  font-size: 11px;
+  gap: 6px;
+  font-size: 13px;
   color: var(--color-on-surface-variant);
-  opacity: 0.7;
+  opacity: 0.8;
 }
 
 .token-ring-wrap {
@@ -194,8 +177,20 @@ export default {
   align-items: center;
 }
 
-.token-ring {
+/* 像素进度条：粗边框 + 平色填充，无圆角无渐变 */
+.token-bar {
+  width: 44px;
+  height: 10px;
+  border: 2px solid var(--color-outline);
+  border-radius: 0;
+  background: var(--color-surface);
   cursor: default;
+  overflow: hidden;
+}
+
+.token-bar-fill {
+  height: 100%;
+  transition: width 0.15s steps(3);
 }
 
 .token-tooltip {
@@ -205,19 +200,16 @@ export default {
   transform: translateX(-50%);
   min-width: 180px;
   padding: 8px 10px;
-  background: var(
-    --color-surface-3,
-    var(--color-surface-container-high, #2b2b2b)
-  );
-  border: 1px solid var(--color-outline-variant);
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  font-size: 11px;
+  background: var(--color-surface-container-high);
+  border: 2px solid var(--color-outline);
+  border-radius: 0;
+  box-shadow: 4px 4px 0 0 #101010;
+  font-size: 13px;
   color: var(--color-on-surface);
   white-space: nowrap;
   opacity: 0;
   visibility: hidden;
-  transition: opacity 0.15s ease, visibility 0.15s ease;
+  transition: opacity 0.15s steps(3), visibility 0.15s;
   pointer-events: none;
   z-index: 100;
 }
@@ -239,12 +231,10 @@ export default {
 }
 
 .token-tooltip-val {
-  font-family: "Inter", sans-serif;
-  font-weight: 500;
+  color: var(--color-on-surface);
 }
 
 .token-label {
-  font-family: "Inter", sans-serif;
   letter-spacing: 0.02em;
   white-space: nowrap;
 }
