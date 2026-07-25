@@ -60,3 +60,9 @@ Thumbs.db
 
 # Local scratch / notes (not source)
 新建 文本文档.txt
+
+# Legacy (pre-pixel) frontend kept locally, not tracked
+FitMate-frontend-legacy/
+
+# Claude Code local config/skills
+.claude/
