@@ -42,53 +42,53 @@ FitMate AI 是一个面向个人健康管理的 AI 健身助手。它将训练�
 
 根据 Agent 的历史记忆展示用户个人信息画像。
 
-![Dashboard 用户画像](C:\Users\28581\AppData\Local\Temp\1784992719265.png)
+![Dashboard 用户画像](docs/images/dashboard.png)
 
 ### Chat 智能会话
 
 支持工具调用、子智能体派发、MCP 和 Skills 按需加载，可用于日常健康咨询、数据查询和复杂任务执行。
 
-![Chat 智能会话](C:\Users\28581\AppData\Local\Temp\1784992758675.png)
+![Chat 智能会话](docs/images/chat.png)
 
 ### Training Log 训练日志
 
 可由 LLM 从对话中提取训练记录，也支持手动记录力量、有氧与饮食数据。
 
-![Training Log 训练日志](C:\Users\28581\AppData\Local\Temp\1784992784783.png)
+![Training Log 训练日志](docs/images/training-log.png)
 
 ### Body Metrics 身体指标
 
 记录体重、围度、睡眠、心率等身体数据，便于长期趋势追踪。
 
-![Body Metrics 身体指标](C:\Users\28581\AppData\Local\Temp\1784992827281.png)
+![Body Metrics 身体指标](docs/images/body-metrics.png)
 
 ### Wiki 与知识库
 
 上传个人资料后，系统会进行向量化并异步编译为结构化 Wiki。检索流程为：`Wiki 预检索 -> kb.search -> rag.search（仅启用 RAG 时）`。
 
-![Wiki 知识页面](C:\Users\28581\AppData\Local\Temp\1784992869559.png)
+![Wiki 知识页面](docs/images/wiki.png)
 
-![Knowledge 知识库](C:\Users\28581\AppData\Local\Temp\1784992904244.png)
+![Knowledge 知识库](docs/images/knowledge.png)
 
 ### 设置与模型配置
 
 可在设置页维护个人模型配置；推荐使用 [DeepSeek 开放平台](https://platform.deepseek.com/) 提供的 OpenAI 兼容接口。
 
-![设置页](C:\Users\28581\AppData\Local\Temp\1784992936510.png)
+![设置页](docs/images/settings.png)
 
 ### 例如：
 
 - 输入想了解的问题
 
-![78499342490](C:\Users\28581\AppData\Local\Temp\1784993500806.png)
+![输入想了解的问题](docs/images/example-question.png)
 
 - 点击新会话首页”分析本周训练”、”恢复状态评估”、”生成本周周报“可以加载skills执行，支持工具调用；
 
-![image](C:\Users\28581\AppData\Local\Temp\1784993363238.png)
+![Skills 执行示例](docs/images/example-skills.png)
 
 - 输入 “使用subagent为我制定简单的个性化减脂方案“；
 
-![image](C:\Users\28581\AppData\Local\Temp\1784993487303.png)
+![Sub-Agent 执行示例](docs/images/example-subagent.png)
 
 ## 技术架构
 
