@@ -40,26 +40,27 @@ function applyToDom(mode: ThemeMode, accent: AccentColor): void {
   updateFavicon(resolved, accent);
 }
 
-/** accent + theme → favicon 背景色映射（取 --color-primary 值） */
+/** accent + theme → favicon 背景色映射（取 --color-primary 值，像素调色板） */
 const FAVICON_COLORS: Record<string, string> = {
-  "dark:blue": "#adc6ff",
-  "light:blue": "#005bc1",
-  "dark:green": "#7ee787",
-  "light:green": "#006e1c",
-  "dark:orange": "#ffb595",
-  "light:orange": "#8d4e00",
-  "dark:purple": "#c4a7e7",
-  "light:purple": "#6b3fa0",
-  "dark:light": "#c1c6d7",
-  "light:light": "#5b5e6c",
-  "dark:dark": "#8e9099",
-  "light:dark": "#3a3b42",
+  "dark:blue": "#6B8FD8",
+  "light:blue": "#3A5BA0",
+  "dark:green": "#4FA96B",
+  "light:green": "#2D7D46",
+  "dark:orange": "#D4A533",
+  "light:orange": "#D4A533",
+  "dark:purple": "#C75B5B",
+  "light:purple": "#A83232",
+  "dark:light": "#F8F8F8",
+  "light:light": "#6B6B6B",
+  "dark:dark": "#6B6B6B",
+  "light:dark": "#101010",
 };
 
-/** 根据当前主题+强调色动态更新 favicon */
+/** 根据当前主题+强调色动态更新 favicon（像素 F + AI 火花徽标） */
 function updateFavicon(theme: "light" | "dark", accent: AccentColor): void {
   const color = FAVICON_COLORS[`${theme}:${accent}`] || FAVICON_COLORS["dark:blue"];
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="${color}"/><path d="M22 16h22v8H30v8h12v8H30v16h-8z" fill="#fff"/></svg>`;
+  const fg = color === "#F8F8F8" || color === "#D4A533" ? "#101010" : "#F8F8F8";
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="${color}"/><rect x="2" y="2" width="60" height="60" fill="none" stroke="#101010" stroke-width="4"/><rect x="10" y="10" width="14" height="44" fill="${fg}"/><rect x="24" y="10" width="18" height="14" fill="${fg}"/><rect x="24" y="32" width="14" height="14" fill="${fg}"/><rect x="48" y="10" width="10" height="10" fill="#D4A533"/></svg>`;
   const href = "data:image/svg+xml," + encodeURIComponent(svg);
   let link = document.querySelector("link[rel='icon']") as HTMLLinkElement | null;
   if (!link) {
