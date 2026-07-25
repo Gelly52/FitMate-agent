@@ -42,53 +42,53 @@ FitMate AI 是一个面向个人健康管理的 AI 健身助手。它将训练�
 
 根据 Agent 的历史记忆展示用户个人信息画像。
 
-![Dashboard 用户画像](https://trae-forum-cdn.trae.com.cn/prod/original/3X/9/3/935efb600f79abc6a70e84772ae885ab78db4a18.jpeg)
+![Dashboard 用户画像](C:\Users\28581\AppData\Local\Temp\1784992719265.png)
 
 ### Chat 智能会话
 
 支持工具调用、子智能体派发、MCP 和 Skills 按需加载，可用于日常健康咨询、数据查询和复杂任务执行。
 
-![Chat 智能会话](https://trae-forum-cdn.trae.com.cn/prod/original/3X/5/8/586cd1e61ba9a37823a9425e1fd2c07ade1e46e5.png)
+![Chat 智能会话](C:\Users\28581\AppData\Local\Temp\1784992758675.png)
 
 ### Training Log 训练日志
 
 可由 LLM 从对话中提取训练记录，也支持手动记录力量、有氧与饮食数据。
 
-![Training Log 训练日志](https://trae-forum-cdn.trae.com.cn/prod/original/3X/1/2/12a97703f974ae99766ceb5e394e33d3c4184ecb.png)
+![Training Log 训练日志](C:\Users\28581\AppData\Local\Temp\1784992784783.png)
 
 ### Body Metrics 身体指标
 
 记录体重、围度、睡眠、心率等身体数据，便于长期趋势追踪。
 
-![Body Metrics 身体指标](https://trae-forum-cdn.trae.com.cn/prod/original/3X/9/1/9167c481f019a41a8a8bc4c4ee928b7a7695b79e.png)
+![Body Metrics 身体指标](C:\Users\28581\AppData\Local\Temp\1784992827281.png)
 
 ### Wiki 与知识库
 
 上传个人资料后，系统会进行向量化并异步编译为结构化 Wiki。检索流程为：`Wiki 预检索 -> kb.search -> rag.search（仅启用 RAG 时）`。
 
-![Wiki 知识页面](https://trae-forum-cdn.trae.com.cn/prod/original/3X/c/2/c204b099e1b982f6404bf46bfdcea9cc4957c076.jpeg)
+![Wiki 知识页面](C:\Users\28581\AppData\Local\Temp\1784992869559.png)
 
-![Knowledge 知识库](https://trae-forum-cdn.trae.com.cn/prod/original/3X/1/8/181b3d17a7274815133b7b6d9f8784519da58a11.png)
+![Knowledge 知识库](C:\Users\28581\AppData\Local\Temp\1784992904244.png)
 
 ### 设置与模型配置
 
 可在设置页维护个人模型配置；推荐使用 [DeepSeek 开放平台](https://platform.deepseek.com/) 提供的 OpenAI 兼容接口。
 
-![设置页](https://trae-forum-cdn.trae.com.cn/prod/original/3X/d/0/d0b380a0c10c8e42006dcafb0b97883e7fd8038d.png)
+![设置页](C:\Users\28581\AppData\Local\Temp\1784992936510.png)
 
 ### 例如：
 
 - 输入想了解的问题
 
-![image](https://trae-forum-cdn.trae.com.cn/prod/original/3X/3/6/36e21280c2b0f2befafc9f89bc9042ef5a9cbcaa.png)
+![78499342490](C:\Users\28581\AppData\Local\Temp\1784993500806.png)
 
 - 点击新会话首页”分析本周训练”、”恢复状态评估”、”生成本周周报“可以加载skills执行，支持工具调用；
 
-![image](https://trae-forum-cdn.trae.com.cn/prod/original/3X/5/7/57aef2087389b7a6f54eb766d7af0470f0960c71.jpeg)
+![image](C:\Users\28581\AppData\Local\Temp\1784993363238.png)
 
 - 输入 “使用subagent为我制定简单的个性化减脂方案“；
 
-![image](https://trae-forum-cdn.trae.com.cn/prod/original/3X/7/2/72701231149fdaa959983b69d8a1416676fd3098.jpeg)
+![image](C:\Users\28581\AppData\Local\Temp\1784993487303.png)
 
 ## 技术架构
 
