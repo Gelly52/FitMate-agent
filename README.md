@@ -1,6 +1,6 @@
 <div align="center">
 
-# FitMate AI
+# FitMate Agent
 
 [![Java](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white)](https://openjdk.org/)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5-6DB33F?logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
@@ -11,7 +11,7 @@
 
 </div>
 
-FitMate AI 是一个面向个人健康管理的 AI 健身助手。它将训练、饮食、身体指标与个人知识库集中到同一工作流中，并通过具备工具调用、记忆和子智能体编排能力的 Agent 提供连续对话式服务。
+FitMate Agent 是一个面向个人健康管理的 AI 健身助手。它将训练、饮食、身体指标与个人知识库集中到同一工作流中，并通过具备工具调用、记忆和子智能体编排能力的 Agent 提供连续对话式服务。
 
 > [!NOTE]
 > 当前项目适合本地开发和自托管部署。使用大模型、邮件和第三方服务前，请自行准备对应的账号、密钥与服务。
@@ -36,7 +36,7 @@ FitMate AI 是一个面向个人健康管理的 AI 健身助手。它将训练�
 
 ## 功能一览
 
-> 从日常数据记录到复杂训练计划，FitMate AI 将健康信息沉淀为可持续使用的个人上下文。
+> 从日常数据记录到复杂训练计划，FitMate Agent 将健康信息沉淀为可持续使用的个人上下文。
 
 ### Dashboard 用户画像
 
