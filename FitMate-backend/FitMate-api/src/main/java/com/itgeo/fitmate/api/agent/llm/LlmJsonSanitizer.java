@@ -37,7 +37,9 @@ public final class LlmJsonSanitizer {
         text = stripCodeFence(text);
 
         // 2. 如果仍不是 JSON，尝试从文本中提取第一个 JSON 对象
-        if (!text.startsWith("{") && !text.startsWith("[")) {
+        //    注意：即使 text 以 { 开头也要走这一步——模型偶尔在合法对象末尾多输出一个 ] 或附加文本，
+        //    括号深度匹配可以把这些尾部多余内容剥掉
+        if (!JSONUtil.isTypeJSON(text)) {
             text = extractFirstJsonBlock(text);
         }
 

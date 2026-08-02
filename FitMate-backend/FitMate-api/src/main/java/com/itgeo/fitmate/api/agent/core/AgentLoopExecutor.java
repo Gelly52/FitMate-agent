@@ -280,7 +280,22 @@ public class AgentLoopExecutor {
                 throw e;
             }
 
-            JSONObject decision = parseDecision(decisionText);
+            JSONObject decision;
+            try {
+                decision = parseDecision(decisionText);
+            } catch (IllegalStateException parseEx) {
+                // 决策 JSON 解析失败不终止整个 run：把错误作为 observation 反馈给下一轮迭代重新决策，
+                // 重试次数天然受 max-iterations 预算约束
+                log.warn("决策 JSON 解析失败，反馈至下一轮迭代重试: {}", parseEx.getMessage());
+                Map<String, Object> observation = new LinkedHashMap<>();
+                observation.put("toolCallId", "decision-retry-" + iteration);
+                observation.put("toolName", "decision_parse");
+                observation.put("success", false);
+                observation.put("content", "你上一轮的决策输出不是合法 JSON（" + abbreviate(decisionText)
+                        + "）。请重新输出：只输出一段合法 JSON 对象，不要有任何多余字符。");
+                observations.add(observation);
+                continue;
+            }
             String action = decision.getStr("action");
             if ("final".equalsIgnoreCase(action)) {
                 String finalAnswer = StrUtil.blankToDefault(decision.getStr("final_answer"), "Processing complete. Please review the execution trace above.");
@@ -783,7 +798,12 @@ public class AgentLoopExecutor {
         if (!JSONUtil.isTypeJSON(json)) {
             throw new IllegalStateException("Model did not return valid JSON decision: " + abbreviate(json));
         }
-        return JSONUtil.parseObj(json);
+        try {
+            return JSONUtil.parseObj(json);
+        } catch (Exception e) {
+            // isTypeJSON 只做粗校验，parseObj 仍可能失败（如字符串未闭合）；统一转为可重试异常
+            throw new IllegalStateException("Model did not return valid JSON decision: " + abbreviate(json), e);
+        }
     }
 
     private void sendContentChunk(AgentExecuteContext context, String content) {
