@@ -14,6 +14,7 @@ import com.itgeo.fitmate.api.chat.infrastructure.entity.ChatSession;
 import com.itgeo.fitmate.common.response.LeeResult;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DeadlockLoserDataAccessException;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -61,13 +62,36 @@ public class AgentController {
     public LeeResult execute(@RequestBody ChatEntity chatEntity) {
         try {
             AuthenticatedUserContext authenticatedUser = UserContextHolder.getRequired();
-            AgentExecuteAckResponse ack = agentExecuteService.execute(authenticatedUser, chatEntity);
+            AgentExecuteAckResponse ack = executeWithDeadlockRetry(authenticatedUser, chatEntity);
             return LeeResult.ok(ack);
         } catch (IllegalArgumentException e) {
             return LeeResult.errorMsg(e.getMessage());
         } catch (Exception e) {
             log.error("Agent 任务受理失败", e);
             return LeeResult.errorException("Agent 任务受理失败");
+        }
+    }
+
+    /**
+     * 受理阶段死锁重试。
+     *
+     * 同一会话多条请求完全同时提交时，受理事务内的消息插入与 t_chat_session 更新
+     * 可能互相形成 InnoDB 死锁（死锁牺牲方整个事务被回滚）。受理具备 botMsgId 幂等，
+     * 因此在事务外整单重试是安全的；重试仍失败则按原逻辑抛出。
+     */
+    private AgentExecuteAckResponse executeWithDeadlockRetry(AuthenticatedUserContext authenticatedUser,
+                                                             ChatEntity chatEntity) throws InterruptedException {
+        int maxAttempts = 3;
+        for (int attempt = 1; ; attempt++) {
+            try {
+                return agentExecuteService.execute(authenticatedUser, chatEntity);
+            } catch (DeadlockLoserDataAccessException e) {
+                if (attempt >= maxAttempts) {
+                    throw e;
+                }
+                log.warn("Agent 受理事务死锁，第 {} 次重试: {}", attempt, e.getMessage());
+                Thread.sleep(50L * attempt);
+            }
         }
     }
 
