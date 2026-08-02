@@ -50,7 +50,9 @@ public class RedisKeywordIndexBootstrap implements ApplicationRunner {
                     indexName,
                     FTCreateParams.createParams()
                             .on(IndexDataType.HASH)
-                            .prefix(keyPrefix),
+                            .prefix(keyPrefix)
+                            // 默认分词器不切中文，中文查询会零召回；friso 中文分词在索引与查询两侧必须一致
+                            .language("chinese"),
                     ragKeywordSchema()
             );
             log.info("RAG 关键字索引创建成功: index={} prefix={}", indexName, keyPrefix);
@@ -72,7 +74,8 @@ public class RedisKeywordIndexBootstrap implements ApplicationRunner {
                     indexName,
                     FTCreateParams.createParams()
                             .on(IndexDataType.HASH)
-                            .prefix(keyPrefix),
+                            .prefix(keyPrefix)
+                            .language("chinese"),
                     wikiKeywordSchema()
             );
             log.info("Wiki 关键字索引创建成功: index={} prefix={}", indexName, keyPrefix);

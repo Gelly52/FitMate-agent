@@ -86,10 +86,16 @@ public class RedisKeywordSearchServiceImpl implements KeywordSearchService {
         String indexName = ragEmbeddingProperties.getRetrieval().getKeywordIndexName();
         int safeTopK = topK == null || topK <= 0 ? 10 : topK;
 
-        String escapedQuestion = question.trim();
-        String queryText = "(@userId:{" + userId + "}) " + escapedQuestion;
+        // jieba 切词后拼 OR：自然语言长句按默认 AND 组合几乎必然零召回
+        String orQuery = com.itgeo.fitmate.api.rag.infrastructure.KeywordQueryBuilder.toOrQuery(question);
+        if (orQuery.isBlank()) {
+            return List.of();
+        }
+        String queryText = "(@userId:{" + userId + "}) (" + orQuery + ")";
 
         Query query = new Query(queryText)
+                // 与索引侧 language(chinese) 保持一致，否则中文查询串不会被切词
+                .setLanguage("chinese")
                 .limit(0, safeTopK);
 
         SearchResult result = jedisPooled.ftSearch(indexName, query);

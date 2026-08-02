@@ -31,9 +31,13 @@ public class WikiKeywordSearchServiceImpl implements WikiKeywordSearchService {
         // 检索 GLOBAL + 当前用户 USER space
         // RediSearch 语法：(@scope:{GLOBAL} | @ownerUserId:{userId}) {query}
         String filterExpr = String.format("(@scope:{GLOBAL} | @ownerUserId:{%d})", userId);
-        String fullQuery = filterExpr + " " + escapeQuery(query);
+        String orQuery = com.itgeo.fitmate.api.rag.infrastructure.KeywordQueryBuilder.toOrQuery(query);
+        if (orQuery.isBlank()) {
+            return java.util.List.of();
+        }
+        String fullQuery = filterExpr + " (" + orQuery + ")";
 
-        Query q = new Query(fullQuery).limit(0, topK);
+        Query q = new Query(fullQuery).setLanguage("chinese").limit(0, topK);
         try {
             SearchResult result = jedisPooled.ftSearch(indexName, q);
             List<WikiPage> pages = new ArrayList<>();

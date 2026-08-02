@@ -108,16 +108,18 @@ public class RagEmbeddingProperties {
 
         private Integer rrfK = 60;
         private Double vectorWeight = 1.0D;
-        private Double keywordWeight = 1.0D;
+        // OR 召回噪声较大，关键词路仅作辅助信号（离线评测调优结论：1.0 时 Top1 由 61.7% 跌至 50%）
+        private Double keywordWeight = 0.15D;
 
         private String keywordIndexName = "rag_chunk_keyword_idx";
         private String keywordKeyPrefix = "rag:chunk:";
 
-        private Boolean rerankEnabled = false;
+        private Boolean rerankEnabled = true;
         private Integer rerankCandidateK = 10;
 
         private Double rerankFusionWeight = 1.0D;
-        private Double rerankDualHitBoost = 0.15D;
+        // OR 查询下几乎所有候选都双路命中，dual-hit 加分只会放大噪声，置 0
+        private Double rerankDualHitBoost = 0.0D;
         private Double rerankQueryCoverageWeight = 0.35D;
     }
 

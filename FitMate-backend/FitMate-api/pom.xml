@@ -14,6 +14,12 @@
     <packaging>jar</packaging>
 
     <dependencies>
+        <!-- 中文分词：关键词检索查询侧切词（离线词典分词，无外部服务依赖） -->
+        <dependency>
+            <groupId>com.huaban</groupId>
+            <artifactId>jieba-analysis</artifactId>
+            <version>1.0.2</version>
+        </dependency>
         <dependency>
             <groupId>com.itgeo</groupId>
             <artifactId>fitmate-common</artifactId>

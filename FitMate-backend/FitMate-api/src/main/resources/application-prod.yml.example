@@ -88,11 +88,11 @@ rag:
     keyword-recall-k: 16
     rrf-k: 60
     vector-weight: 1.0
-    keyword-weight: 1.0
-    rerank-enabled: false
+    keyword-weight: 0.15
+    rerank-enabled: true
     rerank-candidate-k: 10
     rerank-fusion-weight: 1.0
-    rerank-dual-hit-boost: 0.15
+    rerank-dual-hit-boost: 0.0
     rerank-query-coverage-weight: 0.35
   chunking:
     strategy: token
