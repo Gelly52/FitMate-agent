@@ -51,7 +51,6 @@
                 pattern="[0-9]*"
                 placeholder="000000"
                 type="text"
-                @keyup.enter="submitLogin"
               />
             </div>
             <button
@@ -80,7 +79,6 @@
             minlength="8"
             placeholder="8–32 位，字母与数字"
             type="password"
-            @keyup.enter="submitLogin"
           />
         </div>
 
@@ -235,6 +233,10 @@ export default {
         );
     },
     async submitLogin() {
+      // 重入保护：回车原生 submit 与其他触发源并发、连点、慢网络重复提交时只放行一次
+      if (this.isLoginSubmitting) {
+        return;
+      }
       var email = (this.loginForm.email || "").trim();
       var code = (this.loginForm.code || "").trim();
       var password = (this.loginForm.password || "").trim();
